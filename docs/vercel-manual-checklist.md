@@ -92,10 +92,13 @@ Protéger `develop` et `main` dans **Rules > Rulesets** :
 
 1. Pousser la branche de fonctionnalité et ouvrir une PR vers `develop`.
 2. Attendre la CI GitHub et le build Vercel.
-3. Lancer **Actions > Database release > Run workflow** avec :
-   - branche de la PR;
-   - environnement `preview`;
-   - confirmation `MIGRATE`.
+3. Appliquer la migration Preview :
+   - si le workflow **Database release** est déjà présent sur la branche par
+     défaut, le lancer avec l'environnement `preview` et la confirmation
+     `MIGRATE`;
+   - pour la toute première release, avant que ce workflow soit sur `main`,
+     exécuter localement la procédure de bootstrap ci-dessous avec l'URL
+     **directe Preview**.
 4. Redéployer la Preview après la migration.
 5. Vérifier :
 
@@ -116,17 +119,37 @@ La réponse attendue est :
 Tester ensuite la connexion, un import JSON, la recherche, les thèmes, l'ajout
 et la suppression d'un tag, puis la suppression d'une publication de test.
 
+Bootstrap de migration initiale sous PowerShell :
+
+```powershell
+$env:DATABASE_URL="<URL_POSTGRESQL_DIRECTE_PREVIEW>"
+npm.cmd ci
+npm.cmd run db:generate
+npm.cmd run db:deploy
+Remove-Item Env:DATABASE_URL
+```
+
+Vérifier très attentivement l'hôte et le nom de base avant d'exécuter cette
+commande. Ne jamais lancer `db:migrate`, `prisma migrate dev`, `db:seed` ou
+`prisma db push` sur une base distante de release.
+
 ## 7. Mise en production
 
 1. Ouvrir et faire approuver la PR de `develop` vers `main`.
 2. Vérifier que les migrations sont rétrocompatibles.
-3. Exécuter **Database release** sur le commit à livrer avec :
-   - environnement `production`;
-   - confirmation `MIGRATE`.
+3. Appliquer la migration Production :
+   - pour les releases suivantes, exécuter **Database release** sur le commit à
+     livrer avec l'environnement `production` et la confirmation `MIGRATE`;
+   - pour la première release uniquement, si le workflow n'est pas encore
+     disponible sur `main`, répéter la commande de bootstrap avec l'URL
+     **directe Production**, après double vérification et juste avant le merge.
 4. Après succès, merger la PR vers `main`.
 5. Attendre le déploiement Vercel Production.
 6. Vérifier `/api/health`, la page de login et un parcours de lecture.
 7. Consulter les Runtime Logs Vercel et vérifier l'absence de réponses 5xx.
+
+Une fois cette première release mergée, le workflow `Database release` est
+présent sur `main` et doit remplacer définitivement la commande locale.
 
 ## 8. Sécurité après la première mise en ligne
 

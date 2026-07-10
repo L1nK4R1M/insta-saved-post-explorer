@@ -99,6 +99,13 @@ Le endpoint `GET /api/health` est public et ne retourne aucun secret. Il répond
 PostgreSQL répond; sinon il répond `503`. Utiliser ce endpoint pour les smoke
 tests et la supervision.
 
+Pour la toute première release, le workflow `Database release` peut ne pas
+encore être disponible tant que son fichier n'est pas présent sur la branche par
+défaut. Suivre alors la procédure de bootstrap décrite dans
+`docs/vercel-manual-checklist.md`, avec l'URL directe de l'environnement
+concerné. Après le premier merge sur `main`, toutes les migrations passent par
+le workflow protégé.
+
 ## Import et limite de 4,5 Mo
 
 Vercel impose 4,5 Mo maximum au corps d'une requête **et** d'une réponse de
