@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ContentType {
+  IMAGE
+  CAROUSEL
+  REEL
+  OTHER
+}
+
+enum ImportStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model Post {
+  id             String      @id @default(cuid())
+  ownerId        String      @default("local") @map("owner_id")
+  externalId     String?     @map("external_id")
+  postUrl        String      @map("post_url")
+  thumbnailUrl   String      @map("thumbnail_url")
+  mediaUrl       String?     @map("media_url")
+  authorUsername String      @map("author_username")
+  authorSortKey  String      @map("author_sort_key")
+  caption        String      @db.Text
+  savedAt        DateTime?   @map("saved_at") @db.Timestamptz(3)
+  publishedAt    DateTime?   @map("published_at") @db.Timestamptz(3)
+  contentType    ContentType @default(OTHER) @map("content_type")
+  mainTheme      String?     @map("main_theme")
+  metadata       Json        @default("{}")
+  searchText     String      @map("search_text") @db.Text
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  postTags       PostTag[]
+
+  @@unique([ownerId, postUrl], map: "posts_owner_id_post_url_key")
+  @@index([ownerId, savedAt, id], map: "posts_owner_saved_at_id_idx")
+  @@index([ownerId, publishedAt, id], map: "posts_owner_published_at_id_idx")
+  @@index([ownerId, authorSortKey, id], map: "posts_owner_author_id_idx")
+  @@index([ownerId, mainTheme], map: "posts_owner_main_theme_idx")
+  @@map("posts")
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  ownerId   String    @default("local") @map("owner_id")
+  name      String
+  slug      String
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  postTags  PostTag[]
+
+  @@unique([ownerId, slug], map: "tags_owner_id_slug_key")
+  @@index([ownerId, name], map: "tags_owner_name_idx")
+  @@map("tags")
+}
+
+model PostTag {
+  postId    String   @map("post_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId, postId], map: "post_tags_tag_id_post_id_idx")
+  @@map("post_tags")
+}
+
+model ImportJob {
+  id             String       @id @default(cuid())
+  ownerId        String       @default("local") @map("owner_id")
+  idempotencyKey String       @default(cuid()) @map("idempotency_key")
+  status         ImportStatus @default(RUNNING)
+  sourceName     String?      @map("source_name")
+  total          Int          @default(0)
+  imported       Int          @default(0)
+  updated        Int          @default(0)
+  skipped        Int          @default(0)
+  invalid        Int          @default(0)
+  errorCode      String?      @map("error_code")
+  startedAt      DateTime     @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt     DateTime?    @map("finished_at") @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, idempotencyKey], map: "import_jobs_owner_idempotency_key")
+  @@index([ownerId, status, startedAt], map: "import_jobs_owner_status_started_idx")
+  @@map("import_jobs")
+}

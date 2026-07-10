@@ -1,0 +1,62 @@
+name: Database release
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment whose direct database URL will be used
+        required: true
+        type: choice
+        options:
+          - preview
+          - production
+      confirmation:
+        description: Type MIGRATE to apply committed migrations
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Migrate ${{ inputs.environment }}
+    if: inputs.confirmation == 'MIGRATE'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+    steps:
+      - name: Checkout selected commit
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Fail when the direct migration URL is unavailable
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_DIRECT_URL is missing from the selected GitHub environment." >&2
+            exit 1
+          fi
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Apply committed migrations through the direct connection
+        run: npm run db:deploy
+
+      - name: Verify migration status
+        run: npx prisma migrate status

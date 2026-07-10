@@ -1,0 +1,348 @@
+import "server-only";
+
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
+import { Prisma } from "@prisma/client";
+import { z } from "zod";
+
+import type { ContentType, LibraryPost, SortMode } from "@/features/library/types";
+import {
+  filterAndPaginatePosts,
+  type LibraryPostPage,
+} from "@/features/library/filter-posts";
+import {
+  decodeLibraryCursor,
+  encodeLibraryCursor,
+  parseLibraryQuery,
+  type LibraryCursor,
+  type LibraryQuery,
+} from "@/features/library/query-state";
+import {
+  foldForSearch,
+  normalizeImportPayload,
+  tagSlug,
+} from "@/lib/import/normalize";
+import { databaseConfigured, prisma } from "@/server/db";
+import { getApplicationOwnerId, parseOwnerId } from "@/server/owner";
+
+type PostWithTags = Prisma.PostGetPayload<{
+  include: { postTags: { include: { tag: true } } };
+}>;
+
+export type LibraryTag = { name: string; slug: string; count: number };
+
+export async function getLibraryPosts(
+  options: { limit?: number; ownerId?: string } = {},
+): Promise<LibraryPost[]> {
+  const query = parseLibraryQuery({ limit: options.limit });
+  return (await queryLibraryPosts(query, options.ownerId)).items;
+}
+
+export async function queryLibraryPosts(
+  input: LibraryQuery,
+  requestedOwnerId?: string,
+): Promise<LibraryPostPage> {
+  const query = parseLibraryQuery(input);
+  const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
+  if (!databaseConfigured) {
+    const page = filterAndPaginatePosts(await readFallbackPosts(), query);
+    return {
+      ...page,
+      items: page.items.map((post) => ({
+        ...post,
+        caption: post.caption.slice(0, 500),
+        metadata: {},
+      })),
+    };
+  }
+
+  if (query.sort === "relevance" && query.search) {
+    return queryRelevantPosts(ownerId, query);
+  }
+
+  const cursor = query.cursor ? decodeLibraryCursor(query.cursor, query.sort) : null;
+  const effectiveSort = query.sort === "relevance" ? "newest" : query.sort;
+  const where: Prisma.PostWhereInput = {
+    ownerId,
+    ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
+    ...tagWhere(ownerId, query.tags, query.tagMode),
+    ...cursorWhere(cursor, effectiveSort),
+  };
+  const rows = await prisma.post.findMany({
+    where,
+    include: { postTags: { include: { tag: true } } },
+    orderBy: orderByFor(effectiveSort),
+    take: query.limit + 1,
+  });
+
+  const hasNextPage = rows.length > query.limit;
+  const pageRows = hasNextPage ? rows.slice(0, query.limit) : rows;
+  const items = pageRows.map((row) => toLibraryPost(row, true));
+  const lastRow = pageRows.at(-1);
+  const nextCursor =
+    hasNextPage && lastRow
+      ? encodeLibraryCursor(cursorFromRow(lastRow, query.sort, effectiveSort))
+      : null;
+
+  return { items, nextCursor };
+}
+
+async function queryRelevantPosts(
+  ownerId: string,
+  query: LibraryQuery,
+): Promise<LibraryPostPage> {
+  const search = foldForSearch(query.search);
+  const slugs = [...new Set(query.tags.map(tagSlug).filter(Boolean))];
+  const cursor = query.cursor ? decodeLibraryCursor(query.cursor, "relevance") : null;
+  const cursorRank = cursor?.value === null || cursor?.value === undefined ? null : Number(cursor.value);
+  if (cursor && (cursorRank === null || !Number.isFinite(cursorRank))) {
+    throw cursorValidationError();
+  }
+
+  const tagCondition = relevanceTagCondition(ownerId, slugs, query.tagMode);
+  const cursorCondition =
+    cursor && cursorRank !== null
+      ? Prisma.sql`AND (rank < ${cursorRank} OR (rank = ${cursorRank} AND id > ${cursor.id}))`
+      : Prisma.empty;
+  const ranked = await prisma.$queryRaw<Array<{ id: string; rank: number }>>(Prisma.sql`
+    WITH ranked AS (
+      SELECT
+        p."id",
+        ts_rank_cd(
+          to_tsvector('simple', p."search_text"),
+          plainto_tsquery('simple', ${search})
+        )::double precision AS rank
+      FROM "posts" p
+      WHERE p."owner_id" = ${ownerId}
+        AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
+        ${tagCondition}
+    )
+    SELECT id, rank
+    FROM ranked
+    WHERE TRUE ${cursorCondition}
+    ORDER BY rank DESC, id ASC
+    LIMIT ${query.limit + 1}
+  `);
+
+  const hasNextPage = ranked.length > query.limit;
+  const pageRanks = hasNextPage ? ranked.slice(0, query.limit) : ranked;
+  const rows = await prisma.post.findMany({
+    where: { ownerId, id: { in: pageRanks.map((row) => row.id) } },
+    include: { postTags: { include: { tag: true } } },
+  });
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const items = pageRanks.flatMap((rankedRow) => {
+    const row = rowsById.get(rankedRow.id);
+    return row ? [toLibraryPost(row, true)] : [];
+  });
+  const lastRank = pageRanks.at(-1);
+  const nextCursor =
+    hasNextPage && lastRank
+      ? encodeLibraryCursor({
+          version: 1,
+          sort: "relevance",
+          value: String(lastRank.rank),
+          id: lastRank.id,
+        })
+      : null;
+
+  return { items, nextCursor };
+}
+
+function relevanceTagCondition(
+  ownerId: string,
+  slugs: string[],
+  mode: LibraryQuery["tagMode"],
+): Prisma.Sql {
+  if (slugs.length === 0) return Prisma.empty;
+  const selectedSlugs = Prisma.join(slugs);
+
+  if (mode === "and") {
+    return Prisma.sql`
+      AND (
+        SELECT COUNT(DISTINCT t."slug")::integer
+        FROM "post_tags" pt
+        JOIN "tags" t ON t."id" = pt."tag_id"
+        WHERE pt."post_id" = p."id"
+          AND t."owner_id" = ${ownerId}
+          AND t."slug" IN (${selectedSlugs})
+      ) = ${slugs.length}
+    `;
+  }
+
+  return Prisma.sql`
+    AND EXISTS (
+      SELECT 1
+      FROM "post_tags" pt
+      JOIN "tags" t ON t."id" = pt."tag_id"
+      WHERE pt."post_id" = p."id"
+        AND t."owner_id" = ${ownerId}
+        AND t."slug" IN (${selectedSlugs})
+    )
+  `;
+}
+
+export async function getLibraryTags(requestedOwnerId?: string): Promise<LibraryTag[]> {
+  const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
+  if (!databaseConfigured) {
+    const counts = new Map<string, LibraryTag>();
+    for (const post of await readFallbackPosts()) {
+      for (const name of post.tags) {
+        const slug = tagSlug(name);
+        const current = counts.get(slug);
+        counts.set(slug, { name: current?.name ?? name, slug, count: (current?.count ?? 0) + 1 });
+      }
+    }
+    return [...counts.values()].sort((left, right) => left.name.localeCompare(right.name, "fr"));
+  }
+
+  const tags = await prisma.tag.findMany({
+    where: { ownerId },
+    select: { name: true, slug: true, _count: { select: { postTags: true } } },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+  });
+  return tags.map((tag) => ({ name: tag.name, slug: tag.slug, count: tag._count.postTags }));
+}
+
+export async function getLibraryPost(
+  postId: string,
+  requestedOwnerId?: string,
+): Promise<LibraryPost | null> {
+  const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
+  if (!databaseConfigured) {
+    return (await readFallbackPosts()).find((post) => post.id === postId) ?? null;
+  }
+
+  const row = await prisma.post.findFirst({
+    where: { id: postId, ownerId },
+    include: { postTags: { include: { tag: true } } },
+  });
+  return row ? toLibraryPost(row, false) : null;
+}
+
+function tagWhere(
+  ownerId: string,
+  rawTags: string[],
+  mode: LibraryQuery["tagMode"],
+): Prisma.PostWhereInput {
+  const slugs = [...new Set(rawTags.map(tagSlug).filter(Boolean))];
+  if (slugs.length === 0) return {};
+
+  if (mode === "and") {
+    return {
+      AND: slugs.map((slug) => ({
+        postTags: { some: { tag: { ownerId, slug } } },
+      })),
+    };
+  }
+  return { postTags: { some: { tag: { ownerId, slug: { in: slugs } } } } };
+}
+
+function cursorWhere(
+  cursor: LibraryCursor | null,
+  sort: Exclude<SortMode, "relevance">,
+): Prisma.PostWhereInput {
+  if (!cursor) return {};
+
+  if (sort === "author") {
+    if (cursor.value === null) return { id: { gt: cursor.id } };
+    return {
+      OR: [
+        { authorSortKey: { gt: cursor.value } },
+        { authorSortKey: cursor.value, id: { gt: cursor.id } },
+      ],
+    };
+  }
+
+  if (cursor.value === null) return { savedAt: null, id: { gt: cursor.id } };
+  const date = new Date(cursor.value);
+  if (Number.isNaN(date.getTime())) throw cursorValidationError();
+
+  const dateBoundary: Prisma.PostWhereInput =
+    sort === "oldest" ? { savedAt: { gt: date } } : { savedAt: { lt: date } };
+  return {
+    OR: [
+      dateBoundary,
+      { savedAt: date, id: { gt: cursor.id } },
+      { savedAt: null },
+    ],
+  };
+}
+
+function cursorValidationError(): z.ZodError {
+  return new z.ZodError([
+    { code: "custom", path: ["cursor"], message: "Curseur invalide" },
+  ]);
+}
+
+function orderByFor(
+  sort: Exclude<SortMode, "relevance">,
+): Prisma.PostOrderByWithRelationInput[] {
+  if (sort === "author") return [{ authorSortKey: "asc" }, { id: "asc" }];
+  return [
+    { savedAt: { sort: sort === "oldest" ? "asc" : "desc", nulls: "last" } },
+    { id: "asc" },
+  ];
+}
+
+function cursorFromRow(
+  row: PostWithTags,
+  exposedSort: SortMode,
+  effectiveSort: Exclude<SortMode, "relevance">,
+): LibraryCursor {
+  return {
+    version: 1,
+    sort: exposedSort,
+    value: effectiveSort === "author" ? row.authorSortKey : row.savedAt?.toISOString() ?? null,
+    id: row.id,
+  };
+}
+
+function toLibraryPost(row: PostWithTags, compact: boolean): LibraryPost {
+  const metadata =
+    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  return {
+    id: row.id,
+    externalId: row.externalId,
+    postUrl: row.postUrl,
+    thumbnailUrl: row.thumbnailUrl,
+    mediaUrl: row.mediaUrl,
+    authorUsername: row.authorUsername,
+    caption: compact ? row.caption.slice(0, 500) : row.caption,
+    tags: row.postTags.map(({ tag }) => tag.name).sort((a, b) => a.localeCompare(b, "fr")),
+    savedAt: row.savedAt?.toISOString() ?? null,
+    publishedAt: row.publishedAt?.toISOString() ?? null,
+    contentType: row.contentType.toLowerCase() as ContentType,
+    mainTheme: row.mainTheme,
+    metadata: compact ? {} : metadata,
+  };
+}
+
+let fallbackPostsPromise: Promise<LibraryPost[]> | undefined;
+
+async function readFallbackPosts(): Promise<LibraryPost[]> {
+  fallbackPostsPromise ??= (async () => {
+    const samplePath = path.join(process.cwd(), "resources", "instagram-saved-posts.sample.json");
+    const source = JSON.parse(await readFile(samplePath, "utf8")) as unknown;
+    return normalizeImportPayload(source).items.map((post) => ({
+      id: `sample_${createHash("sha256").update(post.postUrl).digest("hex").slice(0, 20)}`,
+      externalId: post.externalId,
+      postUrl: post.postUrl,
+      thumbnailUrl: post.thumbnailUrl,
+      mediaUrl: post.mediaUrl,
+      authorUsername: post.authorUsername,
+      caption: post.caption,
+      tags: post.tags,
+      savedAt: post.savedAt?.toISOString() ?? null,
+      publishedAt: post.publishedAt?.toISOString() ?? null,
+      contentType: post.contentType,
+      mainTheme: post.mainTheme,
+      metadata: post.metadata,
+    }));
+  })();
+  return fallbackPostsPromise;
+}
