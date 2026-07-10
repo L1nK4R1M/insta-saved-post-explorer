@@ -23,7 +23,6 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: formData.get("email"),
           password: formData.get("password"),
         }),
       });
@@ -31,7 +30,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
       if (!response.ok) {
         setError(response.status === 503
           ? "L’authentification n’est pas configurée."
-          : "Adresse e-mail ou mot de passe incorrect.");
+          : "Mot de passe incorrect.");
         return;
       }
 
@@ -47,24 +46,13 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   return (
     <form onSubmit={handleSubmit} noValidate style={{ display: "grid", gap: 18 }}>
       <div style={{ display: "grid", gap: 7 }}>
-        <label htmlFor="email" style={{ fontSize: 14, fontWeight: 650 }}>Adresse e-mail</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          maxLength={254}
-          style={inputStyle}
-        />
-      </div>
-      <div style={{ display: "grid", gap: 7 }}>
         <label htmlFor="password" style={{ fontSize: 14, fontWeight: 650 }}>Mot de passe</label>
         <input
           id="password"
           name="password"
           type="password"
           autoComplete="current-password"
+          autoFocus
           required
           maxLength={1024}
           style={inputStyle}

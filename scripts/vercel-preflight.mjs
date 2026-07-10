@@ -4,7 +4,6 @@ const warnings = [];
 const required = [
   "DATABASE_URL",
   "AUTH_SECRET",
-  "ADMIN_EMAIL",
   "ADMIN_PASSWORD_HASH",
   "APP_OWNER_ID",
 ];
@@ -41,14 +40,6 @@ if (authSecret && authSecret.length < 32) {
 }
 if (/generate|replace|example|change-me/i.test(authSecret)) {
   errors.push("AUTH_SECRET appears to be a placeholder.");
-}
-
-const adminEmail = process.env.ADMIN_EMAIL ?? "";
-if (adminEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
-  errors.push("ADMIN_EMAIL is not a valid email address.");
-}
-if (/example\.(com|invalid)$/i.test(adminEmail)) {
-  errors.push("ADMIN_EMAIL appears to be a placeholder.");
 }
 
 const passwordHash = process.env.ADMIN_PASSWORD_HASH ?? "";

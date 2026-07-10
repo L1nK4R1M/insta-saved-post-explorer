@@ -15,7 +15,7 @@ professional filters.
 - Bounded, idempotent import batches with per-record validation.
 - PostgreSQL schema with Prisma, cursor pagination, and local sample fallback.
 - Persistent `light`, `dark`, and `system` themes.
-- Single-administrator authentication using a signed HTTP-only session cookie.
+- Public read-only browsing with password-only administrator mode using a signed HTTP-only session cookie.
 - Vercel, GitHub Actions, database release, and operations documentation.
 - Public readiness endpoint at `GET /api/health` and deployment-secret preflight.
 
@@ -63,7 +63,6 @@ must never be configured on Vercel.
 | `DATABASE_URL` | Pooled PostgreSQL URL used by the serverless runtime |
 | `DATABASE_DIRECT_URL` | Direct PostgreSQL URL used only for migrations |
 | `AUTH_SECRET` | Random secret used to sign administrator sessions |
-| `ADMIN_EMAIL` | Allowed administrator email |
 | `ADMIN_PASSWORD_HASH` | bcrypt hash of the administrator password |
 | `AUTH_DISABLED` | Explicit development-only authentication bypass |
 | `APP_OWNER_ID` | Stable owner partition key for personal data |

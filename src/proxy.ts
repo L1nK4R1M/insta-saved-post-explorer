@@ -11,61 +11,36 @@ import { verifySessionToken } from "@/auth/token";
 let bypassWarningShown = false;
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
-  const { pathname, search } = request.nextUrl;
-  const isApi = pathname.startsWith("/api/");
-  const isLogin = pathname === "/login";
-  const isPublic = isLogin || pathname.startsWith("/api/auth/") || pathname === "/api/health";
-
-  if (isUnsafeProductionBypassRequested()) {
-    if (isLogin) return NextResponse.next();
-    return isApi
-      ? NextResponse.json({ error: "AUTH_UNAVAILABLE" }, { status: 503 })
-      : redirectToLogin(request, pathname + search, "configuration");
-  }
+  const isLogin = request.nextUrl.pathname === "/login";
 
   if (isAuthDisabled()) {
     if (!bypassWarningShown) {
       console.warn("[security] AUTH_DISABLED=true: development authentication bypass is active.");
       bypassWarningShown = true;
     }
-    const response = NextResponse.next();
+    const response = isLogin
+      ? NextResponse.redirect(new URL("/", request.url))
+      : NextResponse.next();
     response.headers.set("X-Auth-Bypass", "development-only");
     return response;
   }
 
-  if (isPublic && !isLogin) return NextResponse.next();
+  // Public browsing must stay available even when admin authentication is
+  // misconfigured. Mutation handlers still call requireSession() and fail closed.
+  if (!isLogin || isUnsafeProductionBypassRequested()) return NextResponse.next();
 
   try {
     const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
     const session = token ? await verifySessionToken(token) : null;
-
-    if (isLogin) {
-      return session ? NextResponse.redirect(new URL("/", request.url)) : NextResponse.next();
-    }
-    if (session) return NextResponse.next();
-    if (isApi) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-    return redirectToLogin(request, pathname + search);
+    return session
+      ? NextResponse.redirect(new URL("/", request.url))
+      : NextResponse.next();
   } catch (error: unknown) {
     if (!(error instanceof AuthConfigurationError)) {
-      return isApi
-        ? NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
-        : redirectToLogin(request, pathname + search);
+      console.warn("[auth] Unable to verify the admin session.");
     }
-    return isApi
-      ? NextResponse.json({ error: "AUTH_UNAVAILABLE" }, { status: 503 })
-      : redirectToLogin(request, pathname + search, "configuration");
+    return NextResponse.next();
   }
-}
-
-function redirectToLogin(
-  request: NextRequest,
-  nextPath: string,
-  error?: "configuration",
-): NextResponse {
-  const loginUrl = new URL("/login", request.url);
-  loginUrl.searchParams.set("next", nextPath);
-  if (error) loginUrl.searchParams.set("error", error);
-  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {

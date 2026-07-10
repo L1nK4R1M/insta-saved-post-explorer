@@ -16,7 +16,7 @@ test("capture les références visuelles du design D", async ({ page }, testInfo
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.screenshot({
     path: `docs/ui-implementation/${testInfo.project.name}-dark-detail.png`,
-    fullPage: true,
+    fullPage: false,
   });
   await page.keyboard.press("Escape");
 

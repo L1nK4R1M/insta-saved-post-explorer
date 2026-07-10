@@ -66,13 +66,36 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem("theme"))).toBe("system");
   });
 
-  test("ouvre l'import JSON depuis une action nommee", async ({ page }) => {
-    const importButton = page.locator("button.import-button");
-    await expect(importButton).toHaveAccessibleName("Importer JSON");
-    await importButton.click();
+  test("reste en lecture seule pour un visiteur", async ({ page }) => {
+    await expect(page.getByRole("link", { name: "Ouvrir la connexion administrateur" })).toBeVisible();
+    await expect(page.locator("button.import-button")).toHaveCount(0);
 
-    await expect(page.getByRole("dialog", { name: "Importer des publications" })).toBeVisible();
-    await expect(page.getByText(/Déposez votre fichier JSON ici/)).toBeVisible();
+    await page.getByRole("button", { name: "Ouvrir la publication de esncom.fr" }).click();
+    const dialog = page.getByRole("dialog", { name: "Publication de esncom.fr" });
+    await expect(dialog.getByRole("button", { name: /Supprimer/ })).toHaveCount(0);
+    await expect(dialog.getByLabel(/Ajouter un tag/)).toHaveCount(0);
+  });
+
+  test("autorise les lectures publiques et refuse les mutations anonymes", async ({ request }) => {
+    await expect((await request.get("/api/posts?limit=1")).status()).toBe(200);
+    await expect((await request.post("/api/import", { data: [] })).status()).toBe(401);
+    await expect((await request.delete("/api/posts/post-inexistant")).status()).toBe(401);
+  });
+
+  test("ne déborde pas horizontalement et garde un Masonry stable", async ({ page }) => {
+    const layout = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      cards: [...document.querySelectorAll<HTMLElement>("[data-post-id]")].map((card) => {
+        const rect = card.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, width: rect.width, height: rect.height };
+      }),
+    }));
+
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewport + 1);
+    expect(layout.cards.length).toBe(18);
+    expect(layout.cards.every((card) => card.left >= 0 && card.right <= layout.viewport + 1)).toBe(true);
+    expect(layout.cards.every((card) => card.width > 0 && card.height > 0)).toBe(true);
   });
 });
 

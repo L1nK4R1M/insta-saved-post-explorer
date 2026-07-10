@@ -12,7 +12,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     env: {
       ...process.env,
-      AUTH_DISABLED: process.env.AUTH_DISABLED ?? "true",
+      AUTH_DISABLED: process.env.AUTH_DISABLED ?? "false",
       APP_OWNER_ID: process.env.APP_OWNER_ID ?? "e2e-owner",
     },
   },

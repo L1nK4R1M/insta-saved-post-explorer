@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getConfiguredOwnerId } from "@/auth/config";
 import { authErrorResponse } from "@/auth/http";
 import { requireSession } from "@/auth/session";
 import { AdminResourceNotFoundError, deleteOwnedPost } from "@/server/admin-library";
@@ -15,19 +16,12 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  let ownerId: string;
-  try {
-    ownerId = (await requireSession()).ownerId;
-  } catch (error: unknown) {
-    return authErrorResponse(error);
-  }
-
   try {
     const { id } = await context.params;
-    const post = await getLibraryPost(postIdSchema.parse(id), ownerId);
+    const post = await getLibraryPost(postIdSchema.parse(id), getConfiguredOwnerId());
     if (!post) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
     return NextResponse.json(post, {
-      headers: { "Cache-Control": "private, max-age=0, must-revalidate" },
+      headers: { "Cache-Control": "public, max-age=0, must-revalidate" },
     });
   } catch (error: unknown) {
     return errorResponse(error);

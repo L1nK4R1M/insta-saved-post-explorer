@@ -23,7 +23,6 @@ describe("session et cookie", () => {
   beforeEach(() => {
     vi.stubEnv("NODE_ENV", "test");
     process.env.AUTH_SECRET = TEST_SECRET;
-    process.env.ADMIN_EMAIL = "admin.qa@example.com";
     process.env.ADMIN_PASSWORD_HASH = SYNTACTIC_BCRYPT_HASH;
     process.env.APP_OWNER_ID = "qa-owner";
     process.env.AUTH_DISABLED = "false";
@@ -56,7 +55,6 @@ describe("session et cookie", () => {
 
     await expect(getSession()).resolves.toMatchObject({
       ownerId: "qa-owner",
-      email: "admin.qa@example.com",
       role: "admin",
       bypass: false,
     });
@@ -73,7 +71,6 @@ describe("session et cookie", () => {
 
     await expect(getSession()).resolves.toEqual({
       ownerId: "qa-owner",
-      email: "development-bypass@localhost",
       role: "admin",
       bypass: true,
     });

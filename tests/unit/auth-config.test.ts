@@ -13,7 +13,6 @@ import {
 const ENV_KEYS = [
   "AUTH_DISABLED",
   "AUTH_SECRET",
-  "ADMIN_EMAIL",
   "ADMIN_PASSWORD_HASH",
   "APP_OWNER_ID",
 ] as const;
@@ -31,13 +30,11 @@ describe("configuration d'authentification", () => {
     vi.unstubAllEnvs();
   });
 
-  it("normalise l'e-mail et expose une configuration de session bornée", () => {
+  it("expose une configuration de session bornée sans identité publique", () => {
     configureValidEnvironment();
-    process.env.ADMIN_EMAIL = "  Admin.QA@Example.COM ";
 
     const configuration = getSessionConfiguration();
 
-    expect(configuration.adminEmail).toBe("admin.qa@example.com");
     expect(configuration.ownerId).toBe("qa_owner-1");
     expect(new TextDecoder().decode(configuration.secret)).toBe(TEST_SECRET);
   });
@@ -46,7 +43,6 @@ describe("configuration d'authentification", () => {
     configureValidEnvironment();
     const cases: Array<[keyof NodeJS.ProcessEnv, string | undefined]> = [
       ["AUTH_SECRET", "trop-court"],
-      ["ADMIN_EMAIL", "pas-un-email"],
       ["ADMIN_PASSWORD_HASH", "$2b$04$invalide"],
       ["APP_OWNER_ID", "owner avec espaces"],
       ["AUTH_SECRET", undefined],
@@ -85,7 +81,6 @@ describe("configuration d'authentification", () => {
 
 function configureValidEnvironment(): void {
   process.env.AUTH_SECRET = TEST_SECRET;
-  process.env.ADMIN_EMAIL = "admin.qa@example.com";
   process.env.ADMIN_PASSWORD_HASH = SYNTACTIC_BCRYPT_HASH;
   process.env.APP_OWNER_ID = "qa_owner-1";
   process.env.AUTH_DISABLED = "false";

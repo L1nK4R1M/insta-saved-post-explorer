@@ -1,16 +1,20 @@
 import { AlertCircle, ImageOff, SearchX, Upload } from "lucide-react";
 
-export function EmptyLibrary({ onImport }: { onImport: () => void }) {
+export function EmptyLibrary({ onImport }: { onImport?: () => void }) {
   return (
     <div className="empty-state">
       <Upload aria-hidden="true" className="size-6" />
       <h2 className="text-balance text-lg font-semibold">Votre mosaïque attend ses premiers souvenirs</h2>
       <p className="max-w-md text-pretty text-sm text-muted">
-        Importez votre export JSON pour commencer à explorer vos publications sauvegardées.
+        {onImport
+          ? "Importez votre export JSON pour commencer à explorer vos publications sauvegardées."
+          : "La bibliothèque ne contient pas encore de publication."}
       </p>
-      <button className="button button-primary" type="button" onClick={onImport}>
-        Importer un fichier JSON
-      </button>
+      {onImport ? (
+        <button className="button button-primary" type="button" onClick={onImport}>
+          Importer un fichier JSON
+        </button>
+      ) : null}
     </div>
   );
 }

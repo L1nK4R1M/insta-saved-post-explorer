@@ -14,16 +14,15 @@ Deux comportements à risque sont documentés avec `it.fails` : l'acceptation in
 
 ## Playwright avec authentification réelle
 
-Le `playwright.config.ts` utilise `AUTH_DISABLED=true` par défaut pour les
-parcours UI sans base. Une valeur explicite `AUTH_DISABLED=false` est désormais
-respectée pour les parcours d'authentification réelle.
+Le `playwright.config.ts` utilise le mode visiteur public par défaut. Une valeur
+explicite `AUTH_DISABLED=true` reste disponible uniquement pour les parcours
+locaux qui doivent simuler une session administrateur.
 
 Terminal serveur :
 
 ```powershell
 $env:AUTH_DISABLED="false"
 $env:AUTH_SECRET="<secret fort de 32 caractères minimum>"
-$env:ADMIN_EMAIL="<adresse administrateur>"
 $env:ADMIN_PASSWORD_HASH="<hash bcrypt>"
 $env:APP_OWNER_ID="qa-preview"
 $env:DATABASE_URL="<URL PostgreSQL poolée de preview>"
@@ -34,12 +33,14 @@ npm run dev
 Terminal QA :
 
 ```powershell
-$env:E2E_ADMIN_EMAIL="<même adresse administrateur>"
 $env:E2E_ADMIN_PASSWORD="<mot de passe en clair, uniquement dans ce processus>"
 npx playwright test tests/e2e/auth-and-import.spec.ts --project=chromium
 ```
 
-Le test vérifie un échec générique, le login, les attributs du cookie, la protection d'une page privée, le logout UI et la neutralisation d'une cible `next` externe.
+Le test vérifie un échec générique, le login par mot de passe, les attributs du
+cookie, les mutations réservées à l'administrateur, le logout UI et la
+neutralisation d'une cible `next` externe. La bibliothèque et les routes GET
+restent publiques.
 
 ## Import PostgreSQL idempotent
 
