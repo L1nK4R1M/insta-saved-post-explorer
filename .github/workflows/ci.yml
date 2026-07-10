@@ -19,9 +19,8 @@ env:
   DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/insta_saved_test?schema=public
   DATABASE_DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/insta_saved_test?schema=public
   AUTH_SECRET: ci-only-secret-not-used-outside-github-actions
-  ADMIN_EMAIL: ci@example.invalid
   ADMIN_PASSWORD_HASH: ci-placeholder
-  AUTH_DISABLED: "true"
+  AUTH_DISABLED: "false"
   APP_OWNER_ID: ci-owner
   NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
   IMPORT_MAX_BYTES: "1000000"

@@ -17,7 +17,6 @@ export const runtime = "nodejs";
 
 const MAX_LOGIN_BODY_BYTES = 8_192;
 const loginSchema = z.object({
-  email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
   password: z.string().min(1).max(1_024),
 }).strict();
 
@@ -46,7 +45,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!input.success) return invalidRequest();
 
     const passwordMatches = await compare(input.data.password, credentials.passwordHash);
-    if (!passwordMatches || input.data.email !== credentials.adminEmail) {
+    if (!passwordMatches) {
       return NextResponse.json(
         { error: "INVALID_CREDENTIALS" },
         { status: 401, headers: { "Cache-Control": "no-store" } },

@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-
-import { requireSession } from "@/auth/session";
+import { getConfiguredOwnerId } from "@/auth/config";
+import { getSession } from "@/auth/session";
 import { LibraryExplorer, type LibraryInitialState } from "@/features/library/components/library-explorer";
 import { parseLibraryQuery } from "@/features/library/query-state";
 import type { SortMode, TagMode, ViewMode } from "@/features/library/types";
@@ -21,16 +20,15 @@ export default async function HomePage({ searchParams }: PageProps) {
     postId: valueOf(params.post) || null,
   };
 
-  const session = await requireSession().catch(() => null);
-  if (!session) redirect("/login");
-
-  const library = await loadLibrary(initialState, session.ownerId);
+  const session = await getSession().catch(() => null);
+  const library = await loadLibrary(initialState, getConfiguredOwnerId());
   return (
     <LibraryExplorer
       posts={library.posts}
       initialNextCursor={library.nextCursor}
       initialState={initialState}
       initialError={library.error}
+      isAdmin={session?.role === "admin"}
     />
   );
 }

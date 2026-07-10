@@ -57,7 +57,6 @@ Configurer des valeurs distinctes pour Preview et Production :
 | --- | --- | --- |
 | `DATABASE_URL` | Preview, Production | URL PostgreSQL poolée pour le trafic applicatif serverless. |
 | `AUTH_SECRET` | Preview, Production | Secret aléatoire de session, distinct par environnement. |
-| `ADMIN_EMAIL` | Preview, Production | Compte administrateur autorisé. |
 | `ADMIN_PASSWORD_HASH` | Preview, Production | Hash du mot de passe, jamais le mot de passe brut. |
 | `APP_OWNER_ID` | Preview, Production | Identifiant stable du propriétaire des données. |
 | `NEXT_PUBLIC_APP_URL` | Preview, Production | URL canonique; en Preview préférer une URL de branche stable. |

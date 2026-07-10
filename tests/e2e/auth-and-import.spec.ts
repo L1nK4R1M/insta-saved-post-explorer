@@ -2,13 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Page } from "@playwright/test";
 
-const adminEmail = process.env.E2E_ADMIN_EMAIL;
 const adminPassword = process.env.E2E_ADMIN_PASSWORD;
-const realAuthConfigured = Boolean(adminEmail && adminPassword);
+const realAuthConfigured = Boolean(adminPassword);
 const runDatabaseImport = process.env.E2E_RUN_DB_IMPORT === "true";
 
 test.describe("authentification administrateur réelle", () => {
-  test.skip(!realAuthConfigured, "Définir E2E_ADMIN_EMAIL et E2E_ADMIN_PASSWORD.");
+  test.skip(!realAuthConfigured, "Définir E2E_ADMIN_PASSWORD.");
 
   test.beforeEach(async ({ context, page }) => {
     await context.clearCookies();
@@ -17,12 +16,11 @@ test.describe("authentification administrateur réelle", () => {
   });
 
   test("refuse des identifiants invalides sans révéler le champ incorrect", async ({ page }) => {
-    await page.getByLabel("Adresse e-mail").fill("intrus@example.com");
     await page.getByLabel("Mot de passe").fill("mot-de-passe-incorrect");
     await page.getByRole("button", { name: "Se connecter" }).click();
 
     await expect(
-      page.getByRole("alert").filter({ hasText: /e-mail ou mot de passe incorrect/i }),
+      page.getByRole("alert").filter({ hasText: /mot de passe incorrect/i }),
     ).toBeVisible();
     await expect(page).toHaveURL(/\/login/);
   });
@@ -32,6 +30,7 @@ test.describe("authentification administrateur réelle", () => {
 
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("region", { name: /Publications sauvegardées/i })).toBeVisible();
+    await expect(page.locator("button.import-button")).toBeVisible();
 
     const sessionCookie = (await context.cookies()).find((cookie) => cookie.name === "mosaic_session");
     expect(sessionCookie).toMatchObject({ httpOnly: true, sameSite: "Lax" });
@@ -39,7 +38,8 @@ test.describe("authentification administrateur réelle", () => {
     await page.getByRole("button", { name: "Se déconnecter" }).click();
     await expect(page).toHaveURL(/\/login(?:\?|$)/);
     await page.goto("/");
-    await expect(page).toHaveURL(/\/login(?:\?|$)/);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("link", { name: "Ouvrir la connexion administrateur" })).toBeVisible();
   });
 
   test("neutralise une cible next externe après connexion", async ({ page }) => {
@@ -52,7 +52,7 @@ test.describe("authentification administrateur réelle", () => {
 });
 
 test.describe("import PostgreSQL idempotent", () => {
-  test.skip(!realAuthConfigured, "Définir E2E_ADMIN_EMAIL et E2E_ADMIN_PASSWORD.");
+  test.skip(!realAuthConfigured, "Définir E2E_ADMIN_PASSWORD.");
   test.skip(!runDatabaseImport, "Définir E2E_RUN_DB_IMPORT=true sur une base de preview jetable.");
 
   test("expose un health check public prêt pour Vercel", async ({ request }) => {
@@ -146,7 +146,6 @@ test.describe("import PostgreSQL idempotent", () => {
 });
 
 async function login(page: Page): Promise<void> {
-  await page.getByLabel("Adresse e-mail").fill(adminEmail!);
   await page.getByLabel("Mot de passe").fill(adminPassword!);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await page.waitForURL(/\/$/);
@@ -160,4 +159,5 @@ async function expectRealLoginForm(page: Page): Promise<void> {
     );
   }
   await expect(page.getByRole("button", { name: "Se connecter" })).toBeVisible();
+  await expect(page.getByLabel("Adresse e-mail")).toHaveCount(0);
 }

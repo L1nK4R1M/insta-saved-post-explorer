@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { DeletePostAlert } from "@/features/library/components/admin/delete-post-alert";
 import { PostTagEditor } from "@/features/library/components/admin/post-tag-editor";
 import { BrokenImage } from "@/features/library/components/library-states";
+import { parseCaptionMetrics } from "@/features/library/caption-metrics";
 import type { LibraryPost } from "@/features/library/types";
 
 type PostDetailDialogProps = {
@@ -16,9 +17,10 @@ type PostDetailDialogProps = {
   onClose: () => void;
   onPrevious: () => void;
   onNext: () => void;
+  isAdmin: boolean;
 };
 
-export function PostDetailDialog({ post, position, total, onClose, onPrevious, onNext }: PostDetailDialogProps) {
+export function PostDetailDialog({ post, position, total, onClose, onPrevious, onNext, isAdmin }: PostDetailDialogProps) {
   const [copied, setCopied] = useState(false);
   const [detailPost, setDetailPost] = useState<LibraryPost | null>(null);
 
@@ -53,6 +55,7 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
   if (!post) return null;
   const displayPost = detailPost?.id === post.id ? detailPost : post;
   const imageUrl = displayPost.mediaUrl || displayPost.thumbnailUrl;
+  const caption = parseCaptionMetrics(displayPost.caption);
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(displayPost.postUrl);
@@ -113,23 +116,29 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
               </a>
             </div>
 
-            <p className="detail-caption text-pretty">{displayPost.caption || "Aucune légende disponible."}</p>
+            <dl className="metadata-grid">
+              <div><dt>Thème</dt><dd>{displayPost.mainTheme || "Non défini"}</dd></div>
+              <div><dt>Likes</dt><dd className="tabular-nums">{formatMetric(caption.likes)}</dd></div>
+              <div><dt>Commentaires</dt><dd className="tabular-nums">{formatMetric(caption.comments)}</dd></div>
+            </dl>
+
+            <p className="detail-caption text-pretty">{caption.text || "Aucune légende disponible."}</p>
 
             <section className="detail-section" aria-labelledby="detail-tags">
               <h2 id="detail-tags" className="field-label">Tags</h2>
-              <PostTagEditor
-                postId={displayPost.id}
-                tags={displayPost.tags}
-                onTagsChange={(tags) => setDetailPost({ ...displayPost, tags })}
-              />
+              {isAdmin ? (
+                <PostTagEditor
+                  postId={displayPost.id}
+                  tags={displayPost.tags}
+                  onTagsChange={(tags) => setDetailPost({ ...displayPost, tags })}
+                />
+              ) : displayPost.tags.length ? (
+                <ul className="readonly-tags" aria-label="Tags associés à cette publication">
+                  {displayPost.tags.map((tag) => <li key={tag}>#{tag}</li>)}
+                </ul>
+              ) : <p className="text-sm text-muted">Aucun tag</p>}
             </section>
 
-            <dl className="metadata-grid">
-              <div><dt>Type</dt><dd>{contentTypeLabel(displayPost.contentType)}</dd></div>
-              <div><dt>Publié</dt><dd>{formatDate(displayPost.publishedAt)}</dd></div>
-              <div><dt>Thème</dt><dd>{displayPost.mainTheme || "Non défini"}</dd></div>
-              <div><dt>Identifiant</dt><dd className="truncate">{displayPost.externalId || displayPost.id}</dd></div>
-            </dl>
           </div>
 
           <footer className="detail-footer">
@@ -137,7 +146,6 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
               <button className="button" type="button" onClick={onPrevious}>
                 <ArrowLeft aria-hidden="true" className="size-4" /> Précédent
               </button>
-              <span className="content-type-pill">{contentTypeLabel(displayPost.contentType)}</span>
               <button className="button button-primary" type="button" onClick={onNext}>
                 Suivant <ArrowRight aria-hidden="true" className="size-4" />
               </button>
@@ -146,14 +154,16 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
               {copied ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
               {copied ? "Lien copié" : "Copier le lien"}
             </button>
-            <DeletePostAlert
-              postId={displayPost.id}
-              authorUsername={displayPost.authorUsername}
-              onDeleted={() => {
-                onClose();
-                window.location.reload();
-              }}
-            />
+            {isAdmin ? (
+              <DeletePostAlert
+                postId={displayPost.id}
+                authorUsername={displayPost.authorUsername}
+                onDeleted={() => {
+                  onClose();
+                  window.location.reload();
+                }}
+              />
+            ) : null}
           </footer>
         </Dialog.Content>
       </Dialog.Portal>
@@ -180,10 +190,6 @@ function formatSavedAt(value: string | null) {
   return value ? `Enregistré le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(value))}` : "Date d’enregistrement inconnue";
 }
 
-function formatDate(value: string | null) {
-  return value ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(value)) : "Inconnue";
-}
-
-function contentTypeLabel(value: LibraryPost["contentType"]) {
-  return ({ image: "Image", carousel: "Carousel", reel: "Reel", other: "Autre" } as const)[value];
+function formatMetric(value: number | null) {
+  return value === null ? "Non disponible" : new Intl.NumberFormat("fr-FR").format(value);
 }

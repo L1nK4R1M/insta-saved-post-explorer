@@ -26,7 +26,6 @@ export async function getSession(): Promise<AuthSession | null> {
   if (isAuthDisabled()) {
     return {
       ownerId: getConfiguredOwnerId(),
-      email: "development-bypass@localhost",
       role: "admin",
       bypass: true,
     };

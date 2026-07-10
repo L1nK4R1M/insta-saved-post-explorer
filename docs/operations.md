@@ -4,8 +4,8 @@
 
 Exécuter d'abord sur Preview, puis répéter après promotion en Production :
 
-1. Ouvrir la page d'authentification et vérifier la redirection privée.
-2. Se connecter avec le compte de l'environnement.
+1. Ouvrir la bibliothèque sans session et vérifier la navigation publique.
+2. Ouvrir le bouton Admin et vérifier la connexion par mot de passe.
 3. Charger la bibliothèque, rechercher, filtrer en ET/OU et ouvrir un détail.
 4. Passer entre les thèmes clair, sombre et système sans flash d'hydratation.
 5. Importer une petite fixture, puis la réimporter pour vérifier l'idempotence.

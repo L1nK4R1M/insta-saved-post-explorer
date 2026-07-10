@@ -1,6 +1,6 @@
 "use client";
 
-import { Grid2X2, LayoutGrid, LogOut, Search, SlidersHorizontal, Sparkles, Upload, X } from "lucide-react";
+import { Grid2X2, LayoutGrid, LogIn, LogOut, Search, SlidersHorizontal, Sparkles, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -28,11 +28,13 @@ export function LibraryExplorer({
   initialNextCursor,
   initialState,
   initialError,
+  isAdmin,
 }: {
   posts: LibraryPost[];
   initialNextCursor: string | null;
   initialState: LibraryInitialState;
   initialError?: string;
+  isAdmin: boolean;
 }) {
   const [posts, setPosts] = useState(initialPosts);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
@@ -212,20 +214,30 @@ export function LibraryExplorer({
               <LayoutGrid aria-hidden="true" className="size-4" /> Masonry
             </button>
           </div>
-          <button
-            className="button import-button"
-            type="button"
-            aria-label="Importer JSON"
-            onClick={() => setImportOpen(true)}
-          >
-            <Upload aria-hidden="true" className="size-4" /><span className="desktop-only">Importer JSON</span>
-          </button>
-          <ThemeMenu />
-          <form action="/api/auth/logout" method="post">
-            <button className="icon-button" type="submit" aria-label="Se déconnecter">
-              <LogOut aria-hidden="true" className="size-4" />
+          {isAdmin ? (
+            <button
+              className="button import-button"
+              type="button"
+              aria-label="Importer JSON"
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload aria-hidden="true" className="size-4" /><span className="desktop-only">Importer JSON</span>
             </button>
-          </form>
+          ) : null}
+          <ThemeMenu />
+          {isAdmin ? (
+            <form action="/api/auth/logout" method="post">
+              <button className="button" type="submit" aria-label="Se déconnecter du mode administrateur">
+                <LogOut aria-hidden="true" className="size-4" />
+                <span className="desktop-only">Quitter admin</span>
+              </button>
+            </form>
+          ) : (
+            <Link className="button" href="/login" aria-label="Ouvrir la connexion administrateur">
+              <LogIn aria-hidden="true" className="size-4" />
+              <span className="desktop-only">Admin</span>
+            </Link>
+          )}
         </nav>
       </header>
 
@@ -271,7 +283,7 @@ export function LibraryExplorer({
         {filtersVisible ? <aside className="desktop-filter-panel desktop-only"><FilterContent {...filterProps} /></aside> : null}
         <section className="library-content" aria-label="Publications sauvegardées" aria-live="polite">
           {requestError ? <p className="request-error" role="alert">{requestError}</p> : null}
-          {initialError ? <LibraryError message={initialError} /> : posts.length === 0 ? <EmptyLibrary onImport={() => setImportOpen(true)} /> : filteredPosts.length === 0 ? <NoResults onReset={resetFilters} /> : (
+          {initialError ? <LibraryError message={initialError} /> : posts.length === 0 ? <EmptyLibrary onImport={isAdmin ? () => setImportOpen(true) : undefined} /> : filteredPosts.length === 0 ? <NoResults onReset={resetFilters} /> : (
             <>
               <div className={cn("posts-grid", view === "masonry" ? "posts-masonry" : "posts-regular")}>
                 {filteredPosts.map((post) => <PostCard key={post.id} post={post} view={view} onOpen={() => setSelectedPostId(post.id)} />)}
@@ -289,11 +301,13 @@ export function LibraryExplorer({
       </main>
 
       <MobileFilterDrawer open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen} {...filterProps} />
-      <ImportDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        onImported={() => window.location.reload()}
-      />
+      {isAdmin ? (
+        <ImportDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          onImported={() => window.location.reload()}
+        />
+      ) : null}
       <PostDetailDialog
         post={selectedPost}
         position={selectedIndex}
@@ -301,6 +315,7 @@ export function LibraryExplorer({
         onClose={() => setSelectedPostId(null)}
         onPrevious={showPrevious}
         onNext={showNext}
+        isAdmin={isAdmin}
       />
     </div>
   );

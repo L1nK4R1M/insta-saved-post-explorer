@@ -2,7 +2,6 @@ import { z } from "zod";
 
 const ownerIdSchema = z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/);
 const authSecretSchema = z.string().min(32).max(4096);
-const adminEmailSchema = z.string().trim().email().max(254).transform((email) => email.toLowerCase());
 const bcryptHashSchema = z.string().regex(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/);
 
 export class AuthConfigurationError extends Error {
@@ -14,7 +13,6 @@ export class AuthConfigurationError extends Error {
 
 export type SessionConfiguration = {
   secret: Uint8Array;
-  adminEmail: string;
   ownerId: string;
 };
 
@@ -34,17 +32,15 @@ export function getSessionConfiguration(): SessionConfiguration {
   if (isUnsafeProductionBypassRequested()) throw new AuthConfigurationError();
 
   const secret = authSecretSchema.safeParse(process.env.AUTH_SECRET);
-  const adminEmail = adminEmailSchema.safeParse(process.env.ADMIN_EMAIL);
   const ownerId = ownerIdSchema.safeParse(process.env.APP_OWNER_ID ?? "local");
   const passwordHash = bcryptHashSchema.safeParse(process.env.ADMIN_PASSWORD_HASH);
 
-  if (!secret.success || !adminEmail.success || !ownerId.success || !passwordHash.success) {
+  if (!secret.success || !ownerId.success || !passwordHash.success) {
     throw new AuthConfigurationError();
   }
 
   return {
     secret: new TextEncoder().encode(secret.data),
-    adminEmail: adminEmail.data,
     ownerId: ownerId.data,
   };
 }

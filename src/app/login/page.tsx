@@ -20,10 +20,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             Mosaïque
           </p>
           <h1 id="login-title" style={{ margin: 0, fontSize: "clamp(1.7rem, 5vw, 2.2rem)", lineHeight: 1.1 }}>
-            Bibliothèque privée
+            Accès administrateur
           </h1>
           <p className="text-muted" style={{ margin: "12px 0 0", lineHeight: 1.55 }}>
-            Connectez-vous avec le compte administrateur pour explorer vos publications sauvegardées.
+            La bibliothèque est publique. Saisissez le mot de passe uniquement
+            pour importer ou administrer les publications.
           </p>
         </div>
 

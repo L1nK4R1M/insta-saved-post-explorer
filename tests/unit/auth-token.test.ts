@@ -18,7 +18,6 @@ describe("jetons de session administrateur", () => {
   beforeEach(() => {
     vi.stubEnv("NODE_ENV", "test");
     process.env.AUTH_SECRET = TEST_SECRET;
-    process.env.ADMIN_EMAIL = "admin.qa@example.com";
     process.env.ADMIN_PASSWORD_HASH = SYNTACTIC_BCRYPT_HASH;
     process.env.APP_OWNER_ID = "qa-owner";
     process.env.AUTH_DISABLED = "false";
@@ -28,12 +27,11 @@ describe("jetons de session administrateur", () => {
     vi.unstubAllEnvs();
   });
 
-  it("crée puis vérifie un JWT lié à l'owner et à l'administrateur configurés", async () => {
+  it("crée puis vérifie un JWT lié à l'owner administrateur", async () => {
     const token = await createSessionToken();
 
     await expect(verifySessionToken(token)).resolves.toEqual({
       ownerId: "qa-owner",
-      email: "admin.qa@example.com",
       role: "admin",
       bypass: false,
     });
@@ -47,15 +45,12 @@ describe("jetons de session administrateur", () => {
     await expect(verifySessionToken(token)).resolves.toBeNull();
   });
 
-  it("invalide un jeton si l'owner ou l'e-mail configuré change", async () => {
+  it("invalide un jeton si l'owner configuré change", async () => {
     const token = await createSessionToken();
 
     process.env.APP_OWNER_ID = "other-owner";
     await expect(verifySessionToken(token)).resolves.toBeNull();
 
-    process.env.APP_OWNER_ID = "qa-owner";
-    process.env.ADMIN_EMAIL = "other-admin@example.com";
-    await expect(verifySessionToken(token)).resolves.toBeNull();
   });
 
   it("refuse les jetons expirés et les claims inattendus", async () => {
@@ -74,7 +69,7 @@ async function signedToken(input: {
   audience: string;
   expiresIn: string;
 }): Promise<string> {
-  return new SignJWT({ email: "admin.qa@example.com", role: input.role })
+  return new SignJWT({ role: input.role })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject("qa-owner")
     .setIssuer(SESSION_ISSUER)

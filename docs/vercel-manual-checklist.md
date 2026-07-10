@@ -39,7 +39,6 @@ pour **Preview** puis **Production** :
 | --- | --- |
 | `DATABASE_URL` | URL PostgreSQL poolée de l'environnement |
 | `AUTH_SECRET` | Secret aléatoire de l'environnement |
-| `ADMIN_EMAIL` | Adresse autorisée |
 | `ADMIN_PASSWORD_HASH` | Hash bcrypt généré |
 | `APP_OWNER_ID` | Identifiant stable, par exemple `karim` |
 | `IMPORT_MAX_BYTES` | `1000000` |
