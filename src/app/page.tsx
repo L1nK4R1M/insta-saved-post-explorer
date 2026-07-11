@@ -3,7 +3,7 @@ import { getSession } from "@/auth/session";
 import { LibraryExplorer, type LibraryInitialState } from "@/features/library/components/library-explorer";
 import { parseLibraryQuery } from "@/features/library/query-state";
 import type { SortMode, TagMode, ViewMode } from "@/features/library/types";
-import { queryLibraryPosts } from "@/server/library";
+import { getLibraryMainThemes, queryLibraryPosts } from "@/server/library";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -14,19 +14,25 @@ export default async function HomePage({ searchParams }: PageProps) {
   const initialState: LibraryInitialState = {
     query: valueOf(params.q),
     tags: valueOf(params.tags).split(",").map((tag) => tag.trim()).filter(Boolean),
+    theme: valueOf(params.theme) || null,
     tagMode: oneOf(valueOf(params.tagMode), ["and", "or"], "and"),
-    sort: oneOf(valueOf(params.sort), ["newest", "oldest", "author", "relevance"], "newest"),
+    sort: oneOf(valueOf(params.sort), ["newest", "oldest", "author", "relevance", "likes", "comments"], "newest"),
     view: oneOf(valueOf(params.view), ["grid", "masonry"], "masonry"),
     postId: valueOf(params.post) || null,
   };
 
   const session = await getSession().catch(() => null);
-  const library = await loadLibrary(initialState, getConfiguredOwnerId());
+  const ownerId = getConfiguredOwnerId();
+  const [library, mainThemes] = await Promise.all([
+    loadLibrary(initialState, ownerId),
+    getLibraryMainThemes(ownerId).catch(() => []),
+  ]);
   return (
     <LibraryExplorer
       posts={library.posts}
       initialNextCursor={library.nextCursor}
       initialState={initialState}
+      initialMainThemes={mainThemes}
       initialError={library.error}
       isAdmin={session?.role === "admin"}
     />
@@ -39,6 +45,7 @@ async function loadLibrary(initialState: LibraryInitialState, ownerId: string) {
       parseLibraryQuery({
         search: initialState.query,
         tags: initialState.tags,
+        theme: initialState.theme,
         tagMode: initialState.tagMode,
         sort: initialState.sort,
         limit: 30,

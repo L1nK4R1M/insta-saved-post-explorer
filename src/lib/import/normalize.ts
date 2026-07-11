@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { ContentType } from "@/features/library/types";
+import { parseCaptionMetrics } from "@/features/library/caption-metrics";
 
 type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -17,6 +18,8 @@ export type NormalizedImportPost = {
   publishedAt: Date | null;
   contentType: ContentType;
   mainTheme: string | null;
+  likesCount: number | null;
+  commentsCount: number | null;
   metadata: { [key: string]: JsonValue };
   searchText: string;
 };
@@ -198,6 +201,7 @@ export function normalizeImportPayload(input: unknown): {
     }
 
     const post = parsedPost.data;
+    const metrics = parseCaptionMetrics(post.caption);
     items.push({
       externalId: post.externalId ?? null,
       postUrl: post.postUrl,
@@ -210,6 +214,8 @@ export function normalizeImportPayload(input: unknown): {
       publishedAt: post.publishedAt ?? null,
       contentType: post.contentType,
       mainTheme: post.mainTheme ? normalizeWhitespace(post.mainTheme) : null,
+      likesCount: metrics.likes,
+      commentsCount: metrics.comments,
       metadata: post.metadata,
       searchText: buildSearchText({
         authorUsername: post.authorUsername,

@@ -15,9 +15,11 @@ export type LibraryPost = {
   publishedAt: string | null;
   contentType: ContentType;
   mainTheme: string | null;
+  likesCount: number | null;
+  commentsCount: number | null;
   metadata: Record<string, unknown>;
 };
 
 export type TagMode = "and" | "or";
 export type ViewMode = "grid" | "masonry";
-export type SortMode = "newest" | "oldest" | "author" | "relevance";
+export type SortMode = "newest" | "oldest" | "author" | "relevance" | "likes" | "comments";

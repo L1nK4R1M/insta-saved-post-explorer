@@ -36,6 +36,20 @@ describe("filterAndPaginatePosts", () => {
     expect(page.items).toHaveLength(0);
   });
 
+  it("filtre explicitement par thème principal", () => {
+    const page = filterAndPaginatePosts(posts, parseLibraryQuery({ theme: "Sucré" }));
+    expect(page.items.map((post) => post.id)).toEqual(["a", "c"]);
+  });
+
+  it("trie par likes et commentaires décroissants", () => {
+    posts[0].likesCount = 20;
+    posts[1].likesCount = 100;
+    posts[2].commentsCount = 12;
+    posts[3].commentsCount = 2;
+    expect(filterAndPaginatePosts(posts, parseLibraryQuery({ sort: "likes" })).items.map((post) => post.id)).toEqual(["b", "a", "c", "d"]);
+    expect(filterAndPaginatePosts(posts, parseLibraryQuery({ sort: "comments" })).items.map((post) => post.id)).toEqual(["c", "d", "a", "b"]);
+  });
+
   it("pagine avec un curseur composite stable sans doublon", () => {
     const first = filterAndPaginatePosts(posts, parseLibraryQuery({ limit: 2, sort: "newest" }));
     const second = filterAndPaginatePosts(
@@ -75,6 +89,8 @@ function makePost(
     publishedAt: null,
     contentType: "image",
     mainTheme,
+    likesCount: null,
+    commentsCount: null,
     metadata: {},
   };
 }

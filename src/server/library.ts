@@ -66,6 +66,7 @@ export async function queryLibraryPosts(
   const effectiveSort = query.sort === "relevance" ? "newest" : query.sort;
   const where: Prisma.PostWhereInput = {
     ownerId,
+    ...(query.theme ? { mainTheme: query.theme } : {}),
     ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
     ...tagWhere(ownerId, query.tags, query.tagMode),
     ...cursorWhere(cursor, effectiveSort),
@@ -116,6 +117,7 @@ async function queryRelevantPosts(
         )::double precision AS rank
       FROM "posts" p
       WHERE p."owner_id" = ${ownerId}
+        AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
         AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
         ${tagCondition}
     )
@@ -206,6 +208,21 @@ export async function getLibraryTags(requestedOwnerId?: string): Promise<Library
   return tags.map((tag) => ({ name: tag.name, slug: tag.slug, count: tag._count.postTags }));
 }
 
+export async function getLibraryMainThemes(requestedOwnerId?: string): Promise<string[]> {
+  const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
+  if (!databaseConfigured) {
+    return [...new Set((await readFallbackPosts()).flatMap((post) => post.mainTheme ? [post.mainTheme] : []))]
+      .sort((left, right) => left.localeCompare(right, "fr"));
+  }
+  const rows = await prisma.post.findMany({
+    where: { ownerId, mainTheme: { not: null } },
+    distinct: ["mainTheme"],
+    select: { mainTheme: true },
+    orderBy: { mainTheme: "asc" },
+  });
+  return rows.flatMap((row) => row.mainTheme ? [row.mainTheme] : []);
+}
+
 export async function getLibraryPost(
   postId: string,
   requestedOwnerId?: string,
@@ -256,6 +273,20 @@ function cursorWhere(
     };
   }
 
+  if (sort === "likes" || sort === "comments") {
+    const field = sort === "likes" ? "likesCount" : "commentsCount";
+    if (cursor.value === null) return { [field]: null, id: { gt: cursor.id } };
+    const metric = Number(cursor.value);
+    if (!Number.isSafeInteger(metric) || metric < 0) throw cursorValidationError();
+    return {
+      OR: [
+        { [field]: { lt: metric } },
+        { [field]: metric, id: { gt: cursor.id } },
+        { [field]: null },
+      ],
+    };
+  }
+
   if (cursor.value === null) return { savedAt: null, id: { gt: cursor.id } };
   const date = new Date(cursor.value);
   if (Number.isNaN(date.getTime())) throw cursorValidationError();
@@ -281,6 +312,8 @@ function orderByFor(
   sort: Exclude<SortMode, "relevance">,
 ): Prisma.PostOrderByWithRelationInput[] {
   if (sort === "author") return [{ authorSortKey: "asc" }, { id: "asc" }];
+  if (sort === "likes") return [{ likesCount: { sort: "desc", nulls: "last" } }, { id: "asc" }];
+  if (sort === "comments") return [{ commentsCount: { sort: "desc", nulls: "last" } }, { id: "asc" }];
   return [
     { savedAt: { sort: sort === "oldest" ? "asc" : "desc", nulls: "last" } },
     { id: "asc" },
@@ -295,7 +328,13 @@ function cursorFromRow(
   return {
     version: 1,
     sort: exposedSort,
-    value: effectiveSort === "author" ? row.authorSortKey : row.savedAt?.toISOString() ?? null,
+    value: effectiveSort === "author"
+      ? row.authorSortKey
+      : effectiveSort === "likes"
+        ? String(row.likesCount ?? "") || null
+        : effectiveSort === "comments"
+          ? String(row.commentsCount ?? "") || null
+          : row.savedAt?.toISOString() ?? null,
     id: row.id,
   };
 }
@@ -318,6 +357,8 @@ function toLibraryPost(row: PostWithTags, compact: boolean): LibraryPost {
     publishedAt: row.publishedAt?.toISOString() ?? null,
     contentType: row.contentType.toLowerCase() as ContentType,
     mainTheme: row.mainTheme,
+    likesCount: row.likesCount,
+    commentsCount: row.commentsCount,
     metadata: compact ? {} : metadata,
   };
 }
@@ -341,6 +382,8 @@ async function readFallbackPosts(): Promise<LibraryPost[]> {
       publishedAt: post.publishedAt?.toISOString() ?? null,
       contentType: post.contentType,
       mainTheme: post.mainTheme,
+      likesCount: post.likesCount,
+      commentsCount: post.commentsCount,
       metadata: post.metadata,
     }));
   })();
