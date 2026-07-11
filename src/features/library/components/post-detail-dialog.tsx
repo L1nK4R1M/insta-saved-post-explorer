@@ -132,9 +132,9 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
                   tags={displayPost.tags}
                   onTagsChange={(tags) => setDetailPost({ ...displayPost, tags })}
                 />
-              ) : displayPost.tags.length ? (
+              ) : displayPost.tags.some((tag) => tag !== "Favoris") ? (
                 <ul className="readonly-tags" aria-label="Tags associés à cette publication">
-                  {displayPost.tags.map((tag) => <li key={tag}>#{tag}</li>)}
+                  {displayPost.tags.filter((tag) => tag !== "Favoris").map((tag) => <li key={tag}>#{tag}</li>)}
                 </ul>
               ) : <p className="text-sm text-muted">Aucun tag</p>}
             </section>

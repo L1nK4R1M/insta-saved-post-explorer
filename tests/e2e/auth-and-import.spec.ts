@@ -31,6 +31,12 @@ test.describe("authentification administrateur réelle", () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("region", { name: /Publications sauvegardées/i })).toBeVisible();
     await expect(page.locator("button.import-button")).toBeVisible();
+    const favoriteButtons = page.getByRole("button", { name: "Ajouter aux favoris" });
+    await expect(favoriteButtons).not.toHaveCount(0);
+    const favoriteButton = favoriteButtons.first();
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Retirer des favoris" }).first().click();
 
     const sessionCookie = (await context.cookies()).find((cookie) => cookie.name === "mosaic_session");
     expect(sessionCookie).toMatchObject({ httpOnly: true, sameSite: "Lax" });

@@ -1,16 +1,18 @@
 "use client";
 
-import { Bookmark, Images, Play } from "lucide-react";
+import { Heart, Images, Play } from "lucide-react";
 import { useState } from "react";
 
 import { BrokenImage } from "@/features/library/components/library-states";
 import type { LibraryPost, ViewMode } from "@/features/library/types";
 import { cn } from "@/lib/utils";
 
-export function PostCard({ post, view, onOpen }: { post: LibraryPost; view: ViewMode; onOpen: () => void }) {
+export function PostCard({ post, view, onOpen, isAdmin, onToggleFavorite }: { post: LibraryPost; view: ViewMode; onOpen: () => void; isAdmin: boolean; onToggleFavorite: () => void }) {
   const [imageFailed, setImageFailed] = useState(false);
   const imageUrl = post.thumbnailUrl || post.mediaUrl || "";
-  const TypeIcon = post.contentType === "reel" ? Play : post.contentType === "carousel" ? Images : Bookmark;
+  const TypeIcon = post.contentType === "reel" ? Play : post.contentType === "carousel" ? Images : null;
+  const favorite = post.tags.includes("Favoris");
+  const visibleTags = isAdmin ? post.tags : post.tags.filter((tag) => tag !== "Favoris");
 
   return (
     <article className={cn("post-card", view === "masonry" && "post-card-masonry", view === "masonry" && `masonry-size-${postCardSize(post.id)}`)}>
@@ -39,18 +41,27 @@ export function PostCard({ post, view, onOpen }: { post: LibraryPost; view: View
               onError={() => setImageFailed(true)}
             />
           )}
-          <span className="type-indicator" aria-label={`Type : ${post.contentType}`}>
-            <TypeIcon aria-hidden="true" className="size-3.5" />
-          </span>
+          {!isAdmin && TypeIcon ? <span className="type-indicator" aria-label={`Type : ${post.contentType}`}><TypeIcon aria-hidden="true" className="size-3.5" /></span> : null}
         </div>
         <div className="post-card-copy">
           <p className="truncate text-sm font-medium">@{post.authorUsername.replace(/^@/, "")}</p>
           {post.caption ? <p className="line-clamp-2 text-pretty text-xs text-muted">{post.caption}</p> : null}
           <div className="card-tags" aria-label="Tags">
-            {post.tags.slice(0, 3).map((tag) => <span key={tag}>#{tag}</span>)}
+            {visibleTags.slice(0, 3).map((tag) => <span key={tag}>#{tag}</span>)}
           </div>
         </div>
       </button>
+      {isAdmin ? (
+        <button
+          className={cn("favorite-button", favorite && "is-favorite")}
+          type="button"
+          aria-label={favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+          aria-pressed={favorite}
+          onClick={onToggleFavorite}
+        >
+          <Heart aria-hidden="true" className="size-4" fill={favorite ? "currentColor" : "none"} />
+        </button>
+      ) : null}
     </article>
   );
 }

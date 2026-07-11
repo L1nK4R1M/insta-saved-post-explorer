@@ -33,6 +33,18 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("tagMode")).toBe("or");
   });
 
+  test("affiche un état de chargement pendant un filtrage lent", async ({ page }) => {
+    await page.route("**/api/posts?**", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.continue();
+    });
+    const filters = await openFilters(page);
+    await filters.getByRole("button", { name: /Dessert protéiné/ }).click();
+    const loading = page.getByRole("status").filter({ hasText: /Chargement des résultats/i });
+    await expect(loading).toBeVisible();
+    await expect(loading).toBeHidden();
+  });
+
   test("ouvre le detail et navigue au bouton et au clavier", async ({ page }) => {
     await page.getByRole("button", { name: "Ouvrir la publication de esncom.fr" }).click();
     const dialog = page.getByRole("dialog", { name: "Publication de esncom.fr" });
@@ -69,6 +81,7 @@ test.describe("bibliotheque Mosaïque", () => {
   test("reste en lecture seule pour un visiteur", async ({ page }) => {
     await expect(page.getByRole("link", { name: "Ouvrir la connexion administrateur" })).toBeVisible();
     await expect(page.locator("button.import-button")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /favoris/i })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Ouvrir la publication de esncom.fr" }).click();
     const dialog = page.getByRole("dialog", { name: "Publication de esncom.fr" });
