@@ -17,6 +17,16 @@ const validItem = {
 };
 
 describe("normalizeImportPayload", () => {
+  it("corrige la faute historique du thème Cuisine", () => {
+    const result = normalizeImportPayload([{
+      post_url: "https://www.instagram.com/p/cuisine-theme",
+      thumbnail_url: "https://cdn.example.com/cuisine.jpg",
+      username: "chef",
+      main_theme: "Cusine",
+    }]);
+
+    expect(result.items[0].mainTheme).toBe("Cuisine");
+  });
   it("accepte un tableau ou un wrapper items et normalise les alias", () => {
     const direct = normalizeImportPayload([validItem]);
     const wrapped = normalizeImportPayload({ items: [validItem], count: 1 });

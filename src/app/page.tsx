@@ -3,7 +3,7 @@ import { getSession } from "@/auth/session";
 import { LibraryExplorer, type LibraryInitialState } from "@/features/library/components/library-explorer";
 import { parseLibraryQuery } from "@/features/library/query-state";
 import type { SortMode, TagMode, ViewMode } from "@/features/library/types";
-import { getLibraryMainThemes, queryLibraryPosts } from "@/server/library";
+import { getLibraryMainThemes, getLibraryTags, queryLibraryPosts } from "@/server/library";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -23,9 +23,10 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   const session = await getSession().catch(() => null);
   const ownerId = getConfiguredOwnerId();
-  const [library, mainThemes] = await Promise.all([
+  const [library, mainThemes, tagFacets] = await Promise.all([
     loadLibrary(initialState, ownerId),
     getLibraryMainThemes(ownerId).catch(() => []),
+    getLibraryTags(ownerId).catch(() => []),
   ]);
   return (
     <LibraryExplorer
@@ -33,6 +34,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       initialNextCursor={library.nextCursor}
       initialState={initialState}
       initialMainThemes={mainThemes}
+      initialTagFacets={tagFacets}
       initialError={library.error}
       isAdmin={session?.role === "admin"}
     />

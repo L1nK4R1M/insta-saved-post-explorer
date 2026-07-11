@@ -232,7 +232,7 @@ select { min-height: 38px; border: 1px solid var(--line); border-radius: 9px; ba
 .posts-masonry { display: block; columns: 205px auto; column-gap: 12px; }
 .posts-masonry .post-card { display: inline-block; width: 100%; margin: 0 0 12px; break-inside: avoid; vertical-align: top; }
 
-.post-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.post-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .post-card-button { display: block; width: 100%; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; }
 .post-card-button:focus-visible { outline-offset: -3px; }
 .post-media { position: relative; aspect-ratio: 1; overflow: hidden; background: var(--surface-subtle); }
@@ -242,6 +242,11 @@ select { min-height: 38px; border: 1px solid var(--line); border-radius: 9px; ba
 .post-card-masonry.masonry-size-3 .post-media { aspect-ratio: 3 / 4; }
 .post-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .type-indicator { position: absolute; top: 9px; right: 9px; display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid rgb(255 255 255 / 0.45); border-radius: 8px; background: rgb(15 18 23 / 0.78); color: #fff; }
+.favorite-button { position: absolute; top: 9px; right: 9px; z-index: 10; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid rgb(255 255 255 / .55); border-radius: 10px; background: rgb(15 18 23 / .78); color: #fff; cursor: pointer; }
+.favorite-button.is-favorite { border-color: #fb7185; background: #be123c; }
+.filter-loading { position: sticky; top: 138px; z-index: 10; display: flex; width: fit-content; align-items: center; gap: 8px; margin: 0 auto 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); padding: 9px 12px; color: var(--muted); font-size: .875rem; }
+.loading-spinner { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 999px; animation: loading-spin .7s linear infinite; }
+@keyframes loading-spin { to { transform: rotate(360deg); } }
 .post-card-copy { display: grid; gap: 5px; padding: 10px; }
 .card-tags { display: flex; gap: 5px; overflow: hidden; }
 .card-tags span { flex: none; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-subtle); color: var(--muted); padding: 2px 6px; font-size: 0.675rem; }
@@ -337,4 +342,5 @@ select { min-height: 38px; border: 1px solid var(--line); border-radius: 9px; ba
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
+  .loading-spinner { animation: none; }
 }

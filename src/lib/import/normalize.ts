@@ -213,7 +213,7 @@ export function normalizeImportPayload(input: unknown): {
       savedAt: post.savedAt ?? null,
       publishedAt: post.publishedAt ?? null,
       contentType: post.contentType,
-      mainTheme: post.mainTheme ? normalizeWhitespace(post.mainTheme) : null,
+      mainTheme: post.mainTheme ? normalizeMainTheme(post.mainTheme) : null,
       likesCount: metrics.likes,
       commentsCount: metrics.comments,
       metadata: post.metadata,
@@ -409,6 +409,11 @@ function emptyToUndefined(value: unknown): unknown {
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeMainTheme(value: string): string {
+  const normalized = normalizeWhitespace(value);
+  return ["cusine", "cuisne"].includes(foldForSearch(normalized)) ? "Cuisine" : normalized;
 }
 
 function isBoundedJsonObject(
