@@ -226,6 +226,8 @@ function toPostData(post: NormalizedImportPost): Prisma.PostUncheckedCreateWitho
     publishedAt: post.publishedAt,
     contentType: post.contentType.toUpperCase() as PrismaContentType,
     mainTheme: post.mainTheme,
+    likesCount: post.likesCount,
+    commentsCount: post.commentsCount,
     metadata: post.metadata as Prisma.InputJsonValue,
     searchText: post.searchText,
   };

@@ -18,6 +18,7 @@ export function filterAndPaginatePosts(
   const search = foldForSearch(query.search);
   const expectedTags = query.tags.map(tagSlug).filter(Boolean);
   const filtered = posts.filter((post) => {
+    if (query.theme && post.mainTheme !== query.theme) return false;
     if (search && !postSearchText(post).includes(search)) return false;
 
     if (expectedTags.length > 0) {
@@ -76,6 +77,10 @@ export function comparePosts(
     if (comparison === 0) comparison = compareNullableDates(left.savedAt, right.savedAt, "desc");
   } else if (sort === "oldest") {
     comparison = compareNullableDates(left.savedAt, right.savedAt);
+  } else if (sort === "likes") {
+    comparison = compareNullableNumbers(left.likesCount, right.likesCount);
+  } else if (sort === "comments") {
+    comparison = compareNullableNumbers(left.commentsCount, right.commentsCount);
   } else {
     comparison = compareNullableDates(left.savedAt, right.savedAt, "desc");
   }
@@ -86,7 +91,20 @@ export function comparePosts(
 export function cursorValue(post: LibraryPost, sort: SortMode, search = ""): string | null {
   if (sort === "author") return foldForSearch(post.authorUsername);
   if (sort === "relevance") return String(relevanceScore(post, search));
+  if (sort === "likes") return leftPadMetric(post.likesCount);
+  if (sort === "comments") return leftPadMetric(post.commentsCount);
   return post.savedAt;
+}
+
+function compareNullableNumbers(left: number | null, right: number | null): number {
+  if (left === right) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return right - left;
+}
+
+function leftPadMetric(value: number | null): string | null {
+  return value === null ? null : String(value);
 }
 
 function postSearchText(post: LibraryPost): string {

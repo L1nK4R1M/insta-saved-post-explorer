@@ -34,6 +34,8 @@ model Post {
   publishedAt    DateTime?   @map("published_at") @db.Timestamptz(3)
   contentType    ContentType @default(OTHER) @map("content_type")
   mainTheme      String?     @map("main_theme")
+  likesCount     Int?        @map("likes_count")
+  commentsCount  Int?        @map("comments_count")
   metadata       Json        @default("{}")
   searchText     String      @map("search_text") @db.Text
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -45,6 +47,8 @@ model Post {
   @@index([ownerId, publishedAt, id], map: "posts_owner_published_at_id_idx")
   @@index([ownerId, authorSortKey, id], map: "posts_owner_author_id_idx")
   @@index([ownerId, mainTheme], map: "posts_owner_main_theme_idx")
+  @@index([ownerId, likesCount, id], map: "posts_owner_likes_count_id_idx")
+  @@index([ownerId, commentsCount, id], map: "posts_owner_comments_count_id_idx")
   @@map("posts")
 }
 

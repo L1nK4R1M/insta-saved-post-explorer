@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 export type LibraryInitialState = {
   query: string;
   tags: string[];
+  theme: string | null;
   tagMode: TagMode;
   sort: SortMode;
   view: ViewMode;
@@ -27,12 +28,14 @@ export function LibraryExplorer({
   posts: initialPosts,
   initialNextCursor,
   initialState,
+  initialMainThemes,
   initialError,
   isAdmin,
 }: {
   posts: LibraryPost[];
   initialNextCursor: string | null;
   initialState: LibraryInitialState;
+  initialMainThemes: string[];
   initialError?: string;
   isAdmin: boolean;
 }) {
@@ -42,6 +45,7 @@ export function LibraryExplorer({
   const [requestError, setRequestError] = useState<string | null>(null);
   const [query, setQuery] = useState(initialState.query);
   const [selectedTags, setSelectedTags] = useState(initialState.tags);
+  const [selectedTheme, setSelectedTheme] = useState(initialState.theme);
   const [tagMode, setTagMode] = useState<TagMode>(initialState.tagMode);
   const [sort, setSort] = useState<SortMode>(initialState.sort);
   const [view, setView] = useState<ViewMode>(initialState.view);
@@ -61,6 +65,8 @@ export function LibraryExplorer({
     return Array.from(counts, ([name, count]) => ({ name, count }));
   }, [posts]);
 
+  const mainThemes = initialMainThemes;
+
   const filteredPosts = useMemo(() => {
     const normalizedQuery = normalize(debouncedQuery);
     const filtered = posts.filter((post) => {
@@ -68,10 +74,10 @@ export function LibraryExplorer({
       const matchesTags = selectedTags.length === 0 || (tagMode === "and"
         ? selectedTags.every((tag) => post.tags.includes(tag))
         : selectedTags.some((tag) => post.tags.includes(tag)));
-      return matchesQuery && matchesTags;
+      return matchesQuery && matchesTags && (!selectedTheme || post.mainTheme === selectedTheme);
     });
     return filtered.sort((a, b) => comparePosts(a, b, sort));
-  }, [debouncedQuery, posts, selectedTags, sort, tagMode]);
+  }, [debouncedQuery, posts, selectedTags, selectedTheme, sort, tagMode]);
 
   const selectedIndex = filteredPosts.findIndex((post) => post.id === selectedPostId);
   const selectedPost = selectedIndex >= 0 ? filteredPosts[selectedIndex] : null;
@@ -80,13 +86,14 @@ export function LibraryExplorer({
     const params = new URLSearchParams();
     if (debouncedQuery) params.set("q", debouncedQuery);
     if (selectedTags.length) params.set("tags", selectedTags.join(","));
+    if (selectedTheme) params.set("theme", selectedTheme);
     if (tagMode !== "and") params.set("tagMode", tagMode);
     if (sort !== "newest") params.set("sort", sort);
     if (view !== "masonry") params.set("view", view);
     if (selectedPostId) params.set("post", selectedPostId);
     const nextUrl = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`;
     window.history.replaceState(window.history.state, "", nextUrl);
-  }, [debouncedQuery, selectedPostId, selectedTags, sort, tagMode, view]);
+  }, [debouncedQuery, selectedPostId, selectedTags, selectedTheme, sort, tagMode, view]);
 
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
@@ -112,6 +119,7 @@ export function LibraryExplorer({
         const response = await fetch(`/api/posts?${librarySearchParams({
           query: debouncedQuery,
           selectedTags,
+          selectedTheme,
           tagMode,
           sort,
         })}`, { signal: controller.signal });
@@ -127,7 +135,7 @@ export function LibraryExplorer({
     };
     void refresh();
     return () => controller.abort();
-  }, [debouncedQuery, selectedTags, sort, tagMode]);
+  }, [debouncedQuery, selectedTags, selectedTheme, sort, tagMode]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -137,6 +145,7 @@ export function LibraryExplorer({
       const response = await fetch(`/api/posts?${librarySearchParams({
         query: debouncedQuery,
         selectedTags,
+        selectedTheme,
         tagMode,
         sort,
         cursor: nextCursor,
@@ -154,7 +163,7 @@ export function LibraryExplorer({
     } finally {
       setLoadingMore(false);
     }
-  }, [debouncedQuery, loadingMore, nextCursor, selectedTags, sort, tagMode]);
+  }, [debouncedQuery, loadingMore, nextCursor, selectedTags, selectedTheme, sort, tagMode]);
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
@@ -163,9 +172,18 @@ export function LibraryExplorer({
   const resetFilters = useCallback(() => {
     setQuery("");
     setSelectedTags([]);
+    setSelectedTheme(null);
     setTagMode("and");
     setSort("newest");
   }, []);
+
+  const discoverPost = useCallback(() => {
+    if (!filteredPosts.length) return;
+    const candidates = filteredPosts.length > 1 && selectedPostId
+      ? filteredPosts.filter((post) => post.id !== selectedPostId)
+      : filteredPosts;
+    setSelectedPostId(candidates[Math.floor(Math.random() * candidates.length)].id);
+  }, [filteredPosts, selectedPostId]);
 
   const showPrevious = useCallback(() => {
     if (!filteredPosts.length) return;
@@ -184,7 +202,7 @@ export function LibraryExplorer({
   return (
     <div className="app-shell">
       <header className="app-header">
-        <Link className="brand" href="/" aria-label="Mosaïque, accueil">Mosaïque</Link>
+        <Link className="brand" href="/" aria-label="Insta Post Explorer, accueil">Insta Post Explorer</Link>
         <label className="global-search">
           <Search aria-hidden="true" className="size-4" />
           <span className="sr-only">Rechercher dans la bibliothèque</span>
@@ -199,10 +217,9 @@ export function LibraryExplorer({
         </label>
         <nav className="header-actions" aria-label="Actions principales">
           <button
-            className={cn("header-tab desktop-only", sort === "relevance" && "is-active")}
+            className="header-tab desktop-only"
             type="button"
-            aria-pressed={sort === "relevance"}
-            onClick={() => setSort("relevance")}
+            onClick={discoverPost}
           >
             <Sparkles aria-hidden="true" className="size-4" /> Découverte
           </button>
@@ -250,14 +267,26 @@ export function LibraryExplorer({
           {selectedTags.length ? <span className="count-badge">{selectedTags.length}</span> : null}
         </button>
 
+        <div className="main-theme-filters" aria-label="Filtrer par thème principal">
+          {mainThemes.map((theme) => (
+            <button
+              key={theme}
+              type="button"
+              className={cn(selectedTheme === theme && "is-active")}
+              aria-pressed={selectedTheme === theme}
+              onClick={() => setSelectedTheme((current) => current === theme ? null : theme)}
+            >
+              {theme}
+            </button>
+          ))}
+        </div>
+
         <div className="active-tags" aria-label="Tags actifs">
           {selectedTags.length ? selectedTags.map((tag) => (
             <button key={tag} type="button" onClick={() => toggleTag(tag)} aria-label={`Retirer le tag ${tag}`}>
               {tag}<X aria-hidden="true" className="size-3" />
             </button>
-          )) : facets.slice(0, 4).map((facet) => (
-            <button key={facet.name} type="button" onClick={() => toggleTag(facet.name)}>+ {facet.name}</button>
-          ))}
+          )) : null}
           {selectedTags.length ? <span className="mode-pill">Mode {tagMode.toLocaleUpperCase("fr-FR")}</span> : null}
         </div>
 
@@ -270,8 +299,10 @@ export function LibraryExplorer({
             <option value="oldest">Plus anciens</option>
             <option value="author">Auteur</option>
             <option value="relevance">Pertinence</option>
+            <option value="likes">Plus likés</option>
+            <option value="comments">Plus commentés</option>
           </select>
-          {(query || selectedTags.length) ? <button className="text-button desktop-only" type="button" onClick={resetFilters}>Effacer les filtres</button> : null}
+          {(query || selectedTags.length || selectedTheme) ? <button className="text-button desktop-only" type="button" onClick={resetFilters}>Effacer les filtres</button> : null}
           <div className="view-switch mobile-only" aria-label="Mode d’affichage">
             <button type="button" aria-label="Grille régulière" aria-pressed={view === "grid"} className={cn(view === "grid" && "is-active")} onClick={() => setView("grid")}><Grid2X2 aria-hidden="true" className="size-4" /></button>
             <button type="button" aria-label="Grille masonry" aria-pressed={view === "masonry"} className={cn(view === "masonry" && "is-active")} onClick={() => setView("masonry")}><LayoutGrid aria-hidden="true" className="size-4" /></button>
@@ -328,6 +359,8 @@ function normalize(value: string) {
 function comparePosts(a: LibraryPost, b: LibraryPost, sort: SortMode) {
   if (sort === "author") return a.authorUsername.localeCompare(b.authorUsername, "fr-FR");
   if (sort === "relevance") return 0;
+  if (sort === "likes") return (b.likesCount ?? -1) - (a.likesCount ?? -1);
+  if (sort === "comments") return (b.commentsCount ?? -1) - (a.commentsCount ?? -1);
   const aDate = Date.parse(a.savedAt || a.publishedAt || "1970-01-01");
   const bDate = Date.parse(b.savedAt || b.publishedAt || "1970-01-01");
   return sort === "oldest" ? aDate - bDate : bDate - aDate;
@@ -336,6 +369,7 @@ function comparePosts(a: LibraryPost, b: LibraryPost, sort: SortMode) {
 function librarySearchParams(input: {
   query: string;
   selectedTags: string[];
+  selectedTheme: string | null;
   tagMode: TagMode;
   sort: SortMode;
   cursor?: string;
@@ -347,6 +381,7 @@ function librarySearchParams(input: {
   });
   if (input.query) params.set("q", input.query);
   if (input.selectedTags.length) params.set("tags", input.selectedTags.join(","));
+  if (input.selectedTheme) params.set("theme", input.selectedTheme);
   if (input.cursor) params.set("cursor", input.cursor);
   return params.toString();
 }

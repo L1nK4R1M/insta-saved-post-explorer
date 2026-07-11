@@ -8,6 +8,7 @@ export const MAX_LIBRARY_LIMIT = 100;
 export type LibraryQuery = {
   search: string;
   tags: string[];
+  theme: string | null;
   tagMode: TagMode;
   sort: SortMode;
   cursor: string | null;
@@ -25,14 +26,15 @@ const querySchema = z.object({
   search: z.string().trim().max(200).default(""),
   tags: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   tagMode: z.enum(["and", "or"]).default("and"),
-  sort: z.enum(["newest", "oldest", "author", "relevance"]).default("newest"),
+  theme: z.string().trim().min(1).max(120).nullable().default(null),
+  sort: z.enum(["newest", "oldest", "author", "relevance", "likes", "comments"]).default("newest"),
   cursor: z.string().trim().min(1).max(1_024).nullable().default(null),
   limit: z.coerce.number().int().min(1).max(MAX_LIBRARY_LIMIT).default(DEFAULT_LIBRARY_LIMIT),
 });
 
 const cursorSchema = z.object({
   version: z.literal(1),
-  sort: z.enum(["newest", "oldest", "author", "relevance"]),
+  sort: z.enum(["newest", "oldest", "author", "relevance", "likes", "comments"]),
   value: z.string().max(1_024).nullable(),
   id: z.string().min(1).max(256),
 });
@@ -40,6 +42,7 @@ const cursorSchema = z.object({
 export function parseLibraryQuery(input: {
   search?: unknown;
   tags?: unknown;
+  theme?: unknown;
   tagMode?: unknown;
   sort?: unknown;
   cursor?: unknown;
@@ -48,6 +51,7 @@ export function parseLibraryQuery(input: {
   return querySchema.parse({
     ...input,
     tags: normalizeTags(input.tags),
+    theme: input.theme === undefined || input.theme === "" ? null : input.theme,
     cursor: input.cursor === undefined || input.cursor === "" ? null : input.cursor,
   });
 }
@@ -59,6 +63,7 @@ export function parseLibrarySearchParams(searchParams: URLSearchParams): Library
   return parseLibraryQuery({
     search: searchParams.get("search") ?? searchParams.get("q") ?? undefined,
     tags,
+    theme: searchParams.get("theme") ?? undefined,
     tagMode: searchParams.get("tagMode") ?? searchParams.get("tag_mode") ?? undefined,
     sort: searchParams.get("sort") ?? undefined,
     cursor: searchParams.get("cursor") ?? undefined,

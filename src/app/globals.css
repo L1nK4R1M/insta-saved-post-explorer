@@ -195,6 +195,10 @@ button { color: inherit; }
   cursor: pointer;
 }
 .mode-pill, .content-type-pill { color: var(--accent); cursor: default; }
+.main-theme-filters { display: flex; min-width: 0; align-items: center; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+.main-theme-filters::-webkit-scrollbar { display: none; }
+.main-theme-filters button { flex: none; min-height: 32px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); padding: 0 10px; font-size: .75rem; cursor: pointer; }
+.main-theme-filters button.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .ribbon-end { margin-left: auto; display: flex; flex: none; align-items: center; gap: 12px; }
 .results-count { color: var(--accent); font-size: 0.875rem; }
 .results-count span { color: var(--muted); font-weight: 500; }
@@ -304,6 +308,8 @@ select { min-height: 38px; border: 1px solid var(--line); border-radius: 9px; ba
   .global-search kbd { display: none; }
   .control-ribbon { top: 112px; flex-wrap: wrap; min-height: 104px; gap: 7px; padding: 8px 12px; }
   .active-tags { order: 3; width: 100%; }
+  .main-theme-filters { order: 3; width: 100%; }
+  .active-tags:not(:has(button)) { display: none; }
   .ribbon-end { min-width: 0; flex: 1; gap: 7px; }
   .results-count span { display: none; }
   .ribbon-end select { min-width: 0; max-width: 130px; }

@@ -17,7 +17,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <section aria-labelledby="login-title" style={cardStyle}>
         <div>
           <p className="text-accent" style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 750, letterSpacing: ".08em", textTransform: "uppercase" }}>
-            Mosaïque
+            Insta Post Explorer
           </p>
           <h1 id="login-title" style={{ margin: 0, fontSize: "clamp(1.7rem, 5vw, 2.2rem)", lineHeight: 1.1 }}>
             Accès administrateur
@@ -27,6 +27,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             pour importer ou administrer les publications.
           </p>
         </div>
+
+        <Link className="button" href="/">Retour à la page principale</Link>
 
         {status === "disabled" ? (
           <div role="status" style={noticeStyle}>
