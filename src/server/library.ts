@@ -76,6 +76,7 @@ export async function queryLibraryPosts(
   const where: Prisma.PostWhereInput = {
     ownerId,
     ...(query.theme ? { mainTheme: query.theme } : {}),
+    ...(query.contentType ? { contentType: query.contentType.toUpperCase() as "IMAGE" | "CAROUSEL" | "REEL" } : {}),
     ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
     ...tagWhere(ownerId, query.tags, query.tagMode),
     ...cursorWhere(cursor, effectiveSort),
@@ -112,6 +113,7 @@ async function queryRelevantPosts(
   }
 
   const tagCondition = relevanceTagCondition(ownerId, slugs, query.tagMode);
+  const contentType = query.contentType?.toUpperCase() ?? null;
   const cursorCondition =
     cursor && cursorRank !== null
       ? Prisma.sql`AND (rank < ${cursorRank} OR (rank = ${cursorRank} AND id > ${cursor.id}))`
@@ -127,6 +129,7 @@ async function queryRelevantPosts(
       FROM "posts" p
       WHERE p."owner_id" = ${ownerId}
         AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
+        AND (${contentType}::text IS NULL OR p."content_type"::text = ${contentType})
         AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
         ${tagCondition}
     )

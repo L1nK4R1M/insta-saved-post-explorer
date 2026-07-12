@@ -2,6 +2,7 @@ import { getConfiguredOwnerId } from "@/auth/config";
 import { getSession } from "@/auth/session";
 import { LibraryExplorer, type LibraryInitialState } from "@/features/library/components/library-explorer";
 import { parseLibraryQuery } from "@/features/library/query-state";
+import type { ContentTypeFilter } from "@/features/library/query-state";
 import type { SortMode, TagMode, ViewMode } from "@/features/library/types";
 import { getLibraryMainThemes, getLibraryTags, queryLibraryPosts } from "@/server/library";
 
@@ -15,6 +16,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     query: valueOf(params.q),
     tags: valueOf(params.tags).split(",").map((tag) => tag.trim()).filter(Boolean),
     theme: valueOf(params.theme) || null,
+    contentType: contentTypeOf(valueOf(params.type)),
     tagMode: oneOf(valueOf(params.tagMode), ["and", "or"], "and"),
     sort: oneOf(valueOf(params.sort), ["newest", "oldest", "author", "relevance", "likes"], "newest"),
     view: oneOf(valueOf(params.view), ["grid", "masonry"], "masonry"),
@@ -48,6 +50,7 @@ async function loadLibrary(initialState: LibraryInitialState, ownerId: string) {
         search: initialState.query,
         tags: initialState.tags,
         theme: initialState.theme,
+        contentType: initialState.contentType,
         tagMode: initialState.tagMode,
         sort: initialState.sort,
         limit: 30,
@@ -71,4 +74,8 @@ function valueOf(value: string | string[] | undefined) {
 
 function oneOf<T extends TagMode | SortMode | ViewMode>(value: string, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+function contentTypeOf(value: string): ContentTypeFilter | null {
+  return ["image", "carousel", "reel"].includes(value) ? value as ContentTypeFilter : null;
 }

@@ -207,6 +207,7 @@ button { color: inherit; }
 .main-theme-filters::-webkit-scrollbar { display: none; }
 .main-theme-filters button { flex: none; min-height: 32px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); padding: 0 10px; font-size: .75rem; cursor: pointer; }
 .main-theme-filters button.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.main-theme-filters .content-type-filter { display: flex; align-items: center; gap: 5px; }
 .ribbon-end { margin-left: auto; display: flex; flex: none; align-items: center; gap: 12px; }
 .results-count { color: var(--accent); font-size: 0.875rem; }
 .results-count span { color: var(--muted); font-weight: 500; }

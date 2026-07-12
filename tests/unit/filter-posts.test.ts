@@ -41,6 +41,23 @@ describe("filterAndPaginatePosts", () => {
     expect(page.items.map((post) => post.id)).toEqual(["a", "c"]);
   });
 
+  it("combine le type de contenu avec les autres filtres", () => {
+    const typedPosts = posts.map((post, index) => ({
+      ...post,
+      contentType: index === 1 ? "reel" as const : index === 2 ? "carousel" as const : post.contentType,
+    }));
+
+    const carousel = filterAndPaginatePosts(typedPosts, parseLibraryQuery({
+      contentType: "carousel",
+      theme: "Sucré",
+      tags: ["Fruits"],
+    }));
+    const videos = filterAndPaginatePosts(typedPosts, parseLibraryQuery({ contentType: "reel" }));
+
+    expect(carousel.items.map((post) => post.id)).toEqual(["c"]);
+    expect(videos.items.map((post) => post.id)).toEqual(["b"]);
+  });
+
   it("trie par likes décroissants", () => {
     posts[0].likesCount = 20;
     posts[1].likesCount = 100;

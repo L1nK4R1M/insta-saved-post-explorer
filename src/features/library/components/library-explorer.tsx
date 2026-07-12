@@ -1,6 +1,6 @@
 "use client";
 
-import { Grid2X2, LayoutGrid, LogIn, LogOut, Search, SlidersHorizontal, Sparkles, Upload, X } from "lucide-react";
+import { Grid2X2, Image, Images, LayoutGrid, LogIn, LogOut, Search, SlidersHorizontal, Sparkles, Upload, Video, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -13,6 +13,7 @@ import { LibraryStatsDialog } from "@/features/library/components/library-stats-
 import { PostCard } from "@/features/library/components/post-card";
 import { PostDetailDialog } from "@/features/library/components/post-detail-dialog";
 import { useDebouncedValue } from "@/features/library/hooks/use-debounced-value";
+import type { ContentTypeFilter } from "@/features/library/query-state";
 import type { LibraryPost, SortMode, TagMode, ViewMode } from "@/features/library/types";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ export type LibraryInitialState = {
   query: string;
   tags: string[];
   theme: string | null;
+  contentType: ContentTypeFilter | null;
   tagMode: TagMode;
   sort: SortMode;
   view: ViewMode;
@@ -50,6 +52,7 @@ export function LibraryExplorer({
   const [query, setQuery] = useState(initialState.query);
   const [selectedTags, setSelectedTags] = useState(initialState.tags);
   const [selectedTheme, setSelectedTheme] = useState(initialState.theme);
+  const [selectedContentType, setSelectedContentType] = useState(initialState.contentType);
   const [tagMode, setTagMode] = useState<TagMode>(initialState.tagMode);
   const [sort, setSort] = useState<SortMode>(initialState.sort);
   const [view, setView] = useState<ViewMode>(initialState.view);
@@ -74,10 +77,11 @@ export function LibraryExplorer({
       const matchesTags = selectedTags.length === 0 || (tagMode === "and"
         ? selectedTags.every((tag) => post.tags.includes(tag))
         : selectedTags.some((tag) => post.tags.includes(tag)));
-      return matchesQuery && matchesTags && (!selectedTheme || post.mainTheme === selectedTheme);
+      return matchesQuery && matchesTags && (!selectedTheme || post.mainTheme === selectedTheme)
+        && (!selectedContentType || post.contentType === selectedContentType);
     });
     return filtered.sort((a, b) => comparePosts(a, b, sort));
-  }, [debouncedQuery, posts, selectedTags, selectedTheme, sort, tagMode]);
+  }, [debouncedQuery, posts, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
 
   const selectedIndex = filteredPosts.findIndex((post) => post.id === selectedPostId);
   const selectedPost = selectedIndex >= 0 ? filteredPosts[selectedIndex] : null;
@@ -87,13 +91,14 @@ export function LibraryExplorer({
     if (debouncedQuery) params.set("q", debouncedQuery);
     if (selectedTags.length) params.set("tags", selectedTags.join(","));
     if (selectedTheme) params.set("theme", selectedTheme);
+    if (selectedContentType) params.set("type", selectedContentType);
     if (tagMode !== "and") params.set("tagMode", tagMode);
     if (sort !== "newest") params.set("sort", sort);
     if (view !== "masonry") params.set("view", view);
     if (selectedPostId) params.set("post", selectedPostId);
     const nextUrl = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`;
     window.history.replaceState(window.history.state, "", nextUrl);
-  }, [debouncedQuery, selectedPostId, selectedTags, selectedTheme, sort, tagMode, view]);
+  }, [debouncedQuery, selectedContentType, selectedPostId, selectedTags, selectedTheme, sort, tagMode, view]);
 
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
@@ -121,6 +126,7 @@ export function LibraryExplorer({
           query: debouncedQuery,
           selectedTags,
           selectedTheme,
+          selectedContentType,
           tagMode,
           sort,
         })}`, { signal: controller.signal });
@@ -138,7 +144,7 @@ export function LibraryExplorer({
     };
     void refresh();
     return () => controller.abort();
-  }, [debouncedQuery, selectedTags, selectedTheme, sort, tagMode]);
+  }, [debouncedQuery, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -149,6 +155,7 @@ export function LibraryExplorer({
         query: debouncedQuery,
         selectedTags,
         selectedTheme,
+        selectedContentType,
         tagMode,
         sort,
         cursor: nextCursor,
@@ -166,7 +173,7 @@ export function LibraryExplorer({
     } finally {
       setLoadingMore(false);
     }
-  }, [debouncedQuery, loadingMore, nextCursor, selectedTags, selectedTheme, sort, tagMode]);
+  }, [debouncedQuery, loadingMore, nextCursor, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
 
   const toggleTag = useCallback((tag: string) => {
     setIsFiltering(true);
@@ -198,6 +205,7 @@ export function LibraryExplorer({
     setQuery("");
     setSelectedTags([]);
     setSelectedTheme(null);
+    setSelectedContentType(null);
     setTagMode("and");
     setSort("newest");
   }, []);
@@ -293,7 +301,7 @@ export function LibraryExplorer({
           {selectedTags.length ? <span className="count-badge">{selectedTags.length}</span> : null}
         </button>
 
-        <div className="main-theme-filters" aria-label="Filtrer par thème principal">
+        <div className="main-theme-filters" aria-label="Filtres principaux">
           {mainThemes.map((theme) => (
             <button
               key={theme}
@@ -316,6 +324,24 @@ export function LibraryExplorer({
           >
             Favoris
           </button>
+          {([
+            ["image", "Photos", Image],
+            ["carousel", "Carrousels", Images],
+            ["reel", "Vidéos", Video],
+          ] as const).map(([type, label, Icon]) => (
+            <button
+              key={type}
+              type="button"
+              className={cn("content-type-filter", selectedContentType === type && "is-active")}
+              aria-pressed={selectedContentType === type}
+              onClick={() => {
+                setIsFiltering(true);
+                setSelectedContentType((current) => current === type ? null : type);
+              }}
+            >
+              <Icon aria-hidden="true" className="size-3.5" /> {label}
+            </button>
+          ))}
         </div>
 
         <div className="active-tags" aria-label="Tags actifs">
@@ -338,7 +364,7 @@ export function LibraryExplorer({
             <option value="relevance">Pertinence</option>
             <option value="likes">Plus likés</option>
           </select>
-          {(query || selectedTags.length || selectedTheme) ? <button className="text-button desktop-only" type="button" onClick={resetFilters}>Effacer les filtres</button> : null}
+          {(query || selectedTags.length || selectedTheme || selectedContentType) ? <button className="text-button desktop-only" type="button" onClick={resetFilters}>Effacer les filtres</button> : null}
           <div className="view-switch mobile-only" aria-label="Mode d’affichage">
             <button type="button" aria-label="Grille régulière" aria-pressed={view === "grid"} className={cn(view === "grid" && "is-active")} onClick={() => setView("grid")}><Grid2X2 aria-hidden="true" className="size-4" /></button>
             <button type="button" aria-label="Grille masonry" aria-pressed={view === "masonry"} className={cn(view === "masonry" && "is-active")} onClick={() => setView("masonry")}><LayoutGrid aria-hidden="true" className="size-4" /></button>
@@ -411,6 +437,7 @@ function librarySearchParams(input: {
   query: string;
   selectedTags: string[];
   selectedTheme: string | null;
+  selectedContentType: ContentTypeFilter | null;
   tagMode: TagMode;
   sort: SortMode;
   cursor?: string;
@@ -423,6 +450,7 @@ function librarySearchParams(input: {
   if (input.query) params.set("q", input.query);
   if (input.selectedTags.length) params.set("tags", input.selectedTags.join(","));
   if (input.selectedTheme) params.set("theme", input.selectedTheme);
+  if (input.selectedContentType) params.set("type", input.selectedContentType);
   if (input.cursor) params.set("cursor", input.cursor);
   return params.toString();
 }
