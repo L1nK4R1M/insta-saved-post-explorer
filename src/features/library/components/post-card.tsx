@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 
 export function PostCard({ post, view, onOpen, isAdmin, onToggleFavorite }: { post: LibraryPost; view: ViewMode; onOpen: () => void; isAdmin: boolean; onToggleFavorite: () => void }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [videoPreviewActive, setVideoPreviewActive] = useState(false);
+  const previewVideo = post.media.find((media) => media.type === "video" && media.url);
   const imageUrl = post.thumbnailUrl || post.mediaUrl || "";
   const TypeIcon = post.contentType === "reel" ? Play : post.contentType === "carousel" ? Images : null;
   const favorite = post.tags.includes("Favoris");
@@ -21,10 +23,27 @@ export function PostCard({ post, view, onOpen, isAdmin, onToggleFavorite }: { po
         type="button"
         data-post-id={post.id}
         onClick={onOpen}
+        onMouseEnter={() => {
+          if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) setVideoPreviewActive(true);
+        }}
+        onMouseLeave={() => setVideoPreviewActive(false)}
+        onFocus={() => setVideoPreviewActive(true)}
+        onBlur={() => setVideoPreviewActive(false)}
         aria-label={`Ouvrir la publication de ${post.authorUsername}`}
       >
         <div className="post-media">
-          {imageFailed || !imageUrl ? (
+          {videoPreviewActive && previewVideo?.url ? (
+            <video
+              src={previewVideo.url}
+              poster={(previewVideo.thumbnailUrl ?? imageUrl) || undefined}
+              muted
+              loop
+              autoPlay
+              playsInline
+              preload="metadata"
+              aria-hidden="true"
+            />
+          ) : imageFailed || !imageUrl ? (
             <BrokenImage />
           ) : (
             // Media URLs are validated as public HTTPS URLs during import. We avoid

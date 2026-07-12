@@ -98,7 +98,7 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
               <div className="avatar" aria-hidden="true">{displayPost.authorUsername.replace(/^@/, "").slice(0, 1).toUpperCase()}</div>
               <div className="min-w-0">
                 <p className="truncate font-semibold">@{displayPost.authorUsername.replace(/^@/, "")}</p>
-                <p className="text-xs text-muted">{formatSavedAt(displayPost.savedAt)}</p>
+                {displayPost.savedAt ? <p className="text-xs text-muted">{formatSavedAt(displayPost.savedAt)}</p> : null}
               </div>
               <a className="button ml-auto" href={displayPost.postUrl} target="_blank" rel="noopener noreferrer">
                 Ouvrir sur Instagram
@@ -273,7 +273,7 @@ function formatMediaType(media: LibraryPostMedia[], legacyType: LibraryPost["con
 }
 
 function formatSavedAt(value: string | null) {
-  return value ? `Enregistré le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(value))}` : "Date d’enregistrement inconnue";
+  return value ? `Enregistré le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(value))}` : "";
 }
 
 function formatPublishedAt(value: string | null) {

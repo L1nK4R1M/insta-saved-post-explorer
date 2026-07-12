@@ -63,6 +63,7 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect(dialog.getByText("Photo", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Date", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Commentaires", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText("Date d’enregistrement inconnue", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Média indisponible", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Inconnue", { exact: true })).toHaveCount(0);
     const firstId = new URL(page.url()).searchParams.get("post");
