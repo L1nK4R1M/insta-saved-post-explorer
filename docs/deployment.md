@@ -62,6 +62,8 @@ Configurer des valeurs distinctes pour Preview et Production :
 | `NEXT_PUBLIC_APP_URL` | Preview, Production | URL canonique; en Preview préférer une URL de branche stable. |
 | `IMPORT_MAX_BYTES` | Preview, Production | Limite applicative; ne remplace pas la limite Vercel par requête. |
 | `MEDIA_HOST_ALLOWLIST` | Preview, Production | Domaines média HTTPS supplémentaires, séparés par des virgules. |
+| `MEDIA_PUBLIC_BASE_URL` | Preview, Production | Domaine public du bucket R2, sans le préfixe des objets. |
+| `MEDIA_PATH_PREFIX` | Preview, Production | Préfixe ajouté avant `source_path`; utiliser `originals`. |
 
 `DATABASE_DIRECT_URL` est un secret de release. Il doit être stocké dans les
 environnements GitHub `preview` et `production`, pas exposé au runtime Vercel.

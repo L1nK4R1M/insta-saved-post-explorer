@@ -195,6 +195,21 @@ async function persistBatch(
       const postIds = persistedPosts.map((post) => post.id);
 
       await transaction.postTag.deleteMany({ where: { postId: { in: postIds } } });
+      await transaction.postMedia.deleteMany({ where: { postId: { in: postIds } } });
+
+      const postMedia = persistedPosts.flatMap(({ id: postId, source }) =>
+        source.media.map((media) => ({
+          postId,
+          type: media.type.toUpperCase() as "IMAGE" | "VIDEO",
+          url: media.url,
+          sourcePath: media.sourcePath,
+          thumbnailUrl: media.thumbnailUrl,
+          position: media.position,
+        })),
+      );
+      if (postMedia.length > 0) {
+        await transaction.postMedia.createMany({ data: postMedia });
+      }
 
       const postTags = persistedPosts.flatMap(({ id: postId, source }) =>
         source.tags.flatMap((tag) => {

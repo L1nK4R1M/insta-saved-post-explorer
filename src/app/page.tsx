@@ -16,7 +16,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     tags: valueOf(params.tags).split(",").map((tag) => tag.trim()).filter(Boolean),
     theme: valueOf(params.theme) || null,
     tagMode: oneOf(valueOf(params.tagMode), ["and", "or"], "and"),
-    sort: oneOf(valueOf(params.sort), ["newest", "oldest", "author", "relevance", "likes", "comments"], "newest"),
+    sort: oneOf(valueOf(params.sort), ["newest", "oldest", "author", "relevance", "likes"], "newest"),
     view: oneOf(valueOf(params.view), ["grid", "masonry"], "masonry"),
     postId: valueOf(params.post) || null,
   };

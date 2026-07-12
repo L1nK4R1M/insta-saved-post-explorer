@@ -79,8 +79,6 @@ export function comparePosts(
     comparison = compareNullableDates(left.savedAt, right.savedAt);
   } else if (sort === "likes") {
     comparison = compareNullableNumbers(left.likesCount, right.likesCount);
-  } else if (sort === "comments") {
-    comparison = compareNullableNumbers(left.commentsCount, right.commentsCount);
   } else {
     comparison = compareNullableDates(left.savedAt, right.savedAt, "desc");
   }
@@ -92,7 +90,6 @@ export function cursorValue(post: LibraryPost, sort: SortMode, search = ""): str
   if (sort === "author") return foldForSearch(post.authorUsername);
   if (sort === "relevance") return String(relevanceScore(post, search));
   if (sort === "likes") return leftPadMetric(post.likesCount);
-  if (sort === "comments") return leftPadMetric(post.commentsCount);
   return post.savedAt;
 }
 

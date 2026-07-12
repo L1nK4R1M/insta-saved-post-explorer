@@ -60,6 +60,9 @@ test.describe("bibliotheque Mosaïque", () => {
     const dialog = page.getByRole("dialog", { name: "Publication de esncom.fr" });
 
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("Photo", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Date", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Commentaires", { exact: true })).toHaveCount(0);
     const firstId = new URL(page.url()).searchParams.get("post");
     expect(firstId).not.toBeNull();
     await dialog.getByRole("button", { name: "Suivant", exact: true }).click();
@@ -71,6 +74,62 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("post")).not.toBe(secondId);
     await page.keyboard.press("ArrowLeft");
     await expect.poll(() => new URL(page.url()).searchParams.get("post")).toBe(secondId);
+  });
+
+  test("ne propose plus le tri par commentaires", async ({ page }) => {
+    await page.goto("/");
+    const sort = page.getByLabel("Trier les résultats");
+    await expect(sort.locator("option[value='comments']")).toHaveCount(0);
+    await expect(sort.locator("option[value='likes']")).toHaveText("Plus likés");
+  });
+
+  test("parcourt tous les médias d'un carrousel dans le détail", async ({ page }) => {
+    const response = await page.request.get("/api/posts?limit=1");
+    const item = (await response.json() as { items: Array<Record<string, unknown>> }).items[0];
+    const postId = String(item.id);
+    const imageUrl = String(item.thumbnailUrl);
+    await page.route(`**/api/posts/${postId}`, (route) => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...item,
+        contentType: "carousel",
+        media: [
+          { id: "carousel-1", type: "image", url: imageUrl, sourcePath: null, thumbnailUrl: imageUrl, position: 0 },
+          { id: "carousel-2", type: "image", url: imageUrl, sourcePath: null, thumbnailUrl: imageUrl, position: 1 },
+        ],
+      }),
+    }));
+
+    await page.locator(`[data-post-id="${postId}"]`).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Carrousel", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("1 / 2", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "Média suivant" }).click();
+    await expect(dialog.getByText("2 / 2", { exact: true })).toBeVisible();
+  });
+
+  test("prépare la lecture vidéo et le fallback source_path", async ({ page }) => {
+    const response = await page.request.get("/api/posts?limit=1");
+    const item = (await response.json() as { items: Array<Record<string, unknown>> }).items[0];
+    const postId = String(item.id);
+    await page.route(`**/api/posts/${postId}`, (route) => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...item,
+        contentType: "reel",
+        media: [
+          { id: "video-1", type: "video", url: "https://cdn.example.com/video.mp4", sourcePath: "auteur/CODE/video.mp4", thumbnailUrl: String(item.thumbnailUrl), position: 0 },
+          { id: "local-2", type: "image", url: null, sourcePath: "auteur/CODE/photo.jpg", thumbnailUrl: null, position: 1 },
+        ],
+      }),
+    }));
+
+    await page.locator(`[data-post-id="${postId}"]`).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator("video[controls][playsinline]")).toBeVisible();
+    await dialog.getByRole("button", { name: "Média suivant" }).click();
+    await expect(dialog.getByText("Média indisponible", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/source locale/i)).toBeVisible();
   });
 
   test("applique et persiste les themes clair, sombre et systeme", async ({ page }) => {

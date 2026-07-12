@@ -41,13 +41,10 @@ describe("filterAndPaginatePosts", () => {
     expect(page.items.map((post) => post.id)).toEqual(["a", "c"]);
   });
 
-  it("trie par likes et commentaires décroissants", () => {
+  it("trie par likes décroissants", () => {
     posts[0].likesCount = 20;
     posts[1].likesCount = 100;
-    posts[2].commentsCount = 12;
-    posts[3].commentsCount = 2;
     expect(filterAndPaginatePosts(posts, parseLibraryQuery({ sort: "likes" })).items.map((post) => post.id)).toEqual(["b", "a", "c", "d"]);
-    expect(filterAndPaginatePosts(posts, parseLibraryQuery({ sort: "comments" })).items.map((post) => post.id)).toEqual(["c", "d", "a", "b"]);
   });
 
   it("pagine avec un curseur composite stable sans doublon", () => {
@@ -82,6 +79,7 @@ function makePost(
     postUrl: `https://www.instagram.com/p/${id}`,
     thumbnailUrl: `https://cdn.example.com/${id}.jpg`,
     mediaUrl: null,
+    media: [],
     authorUsername,
     caption: `${authorUsername} prépare une recette`,
     tags,

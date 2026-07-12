@@ -71,6 +71,25 @@ if (publicUrl) {
   warnings.push("NEXT_PUBLIC_APP_URL is not set; Vercel aliases will still work.");
 }
 
+const mediaBaseUrl = process.env.MEDIA_PUBLIC_BASE_URL?.trim();
+if (mediaBaseUrl) {
+  try {
+    const parsed = new URL(mediaBaseUrl);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      errors.push("MEDIA_PUBLIC_BASE_URL must be a public HTTPS URL without credentials.");
+    }
+  } catch {
+    errors.push("MEDIA_PUBLIC_BASE_URL is not a valid URL.");
+  }
+} else {
+  warnings.push("MEDIA_PUBLIC_BASE_URL is not set; source_path media will keep fallback URLs.");
+}
+
+const mediaPathPrefix = process.env.MEDIA_PATH_PREFIX ?? "originals";
+if (mediaPathPrefix.includes("..") || mediaPathPrefix.includes("\\")) {
+  errors.push("MEDIA_PATH_PREFIX must be a safe relative URL prefix.");
+}
+
 if (process.env.DATABASE_DIRECT_URL) {
   warnings.push("DATABASE_DIRECT_URL is not required by the Vercel runtime; keep it in GitHub Environments only.");
 }

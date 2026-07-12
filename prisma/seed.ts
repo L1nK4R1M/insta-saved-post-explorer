@@ -54,6 +54,19 @@ async function main() {
     });
 
     await prisma.postTag.deleteMany({ where: { postId: post.id } });
+    await prisma.postMedia.deleteMany({ where: { postId: post.id } });
+    if (source.media.length > 0) {
+      await prisma.postMedia.createMany({
+        data: source.media.map((media) => ({
+          postId: post.id,
+          type: media.type.toUpperCase() as "IMAGE" | "VIDEO",
+          url: media.url,
+          sourcePath: media.sourcePath,
+          thumbnailUrl: media.thumbnailUrl,
+          position: media.position,
+        })),
+      });
+    }
     for (const name of source.tags) {
       const tag = await prisma.tag.upsert({
         where: { ownerId_slug: { ownerId, slug: tagSlug(name) } },
