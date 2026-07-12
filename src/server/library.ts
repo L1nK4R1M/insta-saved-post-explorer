@@ -7,7 +7,7 @@ import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
-import type { ContentType, LibraryPost, SortMode } from "@/features/library/types";
+import type { ContentType, LibraryPost, LibraryStats, SortMode } from "@/features/library/types";
 import {
   filterAndPaginatePosts,
   type LibraryPostPage,
@@ -232,6 +232,31 @@ export async function getLibraryMainThemes(requestedOwnerId?: string): Promise<s
   return rows.flatMap((row) => row.mainTheme ? [row.mainTheme] : []);
 }
 
+export async function getLibraryStats(requestedOwnerId?: string): Promise<LibraryStats> {
+  const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
+  if (!databaseConfigured) return calculateFallbackStats(await readFallbackPosts());
+
+  const [posts, photos, carousels, videos, otherPosts, media, imageMedia, videoMedia, tags, themes] =
+    await prisma.$transaction([
+      prisma.post.count({ where: { ownerId } }),
+      prisma.post.count({ where: { ownerId, contentType: "IMAGE" } }),
+      prisma.post.count({ where: { ownerId, contentType: "CAROUSEL" } }),
+      prisma.post.count({ where: { ownerId, contentType: "REEL" } }),
+      prisma.post.count({ where: { ownerId, contentType: "OTHER" } }),
+      prisma.postMedia.count({ where: { post: { ownerId } } }),
+      prisma.postMedia.count({ where: { post: { ownerId }, type: "IMAGE" } }),
+      prisma.postMedia.count({ where: { post: { ownerId }, type: "VIDEO" } }),
+      prisma.tag.count({ where: { ownerId } }),
+      prisma.post.findMany({
+        where: { ownerId, mainTheme: { not: null } },
+        distinct: ["mainTheme"],
+        select: { mainTheme: true },
+      }),
+    ]);
+
+  return { posts, photos, carousels, videos, otherPosts, media, imageMedia, videoMedia, tags, mainThemes: themes.length };
+}
+
 export async function getLibraryPost(
   postId: string,
   requestedOwnerId?: string,
@@ -434,4 +459,20 @@ async function readFallbackPosts(): Promise<LibraryPost[]> {
     });
   })();
   return fallbackPostsPromise;
+}
+
+function calculateFallbackStats(posts: LibraryPost[]): LibraryStats {
+  const media = posts.flatMap((post) => post.media);
+  return {
+    posts: posts.length,
+    photos: posts.filter((post) => post.contentType === "image").length,
+    carousels: posts.filter((post) => post.contentType === "carousel").length,
+    videos: posts.filter((post) => post.contentType === "reel").length,
+    otherPosts: posts.filter((post) => post.contentType === "other").length,
+    media: media.length,
+    imageMedia: media.filter((item) => item.type === "image").length,
+    videoMedia: media.filter((item) => item.type === "video").length,
+    tags: new Set(posts.flatMap((post) => post.tags)).size,
+    mainThemes: new Set(posts.flatMap((post) => post.mainTheme ? [post.mainTheme] : [])).size,
+  };
 }

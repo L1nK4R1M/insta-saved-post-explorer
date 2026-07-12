@@ -254,7 +254,7 @@ export function normalizeImportPayload(input: unknown): {
       caption: post.caption.trim(),
       tags: post.tags,
       savedAt: post.savedAt ?? null,
-      publishedAt: post.publishedAt ?? null,
+      publishedAt: post.publishedAt ?? metrics.publishedAt,
       contentType: post.contentType,
       mainTheme: post.mainTheme ? normalizeMainTheme(post.mainTheme) : null,
       likesCount: post.likesCount ?? metrics.likes,

@@ -52,8 +52,8 @@ export async function addTagToPost(input: {
 
     await transaction.postTag.upsert({
       where: { postId_tagId: { postId, tagId: tag.id } },
-      create: { postId, tagId: tag.id },
-      update: {},
+      create: { postId, tagId: tag.id, isManual: true },
+      update: { isManual: true },
     });
 
     return synchronizePostSearchText(transaction, ownerId, post);
