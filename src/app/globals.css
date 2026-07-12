@@ -57,6 +57,11 @@ body {
 button, input, select { font: inherit; }
 button, a, select { -webkit-tap-highlight-color: transparent; }
 button { color: inherit; }
+.sync-action { position: relative; display: flex; }
+.sync-button { white-space: nowrap; }
+.sync-spin { animation: sync-spin 1s linear infinite; }
+.sync-error { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: min(320px, 80vw); border: 1px solid var(--danger); border-radius: 8px; background: var(--surface); padding: 8px 10px; color: var(--danger); font-size: .75rem; box-shadow: var(--shadow); }
+@keyframes sync-spin { to { transform: rotate(360deg); } }
 
 :focus-visible {
   outline: 2px solid var(--accent);

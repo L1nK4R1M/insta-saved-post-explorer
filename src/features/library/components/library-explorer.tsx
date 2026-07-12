@@ -12,6 +12,7 @@ import { EmptyLibrary, LibraryError, NoResults } from "@/features/library/compon
 import { LibraryStatsDialog } from "@/features/library/components/library-stats-dialog";
 import { PostCard } from "@/features/library/components/post-card";
 import { PostDetailDialog } from "@/features/library/components/post-detail-dialog";
+import { RefreshPostsButton } from "@/features/library/components/refresh-posts-button";
 import { useDebouncedValue } from "@/features/library/hooks/use-debounced-value";
 import type { ContentTypeFilter } from "@/features/library/query-state";
 import type { LibraryPost, SortMode, TagMode, ViewMode } from "@/features/library/types";
@@ -265,14 +266,17 @@ export function LibraryExplorer({
             </button>
           </div>
           {isAdmin ? (
-            <button
-              className="button import-button"
-              type="button"
-              aria-label="Importer JSON"
-              onClick={() => setImportOpen(true)}
-            >
-              <Upload aria-hidden="true" className="size-4" /><span className="desktop-only">Importer JSON</span>
-            </button>
+            <>
+              <RefreshPostsButton onCompleted={() => window.location.reload()} />
+              <button
+                className="button import-button"
+                type="button"
+                aria-label="Importer JSON"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload aria-hidden="true" className="size-4" /><span className="desktop-only">Importer JSON</span>
+              </button>
+            </>
           ) : null}
           <LibraryStatsDialog />
           <ThemeMenu />

@@ -25,6 +25,13 @@ enum MediaType {
   VIDEO
 }
 
+enum SyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 model Post {
   id             String      @id @default(cuid())
   ownerId        String      @default("local") @map("owner_id")
@@ -119,4 +126,24 @@ model ImportJob {
   @@unique([ownerId, idempotencyKey], map: "import_jobs_owner_idempotency_key")
   @@index([ownerId, status, startedAt], map: "import_jobs_owner_status_started_idx")
   @@map("import_jobs")
+}
+
+model SyncJob {
+  id             String     @id @default(cuid())
+  ownerId        String     @default("local") @map("owner_id")
+  status         SyncStatus @default(PENDING)
+  collected      Int        @default(0)
+  imported       Int        @default(0)
+  updated        Int        @default(0)
+  mediaUploaded  Int        @default(0) @map("media_uploaded")
+  mediaFailed    Int        @default(0) @map("media_failed")
+  errorCode      String?    @map("error_code")
+  startedAt      DateTime   @default(now()) @map("started_at") @db.Timestamptz(3)
+  heartbeatAt    DateTime   @default(now()) @map("heartbeat_at") @db.Timestamptz(3)
+  finishedAt     DateTime?  @map("finished_at") @db.Timestamptz(3)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerId, startedAt], map: "sync_jobs_owner_started_idx")
+  @@map("sync_jobs")
 }
