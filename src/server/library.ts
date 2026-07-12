@@ -28,8 +28,16 @@ import { databaseConfigured, prisma } from "@/server/db";
 import { getApplicationOwnerId, parseOwnerId } from "@/server/owner";
 
 type PostWithTags = Prisma.PostGetPayload<{
-  include: { postTags: { include: { tag: true } } };
+  include: {
+    postTags: { include: { tag: true } };
+    media: true;
+  };
 }>;
+
+const postInclude = {
+  postTags: { include: { tag: true } },
+  media: { orderBy: { position: "asc" as const } },
+} satisfies Prisma.PostInclude;
 
 export type LibraryTag = { name: string; slug: string; count: number };
 
@@ -73,7 +81,7 @@ export async function queryLibraryPosts(
   };
   const rows = await prisma.post.findMany({
     where,
-    include: { postTags: { include: { tag: true } } },
+    include: postInclude,
     orderBy: orderByFor(effectiveSort),
     take: query.limit + 1,
   });
@@ -132,7 +140,7 @@ async function queryRelevantPosts(
   const pageRanks = hasNextPage ? ranked.slice(0, query.limit) : ranked;
   const rows = await prisma.post.findMany({
     where: { ownerId, id: { in: pageRanks.map((row) => row.id) } },
-    include: { postTags: { include: { tag: true } } },
+    include: postInclude,
   });
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const items = pageRanks.flatMap((rankedRow) => {
@@ -234,7 +242,7 @@ export async function getLibraryPost(
 
   const row = await prisma.post.findFirst({
     where: { id: postId, ownerId },
-    include: { postTags: { include: { tag: true } } },
+    include: postInclude,
   });
   return row ? toLibraryPost(row, false) : null;
 }
@@ -350,6 +358,14 @@ function toLibraryPost(row: PostWithTags, compact: boolean): LibraryPost {
     postUrl: row.postUrl,
     thumbnailUrl: row.thumbnailUrl,
     mediaUrl: row.mediaUrl,
+    media: (compact ? row.media.slice(0, 1) : row.media).map((media) => ({
+      id: media.id,
+      type: media.type.toLowerCase() as "image" | "video",
+      url: media.url,
+      sourcePath: media.sourcePath,
+      thumbnailUrl: media.thumbnailUrl,
+      position: media.position,
+    })),
     authorUsername: row.authorUsername,
     caption: compact ? row.caption.slice(0, 500) : row.caption,
     tags: row.postTags.map(({ tag }) => tag.name).sort((a, b) => a.localeCompare(b, "fr")),
@@ -375,6 +391,10 @@ async function readFallbackPosts(): Promise<LibraryPost[]> {
       postUrl: post.postUrl,
       thumbnailUrl: post.thumbnailUrl,
       mediaUrl: post.mediaUrl,
+      media: post.media.map((media) => ({
+        ...media,
+        id: `sample_media_${createHash("sha256").update(`${post.postUrl}:${media.position}`).digest("hex").slice(0, 20)}`,
+      })),
       authorUsername: post.authorUsername,
       caption: post.caption,
       tags: post.tags,

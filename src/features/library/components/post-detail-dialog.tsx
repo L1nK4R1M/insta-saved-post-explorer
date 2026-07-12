@@ -1,14 +1,14 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, FileWarning, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { DeletePostAlert } from "@/features/library/components/admin/delete-post-alert";
 import { PostTagEditor } from "@/features/library/components/admin/post-tag-editor";
 import { BrokenImage } from "@/features/library/components/library-states";
 import { parseCaptionMetrics } from "@/features/library/caption-metrics";
-import type { LibraryPost } from "@/features/library/types";
+import type { LibraryPost, LibraryPostMedia } from "@/features/library/types";
 
 type PostDetailDialogProps = {
   post: LibraryPost | null;
@@ -28,7 +28,7 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
     if (!post) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (event.defaultPrevented || target?.closest("input, textarea, select, [contenteditable='true'], [role='alertdialog']")) return;
+      if (event.defaultPrevented || target?.closest("input, textarea, select, a, video, [data-media-control], [contenteditable='true'], [role='alertdialog']")) return;
       if (event.key === "ArrowLeft") onPrevious();
       if (event.key === "ArrowRight") onNext();
     };
@@ -54,7 +54,9 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
 
   if (!post) return null;
   const displayPost = detailPost?.id === post.id ? detailPost : post;
-  const imageUrl = displayPost.mediaUrl || displayPost.thumbnailUrl;
+  const media = displayPost.media.length
+    ? [...displayPost.media].sort((left, right) => left.position - right.position)
+    : [{ id: `${displayPost.id}-legacy`, type: "image" as const, url: displayPost.mediaUrl, sourcePath: null, thumbnailUrl: displayPost.thumbnailUrl, position: 0 }];
   const caption = parseCaptionMetrics(displayPost.caption);
 
   const copyLink = async () => {
@@ -90,19 +92,7 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
           </header>
 
           <div className="detail-scroll">
-            <div className="detail-media">
-              <DetailImage
-                key={displayPost.id}
-                imageUrl={imageUrl}
-                alt={`Média de la publication de ${displayPost.authorUsername}`}
-              />
-              <button className="media-nav media-nav-left" type="button" onClick={onPrevious} aria-label="Publication précédente">
-                <ChevronLeft aria-hidden="true" className="size-5" />
-              </button>
-              <button className="media-nav media-nav-right" type="button" onClick={onNext} aria-label="Publication suivante">
-                <ChevronRight aria-hidden="true" className="size-5" />
-              </button>
-            </div>
+            <RichPostMedia key={displayPost.id} media={media} authorUsername={displayPost.authorUsername} />
 
             <div className="detail-author-row">
               <div className="avatar" aria-hidden="true">{displayPost.authorUsername.replace(/^@/, "").slice(0, 1).toUpperCase()}</div>
@@ -110,13 +100,14 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
                 <p className="truncate font-semibold">@{displayPost.authorUsername.replace(/^@/, "")}</p>
                 <p className="text-xs text-muted">{formatSavedAt(displayPost.savedAt)}</p>
               </div>
-              <a className="button ml-auto" href={displayPost.postUrl} target="_blank" rel="noreferrer">
+              <a className="button ml-auto" href={displayPost.postUrl} target="_blank" rel="noopener noreferrer">
                 Ouvrir sur Instagram
                 <ExternalLink aria-hidden="true" className="size-4" />
               </a>
             </div>
 
             <dl className="metadata-grid">
+              <div><dt>Type</dt><dd>{formatMediaType(media, displayPost.contentType)}</dd></div>
               <div><dt>Thème</dt><dd>{displayPost.mainTheme || "Non défini"}</dd></div>
               <div><dt>Likes</dt><dd className="tabular-nums">{formatMetric(caption.likes)}</dd></div>
               <div><dt>Commentaires</dt><dd className="tabular-nums">{formatMetric(caption.comments)}</dd></div>
@@ -171,7 +162,60 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
   );
 }
 
-function DetailImage({ imageUrl, alt }: { imageUrl: string; alt: string }) {
+function RichPostMedia({ media, authorUsername }: { media: LibraryPostMedia[]; authorUsername: string }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeMedia = media[activeIndex];
+  const hasMultipleMedia = media.length > 1;
+  const selectPrevious = () => setActiveIndex((index) => (index - 1 + media.length) % media.length);
+  const selectNext = () => setActiveIndex((index) => (index + 1) % media.length);
+
+  return (
+    <section className="detail-media-shell" aria-label={`Médias de la publication de ${authorUsername}`}>
+      <div className="detail-media">
+        <MediaItem
+          key={activeMedia.id}
+          media={activeMedia}
+          alt={`Média ${activeIndex + 1} sur ${media.length} de la publication de ${authorUsername}`}
+        />
+        {hasMultipleMedia ? (
+          <>
+            <button className="media-nav media-nav-left" type="button" onClick={selectPrevious} aria-label="Média précédent" data-media-control>
+              <ChevronLeft aria-hidden="true" className="size-5" />
+            </button>
+            <button className="media-nav media-nav-right" type="button" onClick={selectNext} aria-label="Média suivant" data-media-control>
+              <ChevronRight aria-hidden="true" className="size-5" />
+            </button>
+            <span className="media-counter tabular-nums" aria-live="polite">{activeIndex + 1} / {media.length}</span>
+          </>
+        ) : null}
+      </div>
+      {hasMultipleMedia ? (
+        <div className="media-pagination" aria-label="Choisir un média">
+          {media.map((item, index) => (
+            <button
+              key={item.id}
+              className="media-page"
+              data-active={index === activeIndex}
+              data-media-control
+              type="button"
+              onClick={() => setActiveIndex(index)}
+              aria-label={`Afficher le média ${index + 1} sur ${media.length}`}
+              aria-current={index === activeIndex ? "true" : undefined}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function MediaItem({ media, alt }: { media: LibraryPostMedia; alt: string }) {
+  if (!media.url) return <UnavailableMedia sourcePath={media.sourcePath} />;
+  if (media.type === "video") return <DetailVideo media={media} />;
+  return <DetailImage imageUrl={media.url} alt={alt} />;
+}
+
+function DetailImage({ imageUrl, alt }: { imageUrl: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);
   if (failed || !imageUrl) return <BrokenImage />;
   return (
@@ -184,6 +228,45 @@ function DetailImage({ imageUrl, alt }: { imageUrl: string; alt: string }) {
       onError={() => setFailed(true)}
     />
   );
+}
+
+function DetailVideo({ media }: { media: LibraryPostMedia }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) void video.play();
+    else video.pause();
+  };
+
+  return (
+    <video
+      ref={videoRef}
+      src={media.url ?? undefined}
+      poster={media.thumbnailUrl ?? undefined}
+      controls
+      playsInline
+      preload="metadata"
+      onClick={togglePlayback}
+      aria-label="Vidéo de la publication. Cliquer pour lire ou mettre en pause."
+    />
+  );
+}
+
+function UnavailableMedia({ sourcePath }: { sourcePath: string | null }) {
+  return (
+    <div className="unavailable-media" role="img" aria-label="Média indisponible en ligne">
+      <FileWarning aria-hidden="true" className="size-7" />
+      <strong>Média indisponible</strong>
+      <span>{sourcePath ? "Le fichier existe dans la source locale, mais aucune URL lisible n’est disponible." : "Aucune URL n’est disponible pour ce média."}</span>
+    </div>
+  );
+}
+
+function formatMediaType(media: LibraryPostMedia[], legacyType: LibraryPost["contentType"]) {
+  if (media.length > 1 || legacyType === "carousel") return "Carrousel";
+  if (media[0]?.type === "video" || legacyType === "reel") return "Vidéo";
+  return "Photo";
 }
 
 function formatSavedAt(value: string | null) {

@@ -11,6 +11,7 @@ export type NormalizedImportPost = {
   postUrl: string;
   thumbnailUrl: string;
   mediaUrl: string | null;
+  media: NormalizedImportMedia[];
   authorUsername: string;
   caption: string;
   tags: string[];
@@ -22,6 +23,14 @@ export type NormalizedImportPost = {
   commentsCount: number | null;
   metadata: { [key: string]: JsonValue };
   searchText: string;
+};
+
+export type NormalizedImportMedia = {
+  type: "image" | "video";
+  url: string | null;
+  sourcePath: string | null;
+  thumbnailUrl: string | null;
+  position: number;
 };
 
 export type ImportIssue = {
@@ -64,6 +73,29 @@ const optionalSafeUrlSchema = z.preprocess(
   emptyToUndefined,
   safeUrlSchema.optional(),
 );
+
+const optionalSourcePathSchema = z.preprocess(
+  emptyToUndefined,
+  z.string().trim().min(1).max(4_096).refine(isSafeRelativeSourcePath, "Chemin source non sûr").optional(),
+);
+
+const mediaTypeSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const normalized = value.trim().toLowerCase();
+    if (["photo", "picture", "carousel", "sidecar"].includes(normalized)) return "image";
+    if (["reel", "clip"].includes(normalized)) return "video";
+    return normalized;
+  },
+  z.enum(["image", "video"]).default("image"),
+);
+
+const mediaObjectSchema = z.object({
+  type: mediaTypeSchema,
+  url: optionalSafeUrlSchema,
+  sourcePath: optionalSourcePathSchema,
+  thumbnailUrl: optionalSafeUrlSchema,
+});
 
 const optionalDateSchema = z.preprocess(
   emptyToUndefined,
@@ -160,6 +192,7 @@ const aliases = {
   contentType: ["contentType", "content_type", "type"],
   mainTheme: ["mainTheme", "main_theme", "theme"],
   metadata: ["metadata", "meta"],
+  media: ["media", "media_items", "mediaItems", "children"],
 } as const;
 
 export function normalizeImportPayload(input: unknown): {
@@ -201,12 +234,18 @@ export function normalizeImportPayload(input: unknown): {
     }
 
     const post = parsedPost.data;
+    const media = normalizeMedia(candidate.media, {
+      mediaUrl: post.mediaUrl ?? null,
+      thumbnailUrl: post.thumbnailUrl,
+      contentType: post.contentType,
+    });
     const metrics = parseCaptionMetrics(post.caption);
     items.push({
       externalId: post.externalId ?? null,
       postUrl: post.postUrl,
       thumbnailUrl: post.thumbnailUrl,
       mediaUrl: post.mediaUrl ?? null,
+      media,
       authorUsername: normalizeWhitespace(post.authorUsername),
       caption: post.caption.trim(),
       tags: post.tags,
@@ -232,6 +271,59 @@ export function normalizeImportPayload(input: unknown): {
     invalid: issues.length,
     issues,
   };
+}
+
+function normalizeMedia(
+  input: unknown,
+  legacy: { mediaUrl: string | null; thumbnailUrl: string; contentType: ContentType },
+): NormalizedImportMedia[] {
+  const rawItems = input === undefined || input === null
+    ? []
+    : Array.isArray(input)
+      ? input
+      : [input];
+  const media = rawItems.flatMap((rawItem) => {
+    const candidate = typeof rawItem === "string"
+      ? { url: rawItem }
+      : rawRecordSchema.safeParse(rawItem).success
+        ? {
+            type: pickAlias(rawItem as Record<string, unknown>, ["type"]),
+            url: pickAlias(rawItem as Record<string, unknown>, ["url", "media_url"]),
+            sourcePath: pickAlias(rawItem as Record<string, unknown>, ["path", "source_path", "sourcePath"]),
+            thumbnailUrl: pickAlias(rawItem as Record<string, unknown>, ["thumbnail_url", "thumbnailUrl", "thumbnail"]),
+          }
+        : null;
+    if (!candidate) return [];
+    const parsed = mediaObjectSchema.safeParse(candidate);
+    if (!parsed.success) return [];
+    const item = parsed.data;
+    if (!item.url && !item.sourcePath && !item.thumbnailUrl) return [];
+    return [{
+      type: item.type,
+      url: item.url ?? null,
+      sourcePath: item.sourcePath ?? null,
+      thumbnailUrl: item.thumbnailUrl ?? null,
+    }];
+  });
+
+  if (media.length === 0) {
+    media.push({
+      type: legacy.contentType === "reel" ? "video" : "image",
+      url: legacy.mediaUrl,
+      sourcePath: null,
+      thumbnailUrl: legacy.thumbnailUrl,
+    });
+  }
+
+  return media.slice(0, 20).map((item, position) => ({ ...item, position }));
+}
+
+function isSafeRelativeSourcePath(value: string): boolean {
+  if (value !== value.normalize("NFC")) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || /^[\\/]/.test(value)) return false;
+  if (value.includes("\\") || /[\0-\x1f\x7f]/.test(value)) return false;
+  const segments = value.split("/");
+  return segments.length >= 2 && segments.every((segment) => segment.length > 0 && segment.length <= 255 && segment !== "." && segment !== "..");
 }
 
 export function prepareImportPayload(input: unknown): PreparedImport {

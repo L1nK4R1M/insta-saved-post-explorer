@@ -48,6 +48,76 @@ describe("normalizeImportPayload", () => {
     expect(result.tags).not.toContain("Sucré");
   });
 
+  it("normalise les collections media et leurs alias dans l'ordre", () => {
+    const result = normalizeImportPayload([{
+      ...validItem,
+      media_items: [
+        "https://cdn.example.com/first.jpg",
+        {
+          type: "clip",
+          media_url: "https://cdn.example.com/second.mp4",
+          source_path: "exports/second.mp4",
+          thumbnail_url: "https://cdn.example.com/second.jpg",
+        },
+      ],
+    }]);
+
+    expect(result.items[0].media).toEqual([
+      {
+        type: "image",
+        url: "https://cdn.example.com/first.jpg",
+        sourcePath: null,
+        thumbnailUrl: null,
+        position: 0,
+      },
+      {
+        type: "video",
+        url: "https://cdn.example.com/second.mp4",
+        sourcePath: "exports/second.mp4",
+        thumbnailUrl: "https://cdn.example.com/second.jpg",
+        position: 1,
+      },
+    ]);
+  });
+
+  it("synthétise un média pour les anciens JSON", () => {
+    const result = normalizeImportPayload([{
+      ...validItem,
+      type: "video",
+      media_url: "https://cdn.example.com/legacy.mp4",
+    }]);
+
+    expect(result.items[0].media).toEqual([{
+      type: "video",
+      url: "https://cdn.example.com/legacy.mp4",
+      sourcePath: null,
+      thumbnailUrl: "https://cdn.example.com/thumb.jpg",
+      position: 0,
+    }]);
+  });
+
+  it("conserve un chemin source relatif et refuse une traversée de dossier", () => {
+    const accepted = normalizeImportPayload([{
+      ...validItem,
+      media: [{ type: "image", source_path: "auteur/ABC123/photo-01.jpg" }],
+    }]);
+    const rejected = normalizeImportPayload([{
+      ...validItem,
+      media: [{ type: "image", source_path: "../private/photo.jpg" }],
+    }]);
+
+    expect(accepted.items[0].media[0].sourcePath).toBe("auteur/ABC123/photo-01.jpg");
+    expect(rejected.items[0].media[0].sourcePath).toBeNull();
+    expect(rejected.items[0].media[0].thumbnailUrl).toBe(accepted.items[0].thumbnailUrl);
+  });
+
+  it("borne un carrousel à vingt médias", () => {
+    const media = Array.from({ length: 25 }, (_, index) => `https://cdn.example.com/${index}.jpg`);
+    const result = normalizeImportPayload([{ ...validItem, media }]);
+    expect(result.items[0].media).toHaveLength(20);
+    expect(result.items[0].media.at(-1)?.position).toBe(19);
+  });
+
   it("signale les entrées invalides sans rejeter les entrées valides", () => {
     const result = normalizeImportPayload([
       validItem,

@@ -82,6 +82,7 @@ function makePost(
     postUrl: `https://www.instagram.com/p/${id}`,
     thumbnailUrl: `https://cdn.example.com/${id}.jpg`,
     mediaUrl: null,
+    media: [],
     authorUsername,
     caption: `${authorUsername} prépare une recette`,
     tags,

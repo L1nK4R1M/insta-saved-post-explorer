@@ -20,6 +20,11 @@ enum ImportStatus {
   FAILED
 }
 
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
 model Post {
   id             String      @id @default(cuid())
   ownerId        String      @default("local") @map("owner_id")
@@ -41,6 +46,7 @@ model Post {
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   postTags       PostTag[]
+  media          PostMedia[]
 
   @@unique([ownerId, postUrl], map: "posts_owner_id_post_url_key")
   @@index([ownerId, savedAt, id], map: "posts_owner_saved_at_id_idx")
@@ -50,6 +56,21 @@ model Post {
   @@index([ownerId, likesCount, id], map: "posts_owner_likes_count_id_idx")
   @@index([ownerId, commentsCount, id], map: "posts_owner_comments_count_id_idx")
   @@map("posts")
+}
+
+model PostMedia {
+  id           String    @id @default(cuid())
+  postId       String    @map("post_id")
+  type         MediaType
+  url          String?
+  sourcePath   String?   @map("source_path")
+  thumbnailUrl String?   @map("thumbnail_url")
+  position     Int
+  post         Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, position], map: "post_media_post_id_position_key")
+  @@index([postId, position], map: "post_media_post_id_position_idx")
+  @@map("post_media")
 }
 
 model Tag {
