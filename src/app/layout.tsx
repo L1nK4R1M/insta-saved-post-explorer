@@ -8,6 +8,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Insta Post Explorer",
   description: "Explorez et organisez vos publications Instagram sauvegardées.",
+  icons: { icon: "/api/brand/logo", apple: "/api/brand/logo" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

@@ -7,6 +7,8 @@ test.describe("bibliotheque Mosaïque", () => {
   });
 
   test("charge les 18 publications du fallback local", async ({ page }) => {
+    await expect(page.locator(".brand-logo")).toBeVisible();
+    await expect(page.locator(".brand-name")).toContainText("Insta Post Explorer");
     await expect(page.getByText("18 résultats", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Ouvrir la publication de esncom.fr" })).toBeVisible();
     await expect(page.locator("[data-post-id]")).toHaveCount(18);
@@ -45,6 +47,14 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect(loading).toBeHidden();
   });
 
+  test("traite Favoris comme un filtre principal unique", async ({ page }) => {
+    const favoriteFilter = page.getByRole("button", { name: "Favoris", exact: true });
+    await favoriteFilter.click();
+    await expect(favoriteFilter).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".active-tags")).not.toContainText("Favoris");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tags")).toBe("Favoris");
+  });
+
   test("ouvre le detail et navigue au bouton et au clavier", async ({ page }) => {
     await page.getByRole("button", { name: "Ouvrir la publication de esncom.fr" }).click();
     const dialog = page.getByRole("dialog", { name: "Publication de esncom.fr" });
@@ -81,7 +91,9 @@ test.describe("bibliotheque Mosaïque", () => {
   test("reste en lecture seule pour un visiteur", async ({ page }) => {
     await expect(page.getByRole("link", { name: "Ouvrir la connexion administrateur" })).toBeVisible();
     await expect(page.locator("button.import-button")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /favoris/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Favoris", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Ajouter aux favoris" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Retirer des favoris" })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Ouvrir la publication de esncom.fr" }).click();
     const dialog = page.getByRole("dialog", { name: "Publication de esncom.fr" });
@@ -90,6 +102,7 @@ test.describe("bibliotheque Mosaïque", () => {
   });
 
   test("autorise les lectures publiques et refuse les mutations anonymes", async ({ request }) => {
+    await expect((await request.get("/api/brand/logo")).status()).toBe(200);
     await expect((await request.get("/api/posts?limit=1")).status()).toBe(200);
     await expect((await request.post("/api/import", { data: [] })).status()).toBe(401);
     await expect((await request.delete("/api/posts/post-inexistant")).status()).toBe(401);

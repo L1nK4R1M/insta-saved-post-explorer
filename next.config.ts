@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  outputFileTracingIncludes: {
+    "/api/brand/logo": ["./resources/branding/**/*"],
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.cdninstagram.com" },

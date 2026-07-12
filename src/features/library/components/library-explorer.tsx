@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ThemeMenu } from "@/components/theme-menu";
+import { Brand } from "@/components/brand";
 import { FilterContent, MobileFilterDrawer, type TagFacet } from "@/features/library/components/filter-panel";
 import { ImportDialog } from "@/features/library/components/import-dialog";
 import { EmptyLibrary, LibraryError, NoResults } from "@/features/library/components/library-states";
@@ -60,7 +61,8 @@ export function LibraryExplorer({
   const initialRequest = useRef(true);
   const debouncedQuery = useDebouncedValue(query, 250);
 
-  const facets = isAdmin ? initialTagFacets : initialTagFacets.filter((facet) => facet.name !== "Favoris");
+  const facets = initialTagFacets.filter((facet) => facet.name !== "Favoris");
+  const regularSelectedTags = selectedTags.filter((tag) => tag !== "Favoris");
 
   const mainThemes = initialMainThemes;
 
@@ -224,7 +226,7 @@ export function LibraryExplorer({
   return (
     <div className="app-shell">
       <header className="app-header">
-        <Link className="brand" href="/" aria-label="Insta Post Explorer, accueil">Insta Post Explorer</Link>
+        <Link className="brand" href="/" aria-label="Insta Post Explorer, accueil"><Brand compact /></Link>
         <label className="global-search">
           <Search aria-hidden="true" className="size-4" />
           <span className="sr-only">Rechercher dans la bibliothèque</span>
@@ -304,25 +306,23 @@ export function LibraryExplorer({
               {themeLabel(theme)}
             </button>
           ))}
-          {isAdmin ? (
-            <button
-              type="button"
-              className={cn(selectedTags.includes("Favoris") && "is-active")}
-              aria-pressed={selectedTags.includes("Favoris")}
-              onClick={() => toggleTag("Favoris")}
-            >
-              Favoris
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={cn(selectedTags.includes("Favoris") && "is-active")}
+            aria-pressed={selectedTags.includes("Favoris")}
+            onClick={() => toggleTag("Favoris")}
+          >
+            Favoris
+          </button>
         </div>
 
         <div className="active-tags" aria-label="Tags actifs">
-          {selectedTags.length ? selectedTags.map((tag) => (
+          {regularSelectedTags.length ? regularSelectedTags.map((tag) => (
             <button key={tag} type="button" onClick={() => toggleTag(tag)} aria-label={`Retirer le tag ${tag}`}>
               {tag}<X aria-hidden="true" className="size-3" />
             </button>
           )) : null}
-          {selectedTags.length ? <span className="mode-pill">Mode {tagMode.toLocaleUpperCase("fr-FR")}</span> : null}
+          {regularSelectedTags.length ? <span className="mode-pill">Mode {tagMode.toLocaleUpperCase("fr-FR")}</span> : null}
         </div>
 
         <div className="ribbon-end">
@@ -349,8 +349,9 @@ export function LibraryExplorer({
         {filtersVisible ? <aside className="desktop-filter-panel desktop-only"><FilterContent {...filterProps} /></aside> : null}
         <section className="library-content" aria-label="Publications sauvegardées" aria-live="polite" aria-busy={isFiltering}>
           {requestError ? <p className="request-error" role="alert">{requestError}</p> : null}
-          {isFiltering ? <div className="filter-loading" role="status"><span className="loading-spinner" aria-hidden="true" />Chargement des résultats…</div> : null}
-          {initialError ? <LibraryError message={initialError} /> : posts.length === 0 ? <EmptyLibrary onImport={isAdmin ? () => setImportOpen(true) : undefined} /> : filteredPosts.length === 0 ? <NoResults onReset={resetFilters} /> : (
+          {isFiltering ? (
+            <div className="filter-loading" role="status"><span className="loading-spinner" aria-hidden="true" />Chargement des résultats…</div>
+          ) : initialError ? <LibraryError message={initialError} /> : posts.length === 0 ? <EmptyLibrary onImport={isAdmin ? () => setImportOpen(true) : undefined} /> : filteredPosts.length === 0 ? <NoResults onReset={resetFilters} /> : (
             <>
               <div className={cn("posts-grid", view === "masonry" ? "posts-masonry" : "posts-regular")}>
                 {filteredPosts.map((post) => <PostCard key={post.id} post={post} view={view} onOpen={() => setSelectedPostId(post.id)} isAdmin={isAdmin} onToggleFavorite={() => void toggleFavorite(post)} />)}

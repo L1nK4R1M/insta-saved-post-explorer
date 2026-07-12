@@ -23,6 +23,13 @@ The selected visual reference and exact ImageGen prompt are available in
 [`docs/ui-concepts`](docs/ui-concepts/README.md). Design tokens are documented in
 [`docs/design-system-d.md`](docs/design-system-d.md).
 
+## Branding
+
+The default logo source is `resources/branding/insta-post-explorer-logo.png` and
+is served by `GET /api/brand/logo`. Replace that single file to update every
+in-app logo placement and the favicon. To use an externally managed logo
+without changing code, set `NEXT_PUBLIC_APP_LOGO_URL` to its HTTPS URL.
+
 ## Stack
 
 - Next.js 16 App Router, React 19, strict TypeScript

@@ -90,6 +90,14 @@ button { color: inherit; }
   font-weight: 750;
   text-decoration: none;
 }
+.brand-lockup { display: inline-flex; align-items: center; gap: 10px; }
+.brand-logo { display: block; width: 40px; height: 40px; flex: none; border-radius: 10px; object-fit: contain; }
+.brand-name { font-weight: 800; white-space: nowrap; }
+.brand-name > span { color: transparent; background-clip: text; -webkit-background-clip: text; }
+.brand-insta { background-image: linear-gradient(90deg, #ff5a00, #ff1f73); }
+.brand-post { background-image: linear-gradient(90deg, #ff1f73, #8b2be2); }
+.brand-explorer { background-image: linear-gradient(90deg, #8b2be2, #1688f8); }
+.login-brand { margin-bottom: 12px; font-size: 1.05rem; }
 
 .global-search, .input-shell {
   display: flex;
@@ -224,7 +232,7 @@ select { min-height: 38px; border: 1px solid var(--line); border-radius: 9px; ba
 .tag-check { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border: 1px solid var(--line-strong); border-radius: 5px; }
 .tag-option.is-selected .tag-check { border-color: var(--accent); background: var(--accent); color: var(--accent-contrast); }
 
-.library-content { min-width: 0; }
+.library-content { position: relative; min-width: 0; min-height: 56dvh; }
 .request-error { margin-bottom: 12px; border: 1px solid var(--danger); border-radius: 10px; color: var(--danger); padding: 10px 12px; font-size: 0.875rem; }
 .load-more-row { display: flex; justify-content: center; padding: 24px 0 8px; }
 .posts-grid { display: grid; gap: 12px; }
@@ -244,7 +252,7 @@ select { min-height: 38px; border: 1px solid var(--line); border-radius: 9px; ba
 .type-indicator { position: absolute; top: 9px; right: 9px; display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid rgb(255 255 255 / 0.45); border-radius: 8px; background: rgb(15 18 23 / 0.78); color: #fff; }
 .favorite-button { position: absolute; top: 9px; right: 9px; z-index: 10; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid rgb(255 255 255 / .55); border-radius: 10px; background: rgb(15 18 23 / .78); color: #fff; cursor: pointer; }
 .favorite-button.is-favorite { border-color: #fb7185; background: #be123c; }
-.filter-loading { position: sticky; top: 138px; z-index: 10; display: flex; width: fit-content; align-items: center; gap: 8px; margin: 0 auto 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); padding: 9px 12px; color: var(--muted); font-size: .875rem; }
+.filter-loading { position: absolute; inset: 0; z-index: 10; display: flex; min-height: 50dvh; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: .875rem; }
 .loading-spinner { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 999px; animation: loading-spin .7s linear infinite; }
 @keyframes loading-spin { to { transform: rotate(360deg); } }
 .post-card-copy { display: grid; gap: 5px; padding: 10px; }
@@ -307,6 +315,8 @@ select { min-height: 38px; border: 1px solid var(--line); border-radius: 9px; ba
   .mobile-only { display: inline-flex; }
   .app-header { flex-wrap: wrap; gap: 8px 12px; min-height: 112px; padding: 9px 12px; }
   .brand { font-size: 1.1rem; }
+  .brand-logo { width: 34px; height: 34px; border-radius: 8px; }
+  .brand-name { font-size: .95rem; }
   .header-actions { order: 1; }
   .header-actions .button { padding-inline: 10px; }
   .global-search { order: 2; width: 100%; }
