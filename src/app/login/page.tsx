@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getAuthConfigurationStatus } from "@/auth/config";
 import { LoginForm } from "@/app/login/login-form";
+import { Brand } from "@/components/brand";
 
 type LoginPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -16,9 +17,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main style={shellStyle}>
       <section aria-labelledby="login-title" style={cardStyle}>
         <div>
-          <p className="text-accent" style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 750, letterSpacing: ".08em", textTransform: "uppercase" }}>
-            Insta Post Explorer
-          </p>
+          <Brand className="login-brand" />
           <h1 id="login-title" style={{ margin: 0, fontSize: "clamp(1.7rem, 5vw, 2.2rem)", lineHeight: 1.1 }}>
             Accès administrateur
           </h1>
