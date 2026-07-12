@@ -61,6 +61,15 @@ describe("normalizeImportPayload", () => {
     expect(result.publishedAt?.toISOString()).toBe("2026-07-10T22:47:44.000Z");
   });
 
+  it("récupère la date anglaise depuis une ancienne caption Instagram", () => {
+    const result = normalizeImportPayload([{
+      ...validItem,
+      caption: '535 likes, 10 comments - birdinadeficit le  July 3, 2026: "Une recette."',
+    }]).items[0];
+
+    expect(result.publishedAt?.toISOString()).toBe("2026-07-03T12:00:00.000Z");
+  });
+
   it("normalise les collections media et leurs alias dans l'ordre", () => {
     const result = normalizeImportPayload([{
       ...validItem,

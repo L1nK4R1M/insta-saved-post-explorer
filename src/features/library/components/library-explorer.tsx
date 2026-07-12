@@ -9,6 +9,7 @@ import { Brand } from "@/components/brand";
 import { FilterContent, MobileFilterDrawer, type TagFacet } from "@/features/library/components/filter-panel";
 import { ImportDialog } from "@/features/library/components/import-dialog";
 import { EmptyLibrary, LibraryError, NoResults } from "@/features/library/components/library-states";
+import { LibraryStatsDialog } from "@/features/library/components/library-stats-dialog";
 import { PostCard } from "@/features/library/components/post-card";
 import { PostDetailDialog } from "@/features/library/components/post-detail-dialog";
 import { useDebouncedValue } from "@/features/library/hooks/use-debounced-value";
@@ -265,6 +266,7 @@ export function LibraryExplorer({
               <Upload aria-hidden="true" className="size-4" /><span className="desktop-only">Importer JSON</span>
             </button>
           ) : null}
+          <LibraryStatsDialog />
           <ThemeMenu />
           {isAdmin ? (
             <form action="/api/auth/logout" method="post">

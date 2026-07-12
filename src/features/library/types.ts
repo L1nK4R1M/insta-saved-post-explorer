@@ -30,6 +30,19 @@ export type LibraryPost = {
   metadata: Record<string, unknown>;
 };
 
+export type LibraryStats = {
+  posts: number;
+  photos: number;
+  carousels: number;
+  videos: number;
+  otherPosts: number;
+  media: number;
+  imageMedia: number;
+  videoMedia: number;
+  tags: number;
+  mainThemes: number;
+};
+
 export type TagMode = "and" | "or";
 export type ViewMode = "grid" | "masonry";
 export type SortMode = "newest" | "oldest" | "author" | "relevance" | "likes";

@@ -110,7 +110,7 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
               <div><dt>Type</dt><dd>{formatMediaType(media, displayPost.contentType)}</dd></div>
               <div><dt>Thème</dt><dd>{displayPost.mainTheme || "Non défini"}</dd></div>
               <div><dt>Likes</dt><dd className="tabular-nums">{formatMetric(displayPost.likesCount ?? caption.likes)}</dd></div>
-              <div><dt>Date</dt><dd>{formatPublishedAt(displayPost.publishedAt)}</dd></div>
+              <div><dt>Date</dt><dd>{formatPublishedAt(displayPost.publishedAt ?? caption.publishedAt?.toISOString() ?? null)}</dd></div>
             </dl>
 
             <p className="detail-caption text-pretty">{caption.text || "Aucune légende disponible."}</p>
@@ -210,6 +210,9 @@ function RichPostMedia({ media, authorUsername }: { media: LibraryPostMedia[]; a
 }
 
 function MediaItem({ media, alt }: { media: LibraryPostMedia; alt: string }) {
+  if (!media.url && media.type === "image" && media.thumbnailUrl) {
+    return <DetailImage imageUrl={media.thumbnailUrl} alt={alt} />;
+  }
   if (!media.url) return <UnavailableMedia sourcePath={media.sourcePath} />;
   if (media.type === "video") return <DetailVideo media={media} />;
   return <DetailImage imageUrl={media.url} alt={alt} />;

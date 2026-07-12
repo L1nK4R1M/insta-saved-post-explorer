@@ -131,6 +131,18 @@ test.describe("import PostgreSQL idempotent", () => {
     expect(addTag.status()).toBe(201);
     expect(await addTag.json()).toMatchObject({ tags: expect.arrayContaining(["qa-admin"]) });
 
+    const reimportAfterManualTag = await page.request.post("/api/import?sourceName=qa-auth.json", {
+      headers: { ...authHeaders, "Idempotency-Key": `${nonce}:batch-2` },
+      data: payload,
+    });
+    expect(reimportAfterManualTag.status()).toBe(201);
+    const afterReimport = await page.request.get(`/api/posts?q=${encodeURIComponent(nonce)}&limit=48`, {
+      headers: authHeaders,
+    });
+    expect(await afterReimport.json()).toMatchObject({
+      items: [expect.objectContaining({ tags: expect.arrayContaining(["qa-admin"]) })],
+    });
+
     const removeTag = await page.request.delete(`/api/posts/${importedPost.id}/tags`, {
       headers: authHeaders,
       data: { tag: "qa-admin" },

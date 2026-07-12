@@ -194,7 +194,9 @@ async function persistBatch(
       const tagIds = new Map(tags.map((tag) => [tag.slug, tag.id]));
       const postIds = persistedPosts.map((post) => post.id);
 
-      await transaction.postTag.deleteMany({ where: { postId: { in: postIds } } });
+      await transaction.postTag.deleteMany({
+        where: { postId: { in: postIds }, isManual: false },
+      });
       await transaction.postMedia.deleteMany({ where: { postId: { in: postIds } } });
 
       const postMedia = persistedPosts.flatMap(({ id: postId, source }) =>
@@ -214,7 +216,7 @@ async function persistBatch(
       const postTags = persistedPosts.flatMap(({ id: postId, source }) =>
         source.tags.flatMap((tag) => {
           const tagId = tagIds.get(tagSlug(tag));
-          return tagId ? [{ postId, tagId }] : [];
+          return tagId ? [{ postId, tagId, isManual: false }] : [];
         }),
       );
       if (postTags.length > 0) {

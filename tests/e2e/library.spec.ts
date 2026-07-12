@@ -63,6 +63,8 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect(dialog.getByText("Photo", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Date", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Commentaires", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText("Média indisponible", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText("Inconnue", { exact: true })).toHaveCount(0);
     const firstId = new URL(page.url()).searchParams.get("post");
     expect(firstId).not.toBeNull();
     await dialog.getByRole("button", { name: "Suivant", exact: true }).click();
@@ -81,6 +83,20 @@ test.describe("bibliotheque Mosaïque", () => {
     const sort = page.getByLabel("Trier les résultats");
     await expect(sort.locator("option[value='comments']")).toHaveCount(0);
     await expect(sort.locator("option[value='likes']")).toHaveText("Plus likés");
+  });
+
+  test("affiche les statistiques globales depuis l'endpoint dédié", async ({ page }) => {
+    await page.route("**/api/stats", (route) => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ posts: 3379, photos: 1200, carousels: 900, videos: 1270, otherPosts: 9, media: 6946, imageMedia: 5600, videoMedia: 1346, tags: 420, mainThemes: 7 }),
+    }));
+
+    await page.getByRole("button", { name: "Afficher les statistiques de la bibliothèque" }).click();
+    const dialog = page.getByRole("dialog", { name: "Statistiques de la bibliothèque" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("3 379", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("6 946", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Carrousels", { exact: true })).toBeVisible();
   });
 
   test("parcourt tous les médias d'un carrousel dans le détail", async ({ page }) => {
