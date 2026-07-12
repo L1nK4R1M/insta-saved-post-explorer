@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Instagram Saved Exporter",
+  "version": "4.0.0",
+  "description": "Synchronise les nouvelles publications Instagram sauvegardées avec Insta Post Explorer.",
+  "action": {
+    "default_title": "Instagram Saved Exporter",
+    "default_icon": {
+      "16": "icon/16.png",
+      "32": "icon/32.png",
+      "48": "icon/48.png",
+      "128": "icon/128.png"
+    }
+  },
+  "icons": {
+    "16": "icon/16.png",
+    "32": "icon/32.png",
+    "48": "icon/48.png",
+    "128": "icon/128.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": [
+    "cookies",
+    "alarms",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://*.cdninstagram.com/*",
+    "https://*.fbcdn.net/*",
+    "https://insta-saved-post-explorer.vercel.app/*",
+    "http://localhost:3000/*",
+    "https://*.r2.cloudflarestorage.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://insta-saved-post-explorer.vercel.app/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["content-bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

@@ -90,6 +90,24 @@ if (mediaPathPrefix.includes("..") || mediaPathPrefix.includes("\\")) {
   errors.push("MEDIA_PATH_PREFIX must be a safe relative URL prefix.");
 }
 
+const r2Names = ["R2_ENDPOINT", "R2_BUCKET_NAME", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"];
+const configuredR2Names = r2Names.filter((name) => process.env[name]?.trim());
+if (configuredR2Names.length > 0 && configuredR2Names.length !== r2Names.length) {
+  errors.push("R2 upload configuration is incomplete.");
+}
+if (process.env.R2_ENDPOINT) {
+  try {
+    const parsed = new URL(process.env.R2_ENDPOINT);
+    if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".r2.cloudflarestorage.com")) {
+      errors.push("R2_ENDPOINT must be the HTTPS Cloudflare R2 S3 endpoint.");
+    }
+  } catch {
+    errors.push("R2_ENDPOINT is not a valid URL.");
+  }
+} else {
+  warnings.push("R2 upload is not configured; extension refresh will remain unavailable.");
+}
+
 if (process.env.DATABASE_DIRECT_URL) {
   warnings.push("DATABASE_DIRECT_URL is not required by the Vercel runtime; keep it in GitHub Environments only.");
 }
