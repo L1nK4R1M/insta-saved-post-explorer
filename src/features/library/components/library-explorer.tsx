@@ -335,7 +335,6 @@ export function LibraryExplorer({
             <option value="author">Auteur</option>
             <option value="relevance">Pertinence</option>
             <option value="likes">Plus likés</option>
-            <option value="comments">Plus commentés</option>
           </select>
           {(query || selectedTags.length || selectedTheme) ? <button className="text-button desktop-only" type="button" onClick={resetFilters}>Effacer les filtres</button> : null}
           <div className="view-switch mobile-only" aria-label="Mode d’affichage">
@@ -401,7 +400,6 @@ function comparePosts(a: LibraryPost, b: LibraryPost, sort: SortMode) {
   if (sort === "author") return a.authorUsername.localeCompare(b.authorUsername, "fr-FR");
   if (sort === "relevance") return 0;
   if (sort === "likes") return (b.likesCount ?? -1) - (a.likesCount ?? -1);
-  if (sort === "comments") return (b.commentsCount ?? -1) - (a.commentsCount ?? -1);
   const aDate = Date.parse(a.savedAt || a.publishedAt || "1970-01-01");
   const bDate = Date.parse(b.savedAt || b.publishedAt || "1970-01-01");
   return sort === "oldest" ? aDate - bDate : bDate - aDate;

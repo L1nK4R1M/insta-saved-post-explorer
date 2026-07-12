@@ -32,4 +32,4 @@ export type LibraryPost = {
 
 export type TagMode = "and" | "or";
 export type ViewMode = "grid" | "masonry";
-export type SortMode = "newest" | "oldest" | "author" | "relevance" | "likes" | "comments";
+export type SortMode = "newest" | "oldest" | "author" | "relevance" | "likes";

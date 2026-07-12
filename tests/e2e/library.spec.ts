@@ -61,6 +61,8 @@ test.describe("bibliotheque Mosaïque", () => {
 
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("Photo", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Date", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Commentaires", { exact: true })).toHaveCount(0);
     const firstId = new URL(page.url()).searchParams.get("post");
     expect(firstId).not.toBeNull();
     await dialog.getByRole("button", { name: "Suivant", exact: true }).click();
@@ -72,6 +74,13 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("post")).not.toBe(secondId);
     await page.keyboard.press("ArrowLeft");
     await expect.poll(() => new URL(page.url()).searchParams.get("post")).toBe(secondId);
+  });
+
+  test("ne propose plus le tri par commentaires", async ({ page }) => {
+    await page.goto("/");
+    const sort = page.getByLabel("Trier les résultats");
+    await expect(sort.locator("option[value='comments']")).toHaveCount(0);
+    await expect(sort.locator("option[value='likes']")).toHaveText("Plus likés");
   });
 
   test("parcourt tous les médias d'un carrousel dans le détail", async ({ page }) => {

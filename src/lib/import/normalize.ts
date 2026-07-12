@@ -176,6 +176,8 @@ const normalizedPostSchema = z.object({
   publishedAt: optionalDateSchema,
   contentType: contentTypeSchema,
   mainTheme: z.preprocess(emptyToUndefined, z.string().trim().max(120).optional()),
+  likesCount: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).optional()),
+  commentsCount: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).optional()),
   metadata: jsonObjectSchema.default({}),
 });
 
@@ -188,9 +190,11 @@ const aliases = {
   caption: ["caption", "description"],
   tags: ["tags", "tag_names", "tagNames"],
   savedAt: ["savedAt", "saved_at"],
-  publishedAt: ["publishedAt", "published_at", "takenAt", "taken_at"],
+  publishedAt: ["publishedAt", "published_at", "takenAt", "taken_at", "date"],
   contentType: ["contentType", "content_type", "type"],
   mainTheme: ["mainTheme", "main_theme", "theme"],
+  likesCount: ["likesCount", "likes_count", "likes"],
+  commentsCount: ["commentsCount", "comments_count", "comments"],
   metadata: ["metadata", "meta"],
   media: ["media", "media_items", "mediaItems", "children"],
 } as const;
@@ -253,8 +257,8 @@ export function normalizeImportPayload(input: unknown): {
       publishedAt: post.publishedAt ?? null,
       contentType: post.contentType,
       mainTheme: post.mainTheme ? normalizeMainTheme(post.mainTheme) : null,
-      likesCount: metrics.likes,
-      commentsCount: metrics.comments,
+      likesCount: post.likesCount ?? metrics.likes,
+      commentsCount: post.commentsCount ?? metrics.comments,
       metadata: post.metadata,
       searchText: buildSearchText({
         authorUsername: post.authorUsername,
@@ -427,10 +431,20 @@ function isAllowedMediaHostname(hostname: string): boolean {
     return true;
   }
 
+  let configuredPublicMediaHost = "";
+  try {
+    configuredPublicMediaHost = process.env.MEDIA_PUBLIC_BASE_URL
+      ? new URL(process.env.MEDIA_PUBLIC_BASE_URL).hostname.toLowerCase()
+      : "";
+  } catch {
+    configuredPublicMediaHost = "";
+  }
+
   const allowed = new Set([
     "cdn.example.com",
     "example.com",
     "images.unsplash.com",
+    configuredPublicMediaHost,
     ...(process.env.MEDIA_HOST_ALLOWLIST ?? "")
       .split(",")
       .map((value) => value.trim().toLowerCase())

@@ -24,6 +24,7 @@ import {
   normalizeImportPayload,
   tagSlug,
 } from "@/lib/import/normalize";
+import { resolvePublicMediaUrl } from "@/lib/media-url";
 import { databaseConfigured, prisma } from "@/server/db";
 import { getApplicationOwnerId, parseOwnerId } from "@/server/owner";
 
@@ -281,8 +282,8 @@ function cursorWhere(
     };
   }
 
-  if (sort === "likes" || sort === "comments") {
-    const field = sort === "likes" ? "likesCount" : "commentsCount";
+  if (sort === "likes") {
+    const field = "likesCount";
     if (cursor.value === null) return { [field]: null, id: { gt: cursor.id } };
     const metric = Number(cursor.value);
     if (!Number.isSafeInteger(metric) || metric < 0) throw cursorValidationError();
@@ -321,7 +322,6 @@ function orderByFor(
 ): Prisma.PostOrderByWithRelationInput[] {
   if (sort === "author") return [{ authorSortKey: "asc" }, { id: "asc" }];
   if (sort === "likes") return [{ likesCount: { sort: "desc", nulls: "last" } }, { id: "asc" }];
-  if (sort === "comments") return [{ commentsCount: { sort: "desc", nulls: "last" } }, { id: "asc" }];
   return [
     { savedAt: { sort: sort === "oldest" ? "asc" : "desc", nulls: "last" } },
     { id: "asc" },
@@ -340,9 +340,7 @@ function cursorFromRow(
       ? row.authorSortKey
       : effectiveSort === "likes"
         ? String(row.likesCount ?? "") || null
-        : effectiveSort === "comments"
-          ? String(row.commentsCount ?? "") || null
-          : row.savedAt?.toISOString() ?? null,
+        : row.savedAt?.toISOString() ?? null,
     id: row.id,
   };
 }
@@ -352,20 +350,33 @@ function toLibraryPost(row: PostWithTags, compact: boolean): LibraryPost {
     row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
       ? (row.metadata as Record<string, unknown>)
       : {};
+  const mediaCount = row.media.length;
+  const selectedMedia = compact ? row.media.slice(0, 1) : row.media;
+  const resolvedMedia = selectedMedia.map((media) => ({
+    id: media.id,
+    type: media.type.toLowerCase() as "image" | "video",
+    url: resolvePublicMediaUrl(media.sourcePath, media.url, {
+      type: media.type.toLowerCase() as "image" | "video",
+      position: media.position,
+      mediaCount,
+    }),
+    sourcePath: media.sourcePath,
+    thumbnailUrl: resolvePublicMediaUrl(media.sourcePath, media.thumbnailUrl, {
+      type: media.type.toLowerCase() as "image" | "video",
+      position: media.position,
+      mediaCount,
+      thumbnail: true,
+    }),
+    position: media.position,
+  }));
+  const firstImage = resolvedMedia.find((media) => media.type === "image");
   return {
     id: row.id,
     externalId: row.externalId,
     postUrl: row.postUrl,
-    thumbnailUrl: row.thumbnailUrl,
-    mediaUrl: row.mediaUrl,
-    media: (compact ? row.media.slice(0, 1) : row.media).map((media) => ({
-      id: media.id,
-      type: media.type.toLowerCase() as "image" | "video",
-      url: media.url,
-      sourcePath: media.sourcePath,
-      thumbnailUrl: media.thumbnailUrl,
-      position: media.position,
-    })),
+    thumbnailUrl: firstImage?.url ?? row.thumbnailUrl,
+    mediaUrl: resolvedMedia[0]?.url ?? row.mediaUrl,
+    media: resolvedMedia,
     authorUsername: row.authorUsername,
     caption: compact ? row.caption.slice(0, 500) : row.caption,
     tags: row.postTags.map(({ tag }) => tag.name).sort((a, b) => a.localeCompare(b, "fr")),
@@ -385,27 +396,42 @@ async function readFallbackPosts(): Promise<LibraryPost[]> {
   fallbackPostsPromise ??= (async () => {
     const samplePath = path.join(process.cwd(), "resources", "instagram-saved-posts.sample.json");
     const source = JSON.parse(await readFile(samplePath, "utf8")) as unknown;
-    return normalizeImportPayload(source).items.map((post) => ({
-      id: `sample_${createHash("sha256").update(post.postUrl).digest("hex").slice(0, 20)}`,
-      externalId: post.externalId,
-      postUrl: post.postUrl,
-      thumbnailUrl: post.thumbnailUrl,
-      mediaUrl: post.mediaUrl,
-      media: post.media.map((media) => ({
-        ...media,
-        id: `sample_media_${createHash("sha256").update(`${post.postUrl}:${media.position}`).digest("hex").slice(0, 20)}`,
-      })),
-      authorUsername: post.authorUsername,
-      caption: post.caption,
-      tags: post.tags,
-      savedAt: post.savedAt?.toISOString() ?? null,
-      publishedAt: post.publishedAt?.toISOString() ?? null,
-      contentType: post.contentType,
-      mainTheme: post.mainTheme,
-      likesCount: post.likesCount,
-      commentsCount: post.commentsCount,
-      metadata: post.metadata,
-    }));
+    return normalizeImportPayload(source).items.map((post) => {
+      const media = post.media.map((item) => ({
+        ...item,
+        url: resolvePublicMediaUrl(item.sourcePath, item.url, {
+          type: item.type,
+          position: item.position,
+          mediaCount: post.media.length,
+        }),
+        thumbnailUrl: resolvePublicMediaUrl(item.sourcePath, item.thumbnailUrl, {
+          type: item.type,
+          position: item.position,
+          mediaCount: post.media.length,
+          thumbnail: true,
+        }),
+        id: `sample_media_${createHash("sha256").update(`${post.postUrl}:${item.position}`).digest("hex").slice(0, 20)}`,
+      }));
+      const firstImage = media.find((item) => item.type === "image");
+      return {
+        id: `sample_${createHash("sha256").update(post.postUrl).digest("hex").slice(0, 20)}`,
+        externalId: post.externalId,
+        postUrl: post.postUrl,
+        thumbnailUrl: firstImage?.url ?? post.thumbnailUrl,
+        mediaUrl: media[0]?.url ?? post.mediaUrl,
+        media,
+        authorUsername: post.authorUsername,
+        caption: post.caption,
+        tags: post.tags,
+        savedAt: post.savedAt?.toISOString() ?? null,
+        publishedAt: post.publishedAt?.toISOString() ?? null,
+        contentType: post.contentType,
+        mainTheme: post.mainTheme,
+        likesCount: post.likesCount,
+        commentsCount: post.commentsCount,
+        metadata: post.metadata,
+      };
+    });
   })();
   return fallbackPostsPromise;
 }

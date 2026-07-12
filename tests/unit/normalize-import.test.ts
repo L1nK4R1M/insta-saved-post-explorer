@@ -48,6 +48,19 @@ describe("normalizeImportPayload", () => {
     expect(result.tags).not.toContain("Sucré");
   });
 
+  it("importe les métriques et la date explicites du JSON enrichi", () => {
+    const result = normalizeImportPayload([{
+      ...validItem,
+      likes: 152,
+      comments: 27,
+      date: "2026-07-10T22:47:44.000Z",
+    }]).items[0];
+
+    expect(result.likesCount).toBe(152);
+    expect(result.commentsCount).toBe(27);
+    expect(result.publishedAt?.toISOString()).toBe("2026-07-10T22:47:44.000Z");
+  });
+
   it("normalise les collections media et leurs alias dans l'ordre", () => {
     const result = normalizeImportPayload([{
       ...validItem,

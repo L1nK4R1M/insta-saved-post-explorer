@@ -109,8 +109,8 @@ export function PostDetailDialog({ post, position, total, onClose, onPrevious, o
             <dl className="metadata-grid">
               <div><dt>Type</dt><dd>{formatMediaType(media, displayPost.contentType)}</dd></div>
               <div><dt>Thème</dt><dd>{displayPost.mainTheme || "Non défini"}</dd></div>
-              <div><dt>Likes</dt><dd className="tabular-nums">{formatMetric(caption.likes)}</dd></div>
-              <div><dt>Commentaires</dt><dd className="tabular-nums">{formatMetric(caption.comments)}</dd></div>
+              <div><dt>Likes</dt><dd className="tabular-nums">{formatMetric(displayPost.likesCount ?? caption.likes)}</dd></div>
+              <div><dt>Date</dt><dd>{formatPublishedAt(displayPost.publishedAt)}</dd></div>
             </dl>
 
             <p className="detail-caption text-pretty">{caption.text || "Aucune légende disponible."}</p>
@@ -271,6 +271,14 @@ function formatMediaType(media: LibraryPostMedia[], legacyType: LibraryPost["con
 
 function formatSavedAt(value: string | null) {
   return value ? `Enregistré le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(value))}` : "Date d’enregistrement inconnue";
+}
+
+function formatPublishedAt(value: string | null) {
+  if (!value) return "Inconnue";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Inconnue"
+    : new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(date);
 }
 
 function formatMetric(value: number | null) {
