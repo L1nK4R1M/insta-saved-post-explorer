@@ -11,7 +11,7 @@ describe("parseLibrarySearchParams", () => {
   it("restaure recherche, tags, mode, tri et limite depuis l'URL", () => {
     const query = parseLibrarySearchParams(
       new URLSearchParams(
-        "q=gateau&tags=Dessert%20prot%C3%A9in%C3%A9%2CChocolat&tagMode=or&sort=author&limit=48",
+        "q=gateau&tags=Dessert%20prot%C3%A9in%C3%A9%2CChocolat&tagMode=or&type=carousel&sort=author&limit=48",
       ),
     );
 
@@ -19,6 +19,7 @@ describe("parseLibrarySearchParams", () => {
       search: "gateau",
       tags: ["Dessert protéiné", "Chocolat"],
       tagMode: "or",
+      contentType: "carousel",
       sort: "author",
       limit: 48,
       cursor: null,
@@ -35,6 +36,7 @@ describe("parseLibrarySearchParams", () => {
     expect(() => parseLibraryQuery({ limit: 101 })).toThrow();
     expect(() => parseLibraryQuery({ tagMode: "xor" })).toThrow();
     expect(() => parseLibraryQuery({ sort: "random" })).toThrow();
+    expect(() => parseLibraryQuery({ contentType: "story" })).toThrow();
   });
 });
 

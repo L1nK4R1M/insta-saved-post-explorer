@@ -55,6 +55,22 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("tags")).toBe("Favoris");
   });
 
+  test("combine un filtre de type avec les thèmes principaux", async ({ page }) => {
+    const carousel = page.getByRole("button", { name: "Carrousels", exact: true });
+    await carousel.click();
+    await expect(carousel).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("carousel");
+
+    const sweet = page.getByRole("button", { name: "Sucré", exact: true });
+    await sweet.click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("Sucré");
+    await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("carousel");
+
+    await page.getByRole("button", { name: "Vidéos", exact: true }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("reel");
+    await expect(carousel).toHaveAttribute("aria-pressed", "false");
+  });
+
   test("ouvre le detail et navigue au bouton et au clavier", async ({ page }) => {
     await page.getByRole("button", { name: "Ouvrir la publication de esncom.fr" }).click();
     const dialog = page.getByRole("dialog", { name: "Publication de esncom.fr" });
