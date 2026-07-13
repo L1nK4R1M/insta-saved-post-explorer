@@ -61,7 +61,8 @@ button { color: inherit; }
 .sync-action { position: relative; display: flex; }
 .sync-button { white-space: nowrap; }
 .sync-spin { animation: sync-spin 1s linear infinite; }
-.sync-error { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: min(320px, 80vw); border: 1px solid var(--danger); border-radius: 8px; background: var(--surface); padding: 8px 10px; color: var(--danger); font-size: .75rem; box-shadow: var(--shadow); }
+.sync-error, .sync-status { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: min(320px, 80vw); border: 1px solid var(--danger); border-radius: 8px; background: var(--surface); padding: 8px 10px; color: var(--danger); font-size: .75rem; box-shadow: var(--shadow); }
+.sync-status { border-color: var(--accent); color: var(--text); }
 @keyframes sync-spin { to { transform: rotate(360deg); } }
 
 :focus-visible {
@@ -110,9 +111,11 @@ button { color: inherit; }
   align-items: center;
   gap: 10px;
   min-width: 0;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 12px;
-  background: var(--surface-subtle);
+  background:
+    linear-gradient(var(--surface-subtle), var(--surface-subtle)) padding-box,
+    var(--brand-border-gradient) border-box;
   color: var(--muted);
 }
 
@@ -122,7 +125,7 @@ button { color: inherit; }
 }
 
 .global-search:focus-within, .input-shell:focus-within {
-  border-color: var(--accent);
+  border-color: transparent;
   box-shadow: 0 0 0 1px var(--accent);
 }
 
@@ -217,7 +220,14 @@ button { color: inherit; }
 .ribbon-end { margin-left: auto; display: flex; flex: none; align-items: center; gap: 12px; }
 .results-count { color: var(--accent); font-size: 0.875rem; }
 .results-count span { color: var(--muted); font-weight: 500; }
-select { min-height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); padding: 0 30px 0 10px; }
+select, .gradient-input {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    var(--brand-border-gradient) border-box;
+}
+select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30px 0 10px; }
+.gradient-input { color: var(--text); }
 .count-badge { display: grid; place-items: center; min-width: 20px; height: 20px; border-radius: 999px; background: var(--accent); color: var(--accent-contrast); font-size: 11px; }
 
 .library-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 12px 16px 36px; }

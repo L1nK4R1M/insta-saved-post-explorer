@@ -1,4 +1,4 @@
-# Insta Saved Sync 4.2.0
+# Insta Saved Sync 4.2.1
 
 Extension Chrome MV3 associée à Insta Post Explorer. Elle conserve les fonctions
 d’export locales de la version 3.4 et ajoute le pont de synchronisation avec
