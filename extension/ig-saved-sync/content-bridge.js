@@ -5,6 +5,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 let pollTimer = null;
+let pollFailures = 0;
 const extensionInfo = {
   extensionId: chrome.runtime.id,
   version: chrome.runtime.getManifest().version,
@@ -34,11 +35,17 @@ window.addEventListener("message", (event) => {
 
 function startPolling(requestId) {
   if (pollTimer) clearInterval(pollTimer);
+  pollFailures = 0;
   const poll = () => chrome.runtime.sendMessage({ type: "getWebSyncState" }, (response) => {
     if (chrome.runtime.lastError) {
+      pollFailures += 1;
+      if (pollFailures < 3) return;
       post("STATE", requestId, withExtension({ ok: false, error: "EXTENSION_UNAVAILABLE" }));
+      clearInterval(pollTimer);
+      pollTimer = null;
       return;
     }
+    pollFailures = 0;
     post("STATE", requestId, withExtension(response));
     const status = response?.task?.status;
     if (["completed", "failed"].includes(status)) {

@@ -48,6 +48,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
       <div style={{ display: "grid", gap: 7 }}>
         <label htmlFor="password" style={{ fontSize: 14, fontWeight: 650 }}>Mot de passe</label>
         <input
+          className="gradient-input"
           id="password"
           name="password"
           type="password"
@@ -71,9 +72,9 @@ export function LoginForm({ nextPath }: LoginFormProps) {
 const inputStyle = {
   width: "100%",
   minHeight: 44,
-  border: "1px solid var(--line)",
+  border: "1px solid transparent",
   borderRadius: 10,
-  background: "var(--surface-subtle)",
+  background: "linear-gradient(var(--surface-subtle), var(--surface-subtle)) padding-box, var(--brand-border-gradient) border-box",
   color: "var(--text)",
   padding: "0 12px",
 } as const;

@@ -24,6 +24,7 @@ type SyncState =
   | { status: "idle" }
   | { status: "starting" }
   | { status: "running"; synced: number }
+  | { status: "paused"; synced: number; message: string }
   | { status: "success"; synced: number }
   | { status: "error"; message: string };
 
@@ -71,7 +72,7 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
       if (attemptTimer.current) window.clearTimeout(attemptTimer.current);
       attemptTimer.current = window.setTimeout(() => {
         if (!attemptNext.current()) {
-          setState({ status: "error", message: "Aucune installation de l’extension n’a répondu. Rechargez Insta Saved Sync 4.1.1." });
+          setState({ status: "error", message: "Aucune installation de l’extension n’a répondu. Rechargez Insta Saved Sync 4.2.1." });
         }
       }, 2_500);
       return true;
@@ -111,7 +112,7 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
         return;
       }
       if (message.type !== "STATE" || message.payload?.ok !== true) return;
-      const task = message.payload.task as { status?: string; stats?: { synced?: number }; error?: string; resumeAt?: string | null } | null;
+      const task = message.payload.task as { status?: string; stats?: { synced?: number }; error?: string; resumeAt?: string | null; pausedReason?: { note?: string } | null } | null;
       if (!task) return;
       const synced = task.stats?.synced ?? 0;
       if (task.status === "completed") {
@@ -121,6 +122,13 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
         setState({ status: "error", message: task.error ?? "La synchronisation a échoué." });
       } else if (task.status === "paused" && !task.resumeAt) {
         setState({ status: "error", message: "Synchronisation en pause. Vérifiez votre session Instagram puis relancez." });
+      } else if (task.status === "paused") {
+        const resumeTime = new Date(task.resumeAt as string).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" });
+        setState({
+          status: "paused",
+          synced,
+          message: `${task.pausedReason?.note ?? "La synchronisation attend avant de réessayer."} Reprise automatique vers ${resumeTime}.`,
+        });
       } else {
         setState({ status: "running", synced });
       }
@@ -155,7 +163,7 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
       setState({
         status: "error",
         message: error instanceof Error && error.message === "EXTENSION_NOT_FOUND"
-          ? "Extension introuvable. Installez ou rechargez Insta Saved Sync 4.1.1."
+          ? "Extension introuvable. Installez ou rechargez Insta Saved Sync 4.2.1."
           : "Impossible de créer la session de synchronisation.",
       });
     }
@@ -164,6 +172,8 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
   const busy = state.status === "starting" || state.status === "running";
   const label = state.status === "running"
     ? `${state.synced} nouveau${state.synced > 1 ? "x" : ""}`
+    : state.status === "paused"
+      ? `En pause (${state.synced})`
     : state.status === "success"
       ? `${state.synced} synchronisé${state.synced > 1 ? "s" : ""}`
       : "Actualiser les posts";
@@ -176,6 +186,7 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
           : <RefreshCw aria-hidden="true" className={busy ? "size-4 sync-spin" : "size-4"} />}
         <span className="desktop-only">{label}</span>
       </button>
+      {state.status === "paused" ? <span className="sync-status" role="status">{state.message}</span> : null}
       {state.status === "error" ? <span className="sync-error" role="alert">{state.message}</span> : null}
     </div>
   );

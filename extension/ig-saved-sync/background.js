@@ -28,6 +28,10 @@ const ALARM_NAME = "ig-export-tick";
 const ALARM_PERIOD_MIN = 0.5;
 const ZOMBIE_MS = 90_000;
 const WEB_SYNC_TASK_ID = "web-sync";
+const IG_REQUEST_TIMEOUT_MS = 20_000;
+const SYNC_REQUEST_TIMEOUT_MS = 25_000;
+const MEDIA_FETCH_TIMEOUT_MS = 25_000;
+const MEDIA_UPLOAD_TIMEOUT_MS = 25_000;
 
 const RESUME_MS = {
   rate_limited: 10 * 60_000,
@@ -91,6 +95,33 @@ function classify(err) {
   return { kind: "pause", reason: "network_error", note: `Network issue: ${err?.message ?? err}. Will retry shortly.`, resumeMs: RESUME_MS.network_error };
 }
 
+async function fetchWithTimeout(url, options, timeoutMs, timeoutCode) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(timeoutCode);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function promiseWithTimeout(promise, timeoutMs, timeoutCode) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutCode)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // API client
 // ---------------------------------------------------------------------------
@@ -116,11 +147,11 @@ class IgClient {
       if (attempt > 0) await sleep(Math.min(1000 * 2 ** (attempt - 1), 8000));
       let res;
       try {
-        res = await fetch(url.toString(), {
+        res = await fetchWithTimeout(url.toString(), {
           method: "GET",
           credentials: "include",
           headers: { "X-IG-App-ID": IG_APP_ID, ...(csrf ? { "X-CSRFToken": csrf } : {}) },
-        });
+        }, IG_REQUEST_TIMEOUT_MS, "instagram_request_timeout");
       } catch (err) {
         lastError = err;
         continue;
@@ -130,7 +161,7 @@ class IgClient {
         lastError = new IgApiError(`HTTP ${res.status}`, res.status, null);
         continue;
       }
-      const text = await res.text();
+      const text = await promiseWithTimeout(res.text(), IG_REQUEST_TIMEOUT_MS, "instagram_body_timeout");
       let body = null;
       try {
         body = text ? JSON.parse(text) : null;
@@ -937,7 +968,12 @@ async function syncPostToExplorer(row, sync) {
 
 async function uploadSource(url, input) {
   if (!url) throw new Error("missing_media_url");
-  const source = await fetch(url, { credentials: "include" });
+  const source = await fetchWithTimeout(
+    url,
+    { credentials: "include" },
+    MEDIA_FETCH_TIMEOUT_MS,
+    "media_fetch_timeout",
+  );
   if (!source.ok) throw new Error(`media_fetch_${source.status}`);
   const byteSize = Number(source.headers.get("content-length"));
   if (!Number.isSafeInteger(byteSize) || byteSize <= 0) throw new Error("missing_media_size");
@@ -953,13 +989,13 @@ async function uploadSource(url, input) {
     byteSize,
   });
   if (!prepared.ok) throw new Error(`media_prepare_${prepared.status}`);
-  const target = await prepared.json();
-  const upload = await fetch(target.uploadUrl, {
+  const target = await promiseWithTimeout(prepared.json(), SYNC_REQUEST_TIMEOUT_MS, "sync_response_timeout");
+  const upload = await fetchWithTimeout(target.uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": contentType },
     body: source.body,
     duplex: "half",
-  });
+  }, MEDIA_UPLOAD_TIMEOUT_MS, "media_upload_timeout");
   if (!upload.ok) throw new Error(`media_upload_${upload.status}`);
   return { ...target, byteSize };
 }
@@ -976,11 +1012,11 @@ function numberOrNull(value) {
 }
 
 async function syncFetch(sync, path, body) {
-  return fetch(`${sync.apiBaseUrl}${path}`, {
+  return fetchWithTimeout(`${sync.apiBaseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${sync.token}` },
     body: JSON.stringify(body),
-  });
+  }, SYNC_REQUEST_TIMEOUT_MS, "sync_request_timeout");
 }
 
 async function finishWebSync(sync, status, error, mediaFailed) {
