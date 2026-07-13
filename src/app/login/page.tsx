@@ -15,25 +15,25 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main style={shellStyle}>
-      <section aria-labelledby="login-title" style={cardStyle}>
+      <section className="login-card" aria-labelledby="login-title" style={cardStyle}>
         <div>
           <Brand className="login-brand" />
-          <h1 id="login-title" style={{ margin: 0, fontSize: "clamp(1.7rem, 5vw, 2.2rem)", lineHeight: 1.1 }}>
+          <h1 className="text-balance" id="login-title" style={{ margin: 0, fontSize: "clamp(1.7rem, 5vw, 2.2rem)", lineHeight: 1.1 }}>
             Accès administrateur
           </h1>
-          <p className="text-muted" style={{ margin: "12px 0 0", lineHeight: 1.55 }}>
+          <p className="text-muted text-pretty" style={{ margin: "12px 0 0", lineHeight: 1.55 }}>
             La bibliothèque est publique. Saisissez le mot de passe uniquement
             pour importer ou administrer les publications.
           </p>
         </div>
 
-        <Link className="button" href="/">Retour à la page principale</Link>
+        <Link className="button login-secondary-button" href="/">Retour à la page principale</Link>
 
         {status === "disabled" ? (
           <div role="status" style={noticeStyle}>
             <strong>Authentification désactivée en développement.</strong>
             <span>Le bypass explicite <code>AUTH_DISABLED=true</code> est actif.</span>
-            <Link className="button button-primary" href={nextPath}>Ouvrir la bibliothèque</Link>
+            <Link className="button login-primary-button" href={nextPath}>Ouvrir la bibliothèque</Link>
           </div>
         ) : status === "missing" ? (
           <div role="alert" style={{ ...noticeStyle, background: "var(--danger-soft)", color: "var(--danger)" }}>
@@ -67,9 +67,7 @@ const cardStyle = {
   width: "min(100%, 440px)",
   display: "grid",
   gap: 28,
-  border: "1px solid var(--line)",
   borderRadius: 18,
-  background: "var(--surface)",
   boxShadow: "var(--shadow)",
   padding: "clamp(24px, 6vw, 36px)",
 } as const;

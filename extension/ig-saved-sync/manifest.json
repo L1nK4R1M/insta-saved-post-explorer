@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Insta Saved Sync",
-  "version": "4.2.1",
+  "version": "4.2.2",
   "description": "Exportez vos posts Instagram sauvegardés et synchronisez les nouveaux médias avec Insta Post Explorer.",
   "action": {
     "default_title": "Insta Saved Sync",

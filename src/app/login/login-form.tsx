@@ -62,7 +62,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
       {error ? (
         <p role="alert" style={{ margin: 0, color: "var(--danger)", fontSize: 14 }}>{error}</p>
       ) : null}
-      <button className="button button-primary" type="submit" disabled={pending} style={{ width: "100%" }}>
+      <button className="button login-primary-button" type="submit" disabled={pending} style={{ width: "100%" }}>
         {pending ? "Connexion…" : "Se connecter"}
       </button>
     </form>

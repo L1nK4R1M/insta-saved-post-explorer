@@ -92,7 +92,27 @@ function classify(err) {
     return { kind: "fail", note: `Synchronization rejected: ${err.message}.` };
   if (["missing_media_url", "missing_media_size", "missing_media_body"].includes(err?.message))
     return { kind: "fail", note: `Synchronization rejected: ${err.message}.` };
+  const networkStage = /^(media_fetch|media_buffer|media_prepare|media_upload)_network:(.+)$/.exec(err?.message ?? "");
+  if (networkStage) {
+    const labels = {
+      media_fetch: "Téléchargement du média Instagram impossible",
+      media_buffer: "Lecture du média Instagram impossible",
+      media_prepare: "Préparation de l’envoi R2 impossible",
+      media_upload: "Envoi du média vers Cloudflare R2 impossible",
+    };
+    return {
+      kind: "pause",
+      reason: "network_error",
+      note: `${labels[networkStage[1]]} (${networkStage[2]}). Nouvelle tentative automatique.`,
+      resumeMs: RESUME_MS.network_error,
+    };
+  }
   return { kind: "pause", reason: "network_error", note: `Network issue: ${err?.message ?? err}. Will retry shortly.`, resumeMs: RESUME_MS.network_error };
+}
+
+function networkStageError(stage, error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new Error(`${stage}_network:${detail}`);
 }
 
 async function fetchWithTimeout(url, options, timeoutMs, timeoutCode) {
@@ -968,34 +988,58 @@ async function syncPostToExplorer(row, sync) {
 
 async function uploadSource(url, input) {
   if (!url) throw new Error("missing_media_url");
-  const source = await fetchWithTimeout(
-    url,
-    { credentials: "include" },
-    MEDIA_FETCH_TIMEOUT_MS,
-    "media_fetch_timeout",
-  );
+  let source;
+  try {
+    source = await fetchWithTimeout(
+      url,
+      { credentials: "include" },
+      MEDIA_FETCH_TIMEOUT_MS,
+      "media_fetch_timeout",
+    );
+  } catch (error) {
+    throw networkStageError("media_fetch", error);
+  }
   if (!source.ok) throw new Error(`media_fetch_${source.status}`);
-  const byteSize = Number(source.headers.get("content-length"));
-  if (!Number.isSafeInteger(byteSize) || byteSize <= 0) throw new Error("missing_media_size");
   if (!source.body) throw new Error("missing_media_body");
+  let mediaBlob;
+  try {
+    mediaBlob = await promiseWithTimeout(
+      source.blob(),
+      MEDIA_FETCH_TIMEOUT_MS,
+      "media_buffer_timeout",
+    );
+  } catch (error) {
+    throw networkStageError("media_buffer", error);
+  }
+  const byteSize = mediaBlob.size;
+  if (!Number.isSafeInteger(byteSize) || byteSize <= 0) throw new Error("missing_media_size");
   const contentType = normalizeContentType(source.headers.get("content-type"), input.kind);
-  const prepared = await syncFetch(input.sync, "/api/sync/media/prepare", {
-    authorUsername: input.authorUsername,
-    postCode: input.postCode,
-    position: input.position,
-    carousel: input.carousel,
-    kind: input.kind,
-    contentType,
-    byteSize,
-  });
+  let prepared;
+  try {
+    prepared = await syncFetch(input.sync, "/api/sync/media/prepare", {
+      authorUsername: input.authorUsername,
+      postCode: input.postCode,
+      position: input.position,
+      carousel: input.carousel,
+      kind: input.kind,
+      contentType,
+      byteSize,
+    });
+  } catch (error) {
+    throw networkStageError("media_prepare", error);
+  }
   if (!prepared.ok) throw new Error(`media_prepare_${prepared.status}`);
   const target = await promiseWithTimeout(prepared.json(), SYNC_REQUEST_TIMEOUT_MS, "sync_response_timeout");
-  const upload = await fetchWithTimeout(target.uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": contentType },
-    body: source.body,
-    duplex: "half",
-  }, MEDIA_UPLOAD_TIMEOUT_MS, "media_upload_timeout");
+  let upload;
+  try {
+    upload = await fetchWithTimeout(target.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: mediaBlob,
+    }, MEDIA_UPLOAD_TIMEOUT_MS, "media_upload_timeout");
+  } catch (error) {
+    throw networkStageError("media_upload", error);
+  }
   if (!upload.ok) throw new Error(`media_upload_${upload.status}`);
   return { ...target, byteSize };
 }

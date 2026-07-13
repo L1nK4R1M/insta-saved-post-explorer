@@ -105,6 +105,35 @@ button { color: inherit; }
 .brand-post { background-image: linear-gradient(90deg, #ff1f73, #8b2be2); }
 .brand-explorer { background-image: linear-gradient(90deg, #8b2be2, #1688f8); }
 .login-brand { margin-bottom: 12px; font-size: 1.05rem; }
+.login-card {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    var(--brand-border-gradient) border-box;
+}
+.login-secondary-button {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    var(--brand-border-gradient) border-box;
+}
+.login-secondary-button:hover {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--surface-subtle), var(--surface-subtle)) padding-box,
+    var(--brand-border-gradient) border-box;
+}
+.login-primary-button {
+  border-color: transparent;
+  background: var(--brand-border-gradient);
+  color: #fff;
+}
+.login-primary-button:hover {
+  border-color: transparent;
+  background: var(--brand-border-gradient);
+  color: #fff;
+  opacity: .9;
+}
 
 .global-search, .input-shell {
   display: flex;
