@@ -235,6 +235,33 @@
             <span class="step-num">2</span>
             <div class="step-body">
               <h3 class="block-title">Download its media</h3>
+              <details class="advanced" id="importFilters" hidden open>
+                <summary>Filters &amp; options</summary>
+                <div class="filter-grid">
+                  <label class="field">
+                    <span class="field-label">Types</span>
+                    <span class="chips" id="impTypes">
+                      <label class="chip"><input type="checkbox" value="photo" /> Photos</label>
+                      <label class="chip"><input type="checkbox" value="video" /> Videos</label>
+                      <label class="chip"><input type="checkbox" value="carousel" /> Carousels</label>
+                    </span>
+                  </label>
+                  <div class="field-row">
+                    <label class="field">
+                      <span class="field-label">From <span class="opt">date</span></span>
+                      <input id="impDateFrom" type="date" />
+                    </label>
+                    <label class="field">
+                      <span class="field-label">To <span class="opt">date</span></span>
+                      <input id="impDateTo" type="date" />
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span class="field-label">Accounts <span class="opt">comma-separated, empty = all</span></span>
+                    <input id="impAuthors" type="text" placeholder="natgeo, tobes.lifts" autocomplete="off" spellcheck="false" />
+                  </label>
+                </div>
+              </details>
               <div class="media-choice" id="importChoice" hidden>
                 <label class="mini"><input type="radio" name="ifilter" value="all" checked /> Everything (videos + images)</label>
                 <label class="mini"><input type="radio" name="ifilter" value="photos" /> Images only, incl. video previews</label>
@@ -244,6 +271,7 @@
                 <label class="chip"><input type="radio" name="iquality" value="high" checked /> Full</label>
                 <label class="chip"><input type="radio" name="iquality" value="low" /> Reduced</label>
               </div>
+              <p class="estimate" id="importEstimate" hidden></p>
               <div class="row" id="importStart" hidden>
                 <button id="importBtn" class="btn primary">Download media from file</button>
               </div>

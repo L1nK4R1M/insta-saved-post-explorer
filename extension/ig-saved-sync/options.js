@@ -436,7 +436,9 @@ const importEls = {
   done: el("impDone"), total: el("impTotal"), failed: el("impFailed"),
   bar: el("impBar"), pause: el("impPause"), resume: el("impResume"),
   doneMsg: el("impDoneMsg"), seedNote: el("seedNote"),
-  qualityRow: el("importQualityRow"),
+  qualityRow: el("importQualityRow"), filters: el("importFilters"),
+  types: el("impTypes"), dateFrom: el("impDateFrom"), dateTo: el("impDateTo"),
+  authors: el("impAuthors"), estimate: el("importEstimate"),
 };
 
 let parsedTargets = null;
@@ -461,6 +463,60 @@ function fileNameFor(url, code, idx, type) {
 
 function guessTypeFromUrl(url) {
   return /\.mp4|\/v\/|video/i.test(url) ? "video" : "photo";
+}
+
+function importFilterSpec() {
+  const types = [...importEls.types.querySelectorAll("input:checked")].map((input) => input.value);
+  const authors = importEls.authors.value
+    .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+  return {
+    types,
+    authors,
+    dateFrom: importEls.dateFrom.value || null,
+    dateTo: importEls.dateTo.value || null,
+  };
+}
+
+function rowAuthor(row) {
+  return String(row.owner_username ?? row.username ?? row.authorUsername ?? row._raw?.user?.username ?? "").toLowerCase();
+}
+
+function rowType(row) {
+  const raw = row.media_type ?? row.content_type ?? row.contentType ?? row._raw?.media_type;
+  const media = Array.isArray(row.media) ? row.media : [];
+  if (raw === 8 || raw === "8" || raw === "carousel" || row.carousel?.length || row.carousel_media_urls || media.length > 1 || row._raw?.carousel_media?.length) return "carousel";
+  if (raw === 2 || raw === "2" || raw === "video" || raw === "reel" || row.video_url || row.videoUrl || media[0]?.type === "video") return "video";
+  return "photo";
+}
+
+function rowTimestamp(row) {
+  const value = row.taken_at ?? row.published_at ?? row.publishedAt ?? row.saved_at ?? row.savedAt ?? row._raw?.taken_at;
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+  const timestamp = Date.parse(String(value));
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function localDayBoundary(value, nextDay = false) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day + (nextDay ? 1 : 0)).getTime();
+}
+
+function rowMatchesImportFilters(row, spec) {
+  if (spec.authors.length && !spec.authors.includes(rowAuthor(row))) return false;
+  if (spec.types.length && !spec.types.includes(rowType(row))) return false;
+  if (spec.dateFrom || spec.dateTo) {
+    const timestamp = rowTimestamp(row);
+    if (timestamp == null) return false;
+    if (spec.dateFrom && timestamp < localDayBoundary(spec.dateFrom)) return false;
+    if (spec.dateTo && timestamp >= localDayBoundary(spec.dateTo, true)) return false;
+  }
+  return true;
+}
+
+function filteredImportRows() {
+  return parsedTargets?.rows.filter((row) => rowMatchesImportFilters(row, importFilterSpec())) ?? [];
 }
 
 // Build download targets from parsed rows. Handles three shapes, in order of
@@ -504,8 +560,25 @@ function targetsFromRows(rows, filter, quality = "high") {
   };
 
   for (const row of rows) {
-    const code = row.code || (row.permalink ? row.permalink.split("/").filter(Boolean).pop() : "");
-    const author = row.owner_username || row._raw?.user?.username || "unknown";
+    const postUrl = row.permalink || row.post_url || row.postUrl || "";
+    const code = row.code || (postUrl ? postUrl.split("/").filter(Boolean).pop() : "");
+    const author = row.owner_username || row.username || row.authorUsername || row._raw?.user?.username || "unknown";
+
+    if (Array.isArray(row.media) && row.media.length) {
+      const carousel = row.media.length > 1;
+      row.media.forEach((item, index) => {
+        const position = carousel ? index : null;
+        const type = item.type === "video" ? "video" : "photo";
+        const thumbnail = item.thumbnail_url || item.thumbnailUrl;
+        if (type === "video") {
+          add(item.url, code, position, "video", author);
+          if (thumbnail) add(thumbnail, code, position, "photo", author);
+        } else {
+          add(item.url || thumbnail, code, position, "photo", author);
+        }
+      });
+      continue;
+    }
 
     // Richest: raw carousel children (each video child carries its preview).
     if (row._raw?.carousel_media?.length) {
@@ -529,12 +602,19 @@ function targetsFromRows(rows, filter, quality = "high") {
       continue;
     }
 
-    // Single media. For a video row, image_url is its preview.
-    if (row.video_url) {
-      add(row.video_url, code, null, "video", author);
-      if (row.image_url) add(row.image_url, code, null, "photo", author);
-    } else if (row.image_url) {
-      add(row.image_url, code, null, "photo", author);
+    // Single media. Accept both extension-export and app-import field names.
+    const videoUrl = row.video_url || row.videoUrl;
+    const imageUrl = row.image_url || row.imageUrl || row.thumbnail_url || row.thumbnailUrl;
+    const mediaUrl = row.media_url || row.mediaUrl;
+    if (videoUrl) {
+      add(videoUrl, code, null, "video", author);
+      if (imageUrl) add(imageUrl, code, null, "photo", author);
+    } else if (mediaUrl) {
+      const type = rowType(row) === "video" ? "video" : guessTypeFromUrl(mediaUrl);
+      add(mediaUrl, code, null, type, author);
+      if (type === "video" && imageUrl) add(imageUrl, code, null, "photo", author);
+    } else if (imageUrl) {
+      add(imageUrl, code, null, "photo", author);
     }
   }
   return targets;
@@ -572,7 +652,7 @@ async function parseFile(file) {
   const text = await file.text();
   if (file.name.toLowerCase().endsWith(".json")) {
     const data = JSON.parse(text);
-    const posts = Array.isArray(data) ? data : data.posts ?? [];
+    const posts = Array.isArray(data) ? data : data.posts ?? data.items ?? [];
     return posts;
   }
   return parseCsv(text);
@@ -589,9 +669,11 @@ importEls.fileInput.addEventListener("change", async () => {
     const rows = await parseFile(file);
     if (!rows.length) { showMessage("No posts found in that file."); return; }
     parsedTargets = { rows };
+    importEls.filters.hidden = false;
     importEls.choice.hidden = false;
     importEls.start.hidden = false;
     if (importEls.qualityRow) importEls.qualityRow.hidden = false;
+    updateImportEstimate();
     hideMessage();
 
     // Same file also restores "Update only": extract post pks and seed the
@@ -618,7 +700,7 @@ importEls.importBtn.addEventListener("click", async () => {
   if (!parsedTargets) return;
   const filter = document.querySelector('input[name="ifilter"]:checked')?.value ?? "all";
   const quality = document.querySelector('input[name="iquality"]:checked')?.value ?? "high";
-  const targets = targetsFromRows(parsedTargets.rows, filter, quality);
+  const targets = targetsFromRows(filteredImportRows(), filter, quality);
   if (!targets.length) { showMessage("No media URLs found in that file."); return; }
   await send("startMediaFromTargets", { targets });
   importEls.start.hidden = true;
@@ -626,6 +708,26 @@ importEls.importBtn.addEventListener("click", async () => {
   importEls.progress.hidden = false;
   pollImport();
 });
+
+function updateImportEstimate() {
+  if (!parsedTargets) return;
+  const rows = filteredImportRows();
+  const filter = document.querySelector('input[name="ifilter"]:checked')?.value ?? "all";
+  const quality = document.querySelector('input[name="iquality"]:checked')?.value ?? "high";
+  const targets = targetsFromRows(rows, filter, quality);
+  importEls.estimate.hidden = false;
+  importEls.estimate.innerHTML = `<strong>${rows.length.toLocaleString()}</strong> of ${parsedTargets.rows.length.toLocaleString()} posts · <strong>${targets.length.toLocaleString()}</strong> media files selected.`;
+}
+
+for (const input of [
+  ...importEls.types.querySelectorAll("input"),
+  importEls.dateFrom,
+  importEls.dateTo,
+  importEls.authors,
+  ...document.querySelectorAll('input[name="ifilter"], input[name="iquality"]'),
+]) {
+  input.addEventListener(input === importEls.authors ? "input" : "change", updateImportEstimate);
+}
 importEls.pause.addEventListener("click", async () => { await send("pauseMediaDownload"); pollImport(); });
 importEls.resume.addEventListener("click", async () => { await send("resumeMediaDownload"); pollImport(); });
 
@@ -635,7 +737,12 @@ el("resetMediaBtn").addEventListener("click", async () => {
   showMessage("Download history cleared. You can start the media download again.");
   importEls.progress.hidden = true;
   importEls.doneMsg.hidden = true;
-  if (parsedTargets) { importEls.start.hidden = false; importEls.choice.hidden = false; }
+  if (parsedTargets) {
+    importEls.start.hidden = false;
+    importEls.choice.hidden = false;
+    importEls.filters.hidden = false;
+    updateImportEstimate();
+  }
 });
 
 function renderImport(mt) {
