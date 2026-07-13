@@ -113,6 +113,7 @@ export const TaskStoreRaw = {
     return tx("tasks", "readonly", (store) => reqAsValue(store.get(id)));
   },
   async put(task) {
+    task.updatedAt = new Date().toISOString();
     return tx("tasks", "readwrite", (store) => {
       store.put(task);
     });

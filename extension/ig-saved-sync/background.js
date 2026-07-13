@@ -27,6 +27,7 @@ const MEDIA_GAP_MS = [200, 800]; // small pause between media downloads
 const ALARM_NAME = "ig-export-tick";
 const ALARM_PERIOD_MIN = 0.5;
 const ZOMBIE_MS = 90_000;
+const WEB_SYNC_TASK_ID = "web-sync";
 
 const RESUME_MS = {
   rate_limited: 10 * 60_000,
@@ -161,12 +162,34 @@ function bestImageUrl(media) {
   for (const x of c) if (x.width * x.height > best.width * best.height) best = x;
   return best.url ?? "";
 }
+// Smallest available image (for the "reduced quality" option).
+function smallImageUrl(media) {
+  const c = media.image_versions2?.candidates;
+  if (!c?.length) return "";
+  let small = c[0];
+  for (const x of c) if (x.width * x.height < small.width * small.height) small = x;
+  return small.url ?? "";
+}
+function imageUrlByQuality(media, quality) {
+  return quality === "low" ? smallImageUrl(media) : bestImageUrl(media);
+}
 function bestVideoUrl(media) {
   const v = media.video_versions;
   if (!v?.length) return "";
   let best = v[0];
   for (const x of v) if ((x.bandwidth ?? 0) > (best.bandwidth ?? 0)) best = x;
   return best.url ?? "";
+}
+// Smallest available video rendition (lowest bandwidth).
+function smallVideoUrl(media) {
+  const v = media.video_versions;
+  if (!v?.length) return "";
+  let small = v[0];
+  for (const x of v) if ((x.bandwidth ?? Infinity) < (small.bandwidth ?? Infinity)) small = x;
+  return small.url ?? "";
+}
+function videoUrlByQuality(media, quality) {
+  return quality === "low" ? smallVideoUrl(media) : bestVideoUrl(media);
 }
 
 // Every child of a carousel (or the single media itself), flattened.
@@ -235,24 +258,27 @@ function toExportRow(media) {
 }
 
 // Downloadable media targets for one post (all carousel children).
-// filter: "all" (default) | "photos" (skip videos)
-function mediaTargets(media, code, filter = "all") {
+// opts.filter: "all" | "photos" (skip video files, keep their previews)
+// opts.quality: "high" (default, max res/bitrate) | "low" (smallest rendition)
+// A video's preview image shares the video's basename with a .jpg extension.
+function mediaTargets(media, code, opts = {}) {
+  const filter = opts.filter ?? "all";
+  const quality = opts.quality ?? "high";
   const out = [];
   const owner = media.user?.username ?? "unknown";
+  const add = (url, filename, type) => {
+    out.push({ url, filename, path: mediaPath(owner, filename), type, postCode: code });
+  };
   const push = (m, idx) => {
     const suffix = idx === undefined ? "" : `_${idx + 1}`;
-    const vurl = bestVideoUrl(m);
+    const vurl = videoUrlByQuality(m, quality);
+    const iurl = imageUrlByQuality(m, quality);
     if (m.media_type === 2 && vurl) {
-      if (filter === "photos") return; // skip videos entirely
-      const filename = `${code}${suffix}.mp4`;
-      out.push({ url: vurl, filename, path: mediaPath(owner, filename), type: "video", postCode: code });
+      if (filter !== "photos") add(vurl, `${code}${suffix}.mp4`, "video");
+      if (iurl) add(iurl, `${code}${suffix}.jpg`, "photo");
       return;
     }
-    const iurl = bestImageUrl(m);
-    if (iurl) {
-      const filename = `${code}${suffix}.jpg`;
-      out.push({ url: iurl, filename, path: mediaPath(owner, filename), type: "photo", postCode: code });
-    }
+    if (iurl) add(iurl, `${code}${suffix}.jpg`, "photo");
   };
   if (media.media_type === 8 && media.carousel_media?.length) {
     media.carousel_media.forEach((child, i) => push(child, i));
@@ -260,6 +286,39 @@ function mediaTargets(media, code, filter = "all") {
     push(media);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Post filter (shared by export and media download)
+//   spec: { authors?: string[], types?: string[], dateFrom?, dateTo? }
+//   - authors: lowercased usernames to keep (empty = all)
+//   - types: any of "photo" | "video" | "carousel" (empty = all)
+//   - dateFrom/dateTo: ISO date strings (inclusive), compared to taken_at
+// ---------------------------------------------------------------------------
+function postMatchesFilter(media, spec) {
+  if (!spec) return true;
+
+  if (spec.authors?.length) {
+    const u = (media.user?.username ?? "").toLowerCase();
+    if (!spec.authors.includes(u)) return false;
+  }
+  if (spec.types?.length) {
+    const t = MEDIA_TYPE[media.media_type] ?? "";
+    if (!spec.types.includes(t)) return false;
+  }
+  if (spec.dateFrom || spec.dateTo) {
+    const ts = media.taken_at ? media.taken_at * 1000 : null;
+    if (ts == null) return false;
+    if (spec.dateFrom && ts < Date.parse(spec.dateFrom)) return false;
+    // dateTo is inclusive of the whole day.
+    if (spec.dateTo && ts > Date.parse(spec.dateTo) + 86400000 - 1) return false;
+  }
+  return true;
+}
+
+// True when a filter spec actually constrains anything.
+function filterIsActive(spec) {
+  return !!(spec && (spec.authors?.length || spec.types?.length || spec.dateFrom || spec.dateTo));
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +353,29 @@ function mediaPath(ownerUsername, filename) {
   return `${DOWNLOAD_SUBFOLDER}/${author}/${filename}`;
 }
 
+// When enabled, remove the entry from chrome://downloads once the file has
+// finished writing. The file stays on disk; only the history row is cleared.
+// This keeps the downloads list manageable across thousands of files.
+let autoCleanHistory = true;
+
+// Load persisted settings (best-effort; defaults are safe).
+chrome.storage?.local.get(["autoCleanHistory"]).then((s) => {
+  if (typeof s.autoCleanHistory === "boolean") autoCleanHistory = s.autoCleanHistory;
+}).catch(() => {});
+
+function eraseWhenComplete(downloadId) {
+  const listener = (delta) => {
+    if (delta.id !== downloadId) return;
+    if (delta.state?.current === "complete") {
+      chrome.downloads.erase({ id: downloadId }).catch(() => {});
+      chrome.downloads.onChanged.removeListener(listener);
+    } else if (delta.state?.current === "interrupted") {
+      chrome.downloads.onChanged.removeListener(listener);
+    }
+  };
+  chrome.downloads.onChanged.addListener(listener);
+}
+
 // Download one media file straight to disk via chrome.downloads, into a
 // per-author subfolder. Deduped by URL: only URLs that were actually recorded
 // as downloaded are skipped, so a failed attempt never blocks a later retry.
@@ -317,6 +399,8 @@ async function downloadMedia(target) {
   }
 
   if (id == null) return { failed: true };
+
+  if (autoCleanHistory) eraseWhenComplete(id);
 
   // Record as done only after a successful download call, so failures don't
   // pollute the dedup index and block retries.
@@ -343,7 +427,7 @@ async function stepOnce(task, seenSet) {
   if (task.mode === "incremental" && seenSet) {
     fresh = [];
     for (const m of media) {
-      if (seenSet.has(String(m.pk))) {
+      if (seenSet.has(String(m.pk)) || (m.code && seenSet.has(String(m.code)))) {
         stopEarly = true;
         break;
       }
@@ -351,23 +435,30 @@ async function stepOnce(task, seenSet) {
     }
   }
 
+  // Apply the user's content filter (authors / types / dates), if any.
+  if (filterIsActive(task.filterSpec)) {
+    fresh = fresh.filter((m) => postMatchesFilter(m, task.filterSpec));
+  }
+
   const rows = fresh.map(toExportRow);
   const raw = fresh; // raw is always stored now
-  if (rows.length) await PageStore.add(TASK_ID, task.seq, rows, raw);
+  if (rows.length) await PageStore.add(task.id, task.seq, rows, raw);
 
+  // The web app always receives the best available media URLs, independently
+  // from the quality selected for optional local downloads.
   if (task.webSync) {
     for (const row of rows) {
       const uploadedCount = await syncPostToExplorer(row, task.webSync);
       task.stats.synced = (task.stats.synced ?? 0) + 1;
       task.stats.mediaUploaded = (task.stats.mediaUploaded ?? 0) + uploadedCount;
-      await TaskStore.put(task);
+      await TaskStoreRaw.put(task);
     }
   }
 
   // Optional media download straight to disk.
   if (task.includeMedia) {
     for (const m of fresh) {
-      for (const target of mediaTargets(m, m.code ?? String(m.pk))) {
+      for (const target of mediaTargets(m, m.code ?? String(m.pk), { filter: task.mediaFilter, quality: task.mediaQuality })) {
         const r = await downloadMedia(target);
         if (r.ok) {
           task.stats.mediaDownloaded += 1;
@@ -415,19 +506,26 @@ async function loadSeenSet(task) {
   if (seenSetCache) return seenSetCache;
   const archive = await ArchiveStore.get();
   seenSetCache = new Set(archive.seenPks.map(String));
+  for (const code of task.knownPostCodes ?? []) seenSetCache.add(String(code));
   return seenSetCache;
+}
+
+async function schedulerTask() {
+  const web = await TaskStoreRaw.get(WEB_SYNC_TASK_ID);
+  if (web && !["completed", "failed"].includes(web.status)) return web;
+  return TaskStore.get();
 }
 
 async function tick() {
   if (ticking) return;
   ticking = true;
   try {
-    let task = await TaskStore.get();
+    let task = await schedulerTask();
     if (!task) return;
 
     if (task.status === "running" && Date.now() - new Date(task.updatedAt).getTime() > ZOMBIE_MS) {
       task.status = "pending";
-      await TaskStore.put(task);
+      await TaskStoreRaw.put(task);
     }
 
     const duePaused =
@@ -438,13 +536,13 @@ async function tick() {
     task.status = "running";
     task.resumeAt = null;
     task.pausedReason = null;
-    await TaskStore.put(task);
+    await TaskStoreRaw.put(task);
     await setBadge("…", "#c9820a");
 
     const seenSet = await loadSeenSet(task);
 
     while (true) {
-      const fresh = await TaskStore.get();
+      const fresh = await TaskStoreRaw.get(task.id);
       if (!fresh || fresh.status !== "running") return;
       task = fresh;
 
@@ -456,7 +554,7 @@ async function tick() {
         if (c.kind === "fail") {
           task.status = "failed";
           task.error = c.note;
-          await TaskStore.put(task);
+          await TaskStoreRaw.put(task);
           if (task.webSync) await finishWebSync(task.webSync, "failed", c.note, task.stats.mediaFailed ?? 0);
           await setBadge("!", "#b4462f");
           return;
@@ -464,7 +562,7 @@ async function tick() {
         task.status = "paused";
         task.pausedReason = { reason: c.reason, note: c.note };
         task.resumeAt = c.resumeMs ? new Date(Date.now() + c.resumeMs).toISOString() : null;
-        await TaskStore.put(task);
+        await TaskStoreRaw.put(task);
         await setBadge("‖", "#b4462f");
         return;
       }
@@ -474,14 +572,14 @@ async function tick() {
       if (result.done) {
         task.status = "completed";
         task.totalCount = task.processedCount;
-        await TaskStore.put(task);
+        await TaskStoreRaw.put(task);
         await finalizeArchive(task);
         if (task.webSync) await finishWebSync(task.webSync, "completed", null, task.stats.mediaFailed ?? 0);
         await setBadge("✓", "#3f7d54");
         return;
       }
 
-      await TaskStore.put(task);
+      await TaskStoreRaw.put(task);
       const waitMs = Math.max(0, (task.nextAllowedAt ?? 0) - Date.now());
       if (waitMs > 0) await sleep(waitMs);
     }
@@ -508,15 +606,16 @@ async function putMediaTask(task) {
   return TaskStoreRaw.put(task);
 }
 
-async function startMediaDownload({ filter }) {
+async function startMediaDownload({ filter, quality, filterSpec }) {
   // Build the full target list up front from stored raw data (no API).
   const pages = await PageStore.all(TASK_ID);
   const targets = [];
   for (const p of pages) {
     if (!p.raw) continue;
     for (const media of p.raw) {
+      if (filterIsActive(filterSpec) && !postMatchesFilter(media, filterSpec)) continue;
       const code = media.code ?? String(media.pk);
-      for (const t of mediaTargets(media, code, filter)) targets.push(t);
+      for (const t of mediaTargets(media, code, { filter, quality })) targets.push(t);
     }
   }
 
@@ -667,7 +766,7 @@ async function seedArchiveFromPks(pks, newestPk) {
 
 // After a successful run, fold this run's pks into the durable archive index.
 async function finalizeArchive(task) {
-  const pages = await PageStore.all(TASK_ID);
+  const pages = await PageStore.all(task.id);
   const pks = [];
   for (const p of pages) for (const r of p.rows) if (r.pk) pks.push(String(r.pk));
 
@@ -691,16 +790,26 @@ function freshStats() {
   return { photos: 0, videos: 0, carousels: 0, mediaDownloaded: 0, mediaUploaded: 0, mediaFailed: 0, synced: 0, owners: {} };
 }
 
-async function startExport({ collectionId, includeMedia, mode, webSync = null }) {
-  await PageStore.clear(TASK_ID);
+function taskIsActive(task) {
+  return task && !["completed", "failed"].includes(task.status);
+}
+
+async function startExport({ collectionId, includeMedia, mode, filterSpec, mediaFilter, mediaQuality, webSync = null, taskId = TASK_ID, knownPostCodes = [] }) {
+  const competingTaskId = taskId === WEB_SYNC_TASK_ID ? TASK_ID : WEB_SYNC_TASK_ID;
+  if (taskIsActive(await TaskStoreRaw.get(taskId))) throw new Error("export_already_running");
+  if (taskIsActive(await TaskStoreRaw.get(competingTaskId))) throw new Error("another_export_is_running");
+  await PageStore.clear(taskId);
   seenSetCache = null;
   const now = new Date().toISOString();
-  await TaskStore.put({
-    id: TASK_ID,
+  await TaskStoreRaw.put({
+    id: taskId,
     status: "pending",
     mode: mode === "incremental" ? "incremental" : "full",
     collectionId: collectionId || null,
     includeMedia: !!includeMedia,
+    filterSpec: filterSpec || null,
+    mediaFilter: mediaFilter === "photos" ? "photos" : "all",
+    mediaQuality: mediaQuality === "low" ? "low" : "high",
     cursor: null,
     seq: 0,
     processedCount: 0,
@@ -712,6 +821,7 @@ async function startExport({ collectionId, includeMedia, mode, webSync = null })
     pausedReason: null,
     error: null,
     webSync,
+    knownPostCodes,
     createdAt: now,
     updatedAt: now,
   });
@@ -727,11 +837,23 @@ async function startWebSync(data) {
   if (!["https://insta-saved-post-explorer.vercel.app", "http://localhost:3000"].includes(apiUrl.origin)) {
     throw new Error("invalid_sync_origin");
   }
-  const known = Array.isArray(data.knownExternalIds) ? data.knownExternalIds.map(String).slice(0, 10000) : [];
+  const previous = await TaskStoreRaw.get(WEB_SYNC_TASK_ID);
+  if (previous?.status === "paused" && !previous.resumeAt) {
+    if (previous.webSync) await finishWebSync(previous.webSync, "failed", "Synchronization restarted after a manual pause.", previous.stats?.mediaFailed ?? 0);
+    await PageStore.clear(WEB_SYNC_TASK_ID);
+    await TaskStoreRaw.clear(WEB_SYNC_TASK_ID);
+  }
+  const knownIds = Array.isArray(data.knownExternalIds) ? data.knownExternalIds.map(String) : [];
+  const knownCodes = Array.isArray(data.knownPostCodes) ? data.knownPostCodes.map(String) : [];
+  const known = [...new Set(knownIds)].slice(0, 10_000);
+  const postCodes = [...new Set(knownCodes)].slice(0, 10_000);
   if (known.length) await seedArchiveFromPks(known, known[0]);
   await startExport({
+    taskId: WEB_SYNC_TASK_ID,
     mode: "incremental",
     includeMedia: false,
+    mediaQuality: "high",
+    knownPostCodes: postCodes,
     webSync: { apiBaseUrl: apiUrl.origin, token: data.token, jobId: String(data.jobId ?? "") },
   });
 }
@@ -839,6 +961,19 @@ async function finishWebSync(sync, status, error, mediaFailed) {
   await syncFetch(sync, "/api/sync/complete", { status, error, mediaFailed }).catch(() => null);
 }
 
+function publicWebSyncState(task) {
+  if (!task) return null;
+  return {
+    status: task.status,
+    processedCount: task.processedCount ?? 0,
+    totalCount: task.totalCount ?? null,
+    stats: task.stats ?? freshStats(),
+    pausedReason: task.pausedReason ?? null,
+    resumeAt: task.resumeAt ?? null,
+    error: task.error ?? null,
+  };
+}
+
 async function pauseExport() {
   const task = await TaskStore.get();
   if (task && (task.status === "running" || task.status === "pending")) {
@@ -925,6 +1060,48 @@ async function getMediaManifest() {
   return { count: keys.length, subfolder: DOWNLOAD_SUBFOLDER };
 }
 
+// Average bytes per file, by type and quality. Instagram's saved feed doesn't
+// return reliable file sizes, so these are empirical averages used only to give
+// the user a rough "~X GB" heads-up before a large download. Clearly approximate.
+const AVG_BYTES = {
+  high: { photo: 350 * 1024, video: 3.2 * 1024 * 1024 },
+  low: { photo: 90 * 1024, video: 900 * 1024 },
+};
+
+// Estimate a media download from stored raw data, honoring filter+quality.
+// Returns counts and a rough byte estimate. Also returns the author list and
+// per-type counts, which the UI uses to populate filter choices.
+async function estimateFromStored({ filter = "all", quality = "high", filterSpec = null } = {}) {
+  const pages = await PageStore.all(TASK_ID);
+  let photos = 0, videos = 0;
+  const authors = new Map(); // username -> post count
+  const types = { photo: 0, video: 0, carousel: 0 };
+
+  for (const p of pages) {
+    if (!p.raw) continue;
+    for (const media of p.raw) {
+      const t = MEDIA_TYPE[media.media_type];
+      if (t) types[t] = (types[t] ?? 0) + 1;
+      const u = media.user?.username ?? "unknown";
+      authors.set(u, (authors.get(u) ?? 0) + 1);
+
+      if (filterIsActive(filterSpec) && !postMatchesFilter(media, filterSpec)) continue;
+      const code = media.code ?? String(media.pk);
+      for (const tg of mediaTargets(media, code, { filter, quality })) {
+        if (tg.type === "video") videos += 1;
+        else photos += 1;
+      }
+    }
+  }
+
+  const bytes = photos * AVG_BYTES[quality].photo + videos * AVG_BYTES[quality].video;
+  const authorList = [...authors.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([username, count]) => ({ username, count }));
+
+  return { photos, videos, files: photos + videos, bytes, authors: authorList, types };
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
@@ -939,7 +1116,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         await startWebSync(msg.data ?? {});
         return { ok: true };
       case "getWebSyncState":
-        return { ok: true, task: (await TaskStore.get()) ?? null };
+        return { ok: true, task: publicWebSyncState(await TaskStoreRaw.get(WEB_SYNC_TASK_ID)) };
       case "pauseExport":
         await pauseExport();
         return { ok: true };
@@ -959,6 +1136,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return { ok: true, thumbs: await recentThumbs(msg.limit ?? 12) };
       case "getMediaInfo":
         return { ok: true, ...(await getMediaManifest()) };
+      case "estimateMedia":
+        return { ok: true, ...(await estimateFromStored(msg.data ?? {})) };
+      case "getSettings":
+        return { ok: true, autoCleanHistory };
+      case "setSettings":
+        if (typeof msg.data?.autoCleanHistory === "boolean") {
+          autoCleanHistory = msg.data.autoCleanHistory;
+          chrome.storage?.local.set({ autoCleanHistory }).catch(() => {});
+        }
+        return { ok: true, autoCleanHistory };
       case "clearMediaStore":
         await MediaStore.clearAll();
         return { ok: true };

@@ -31,7 +31,7 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
         setState({ status: "error", message: "L’extension n’a pas pu démarrer la synchronisation." });
       }
       if (message.type !== "STATE" || message.payload?.ok !== true) return;
-      const task = message.payload.task as { status?: string; stats?: { synced?: number }; error?: string } | null;
+      const task = message.payload.task as { status?: string; stats?: { synced?: number }; error?: string; resumeAt?: string | null } | null;
       if (!task) return;
       const synced = task.stats?.synced ?? 0;
       if (task.status === "completed") {
@@ -39,6 +39,8 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
         onCompleted();
       } else if (task.status === "failed") {
         setState({ status: "error", message: task.error ?? "La synchronisation a échoué." });
+      } else if (task.status === "paused" && !task.resumeAt) {
+        setState({ status: "error", message: "Synchronisation en pause. Vérifiez votre session Instagram puis relancez." });
       } else {
         setState({ status: "running", synced });
       }
