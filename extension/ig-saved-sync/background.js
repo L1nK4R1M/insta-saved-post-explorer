@@ -794,10 +794,20 @@ function taskIsActive(task) {
   return task && !["completed", "failed"].includes(task.status);
 }
 
+function taskBlocksCompetingStart(task) {
+  if (!task) return false;
+  if (["pending", "running"].includes(task.status)) return true;
+  return task.status === "paused" && Boolean(task.resumeAt);
+}
+
 async function startExport({ collectionId, includeMedia, mode, filterSpec, mediaFilter, mediaQuality, webSync = null, taskId = TASK_ID, knownPostCodes = [] }) {
   const competingTaskId = taskId === WEB_SYNC_TASK_ID ? TASK_ID : WEB_SYNC_TASK_ID;
   if (taskIsActive(await TaskStoreRaw.get(taskId))) throw new Error("export_already_running");
-  if (taskIsActive(await TaskStoreRaw.get(competingTaskId))) throw new Error("another_export_is_running");
+  const competingTask = await TaskStoreRaw.get(competingTaskId);
+  const competingBlocks = taskId === WEB_SYNC_TASK_ID
+    ? taskBlocksCompetingStart(competingTask)
+    : taskIsActive(competingTask);
+  if (competingBlocks) throw new Error("another_export_is_running");
   await PageStore.clear(taskId);
   seenSetCache = null;
   const now = new Date().toISOString();
@@ -837,9 +847,25 @@ async function startWebSync(data) {
   if (!["https://insta-saved-post-explorer.vercel.app", "http://localhost:3000"].includes(apiUrl.origin)) {
     throw new Error("invalid_sync_origin");
   }
+  const incomingSync = { apiBaseUrl: apiUrl.origin, token: data.token, jobId: String(data.jobId ?? "") };
+  const legacy = await TaskStoreRaw.get(TASK_ID);
+  if (legacy?.webSync) {
+    if (taskIsActive(legacy)) {
+      await finishWebSync(incomingSync, "failed", "A legacy synchronization is already running.", 0);
+      tick();
+      return;
+    }
+    await PageStore.clear(TASK_ID);
+    await TaskStoreRaw.clear(TASK_ID);
+  }
   const previous = await TaskStoreRaw.get(WEB_SYNC_TASK_ID);
-  if (previous?.status === "paused" && !previous.resumeAt) {
-    if (previous.webSync) await finishWebSync(previous.webSync, "failed", "Synchronization restarted after a manual pause.", previous.stats?.mediaFailed ?? 0);
+  if (previous && ["pending", "running"].includes(previous.status)) {
+    await finishWebSync(incomingSync, "failed", "An existing synchronization is already running.", 0);
+    tick();
+    return;
+  }
+  if (previous?.status === "paused") {
+    if (previous.webSync) await finishWebSync(previous.webSync, "failed", "Synchronization replaced by a new explicit request.", previous.stats?.mediaFailed ?? 0);
     await PageStore.clear(WEB_SYNC_TASK_ID);
     await TaskStoreRaw.clear(WEB_SYNC_TASK_ID);
   }
@@ -854,7 +880,7 @@ async function startWebSync(data) {
     includeMedia: false,
     mediaQuality: "high",
     knownPostCodes: postCodes,
-    webSync: { apiBaseUrl: apiUrl.origin, token: data.token, jobId: String(data.jobId ?? "") },
+    webSync: incomingSync,
   });
 }
 
@@ -972,6 +998,13 @@ function publicWebSyncState(task) {
     resumeAt: task.resumeAt ?? null,
     error: task.error ?? null,
   };
+}
+
+async function currentWebSyncTask() {
+  const current = await TaskStoreRaw.get(WEB_SYNC_TASK_ID);
+  if (current) return current;
+  const legacy = await TaskStore.get();
+  return legacy?.webSync ? legacy : null;
 }
 
 async function pauseExport() {
@@ -1116,7 +1149,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         await startWebSync(msg.data ?? {});
         return { ok: true };
       case "getWebSyncState":
-        return { ok: true, task: publicWebSyncState(await TaskStoreRaw.get(WEB_SYNC_TASK_ID)) };
+        return { ok: true, task: publicWebSyncState(await currentWebSyncTask()) };
       case "pauseExport":
         await pauseExport();
         return { ok: true };
