@@ -7,196 +7,281 @@
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <button id="themeToggle" class="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
-      <span id="themeIcon">◐</span>
-    </button>
+    <main class="shell">
+      <!-- Signature: the Instagram-sunset hairline. Quiet, single, memorable. -->
+      <div class="strip" aria-hidden="true"></div>
 
-    <main class="panel">
       <header class="head">
-        <div class="mark" aria-hidden="true"></div>
-        <div>
-          <h1>Saved Exporter</h1>
-          <p class="sub">A personal, permanent archive of your Instagram saved posts.</p>
+        <div class="head-id">
+          <div class="mark" aria-hidden="true"></div>
+          <div>
+            <h1>Saved Exporter</h1>
+            <p class="sub">Your saved posts, safe on your own disk.</p>
+          </div>
+        </div>
+        <div class="head-tools">
+          <span class="session" id="loginRow">
+            <span class="dot" id="loginDot" aria-hidden="true"></span>
+            <span id="loginText">Checking session&hellip;</span>
+          </span>
+          <button id="themeToggle" class="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
+            <span id="themeIcon">◐</span>
+          </button>
         </div>
       </header>
 
-      <section class="status" id="loginRow">
-        <span class="dot" id="loginDot" aria-hidden="true"></span>
-        <span id="loginText">Checking your Instagram session&hellip;</span>
+      <!-- The vault line: what the archive already holds -->
+      <section class="vault" id="archive" hidden>
+        <span class="vault-figure" id="archiveCount">0</span>
+        <span class="vault-label">posts in your archive</span>
+        <span class="vault-meta" id="archiveMeta"></span>
       </section>
 
-      <!-- Archive summary: what we already have on record -->
-      <section class="archive" id="archive" hidden>
-        <span class="archive-figure" id="archiveCount">0</span>
-        <span class="archive-label">posts already archived</span>
-        <span class="archive-meta" id="archiveMeta"></span>
-      </section>
+      <nav class="tabs" role="tablist" aria-label="Source">
+        <button id="tabExport" class="tab active" role="tab" aria-selected="true">Export from Instagram</button>
+        <button id="tabFile" class="tab" role="tab" aria-selected="false">Work from a file</button>
+      </nav>
 
-      <!-- Setup (idle) -->
-      <section class="controls" id="setup">
-        <div class="modes" role="radiogroup" aria-label="Export mode">
-          <label class="mode">
-            <input type="radio" name="mode" value="full" checked />
-            <span class="mode-body">
-              <span class="mode-title">Full export</span>
-              <span class="mode-desc">Walk every saved post from newest to oldest.</span>
+      <!-- ============================ EXPORT TAB ============================ -->
+      <div id="panelExport" class="tab-panel active" role="tabpanel">
+
+        <!-- Setup (idle) -->
+        <section class="card" id="setup">
+          <div class="modes" role="radiogroup" aria-label="Export mode">
+            <label class="mode">
+              <input type="radio" name="mode" value="full" checked />
+              <span class="mode-body">
+                <span class="mode-title">Full export</span>
+                <span class="mode-desc">Every saved post, newest to oldest.</span>
+              </span>
+            </label>
+            <label class="mode">
+              <input type="radio" name="mode" value="incremental" />
+              <span class="mode-body">
+                <span class="mode-title">Update only</span>
+                <span class="mode-desc">Just the posts saved since last time.</span>
+              </span>
+            </label>
+          </div>
+
+          <label class="check">
+            <input id="includeMedia" type="checkbox" />
+            <span>
+              <strong>Also download media files</strong>
+              <span class="check-note">Images and videos save to Downloads/instagram-saved/, one folder per account. Links expire in days, so grab them while they're fresh. Re-runs skip files you already have.</span>
             </span>
           </label>
-          <label class="mode">
-            <input type="radio" name="mode" value="incremental" />
-            <span class="mode-body">
-              <span class="mode-title">Update only</span>
-              <span class="mode-desc">Fetch just the posts saved since your last export.</span>
-            </span>
-          </label>
-        </div>
 
-        <label class="field">
-          <span class="field-label">Collection ID <span class="opt">optional</span></span>
-          <input id="collectionId" type="text" placeholder="Empty = all saved posts" autocomplete="off" spellcheck="false" />
-        </label>
+          <details class="advanced">
+            <summary>Filters &amp; options</summary>
 
-        <label class="check">
-          <input id="includeMedia" type="checkbox" />
-          <span>
-            <strong>Download media files</strong> (images &amp; videos)
-            <span class="check-note">Recommended. Instagram media links expire after a few days. Files save straight to your Downloads folder, under "instagram-saved/". Already-downloaded files are skipped on re-runs.</span>
-          </span>
-        </label>
+            <div class="filter-grid">
+              <label class="field">
+                <span class="field-label">Types</span>
+                <span class="chips" id="expTypes">
+                  <label class="chip"><input type="checkbox" value="photo" /> Photos</label>
+                  <label class="chip"><input type="checkbox" value="video" /> Videos</label>
+                  <label class="chip"><input type="checkbox" value="carousel" /> Carousels</label>
+                </span>
+              </label>
 
-        <button id="startBtn" class="btn primary">Start export</button>
-      </section>
+              <div class="field-row">
+                <label class="field">
+                  <span class="field-label">From <span class="opt">date</span></span>
+                  <input id="expDateFrom" type="date" />
+                </label>
+                <label class="field">
+                  <span class="field-label">To <span class="opt">date</span></span>
+                  <input id="expDateTo" type="date" />
+                </label>
+              </div>
 
-      <!-- Import: download media from a JSON/CSV you already exported -->
-      <section class="import" id="importBox">
-        <h2 class="import-title">Already have an export file?</h2>
-        <p class="import-hint">
-          Load a JSON or CSV you exported earlier to download its media
-          (images &amp; videos) straight to your Downloads folder. No re-scanning.
-          Instagram media links expire after a few days, so use a recent file.
-        </p>
-        <div class="import-row">
-          <input type="file" id="fileInput" accept=".json,.csv" hidden />
-          <button id="fileBtn" class="btn out">Choose file&hellip;</button>
-          <span id="fileName" class="file-name"></span>
-        </div>
-        <p class="media-done" id="seedNote" hidden></p>
-        <div class="media-choice" id="importChoice" hidden>
-          <label class="mini"><input type="radio" name="ifilter" value="all" checked /> Everything (photos + videos)</label>
-          <label class="mini"><input type="radio" name="ifilter" value="photos" /> Photos only</label>
-        </div>
-        <div class="import-start" id="importStart" hidden>
-          <button id="importBtn" class="btn primary">Download media from file</button>
-        </div>
-        <p class="reset-line">
-          Downloads not starting or everything skipped?
-          <button id="resetMediaBtn" class="linkbtn">Reset download history</button>
-        </p>
-        <div class="media-progress" id="importProgress" hidden>
-          <div class="media-progress-line">
-            <span id="impDone">0</span> / <span id="impTotal">0</span> files
-            <span id="impFailed"></span>
+              <label class="field">
+                <span class="field-label">Accounts <span class="opt">comma-separated, empty = all</span></span>
+                <input id="expAuthors" type="text" placeholder="natgeo, tobes.lifts" autocomplete="off" spellcheck="false" />
+              </label>
+
+              <label class="field">
+                <span class="field-label">Media quality</span>
+                <span class="chips">
+                  <label class="chip"><input type="radio" name="expQuality" value="high" checked /> Full</label>
+                  <label class="chip"><input type="radio" name="expQuality" value="low" /> Reduced (smaller)</label>
+                </span>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Collection ID <span class="opt">optional</span></span>
+                <input id="collectionId" type="text" placeholder="Empty = all saved posts" autocomplete="off" spellcheck="false" />
+              </label>
+            </div>
+          </details>
+
+          <button id="startBtn" class="btn primary big">Start export</button>
+        </section>
+
+        <!-- Progress (running/pending) -->
+        <section class="card" id="progress" hidden>
+          <div class="progress-head">
+            <div class="progress-count">
+              <span id="count">0</span>
+              <span class="progress-label">collected</span>
+            </div>
+            <div class="progress-eta" id="eta"></div>
           </div>
-          <div class="bar"><div class="bar-fill" id="impBar"></div></div>
-          <div class="row">
-            <button id="impPause" class="btn ghost">Pause</button>
-            <button id="impResume" class="btn out" hidden>Resume</button>
+
+          <div class="bar" id="barTrack"><div class="bar-fill" id="barFill"></div></div>
+          <div class="bar-caption">
+            <span id="barPct"></span>
+            <span id="mediaStat"></span>
           </div>
-        </div>
-        <p class="media-done" id="impDoneMsg" hidden></p>
-      </section>
 
-      <!-- Progress (running/pending) -->
-      <section class="progress" id="progress" hidden>
-        <div class="progress-head">
-          <div class="progress-count">
-            <span id="count">0</span>
-            <span class="progress-label">collected</span>
-          </div>
-          <div class="progress-eta" id="eta"></div>
-        </div>
+          <div class="contact-sheet" id="thumbs" aria-hidden="true"></div>
 
-        <div class="bar" id="barTrack">
-          <div class="bar-fill" id="barFill"></div>
-        </div>
-        <div class="bar-caption">
-          <span id="barPct"></span>
-          <span id="mediaStat"></span>
-        </div>
-
-        <div class="contact-sheet" id="thumbs" aria-hidden="true"></div>
-
-        <p class="progress-note">
-          Paced deliberately to protect your account. Close this tab if you like;
-          it keeps running in the background.
-        </p>
-        <div class="row">
-          <button id="sampleBtn" class="btn out">Download sample</button>
-          <button id="pauseBtn" class="btn ghost">Pause</button>
-        </div>
-      </section>
-
-      <!-- Paused -->
-      <section class="paused" id="paused" hidden>
-        <p class="paused-title" id="pausedTitle">Paused</p>
-        <p class="paused-note" id="pausedNote"></p>
-        <p class="paused-count"><span id="pausedCount">0</span> collected so far.</p>
-        <div class="row">
-          <button id="resumeBtn" class="btn primary">Resume</button>
-          <button id="discardBtn" class="btn ghost">Discard</button>
-        </div>
-      </section>
-
-      <!-- Result (completed) -->
-      <section class="result" id="result" hidden>
-        <p class="result-text" id="resultText"></p>
-
-        <div class="stats" id="stats"></div>
-
-        <div class="downloads">
-          <button id="dlCsv" class="btn out">CSV</button>
-          <button id="dlJson" class="btn out">JSON</button>
-        </div>
-
-        <!-- Media download from already-collected data (no re-scan) -->
-        <div class="media-box" id="mediaBox">
-          <h3>Download media files</h3>
-          <p class="media-hint">
-            Saves images and videos to your Downloads folder, read straight from
-            the data already collected. No re-scanning of Instagram.
+          <p class="note">
+            Paced deliberately to protect your account. You can close this tab;
+            the export keeps running in the background.
           </p>
-          <div class="media-choice" id="mediaChoice">
-            <label class="mini"><input type="radio" name="mfilter" value="all" checked /> Everything (photos + videos)</label>
-            <label class="mini"><input type="radio" name="mfilter" value="photos" /> Photos only (much smaller)</label>
+          <div class="row">
+            <button id="sampleBtn" class="btn out">Download sample</button>
+            <button id="pauseBtn" class="btn ghost">Pause</button>
           </div>
-          <div class="row" id="mediaStart">
-            <button id="mediaBtn" class="btn primary">Download media</button>
-          </div>
-          <div class="media-progress" id="mediaProgress" hidden>
-            <div class="media-progress-line">
-              <span id="mediaDone">0</span> / <span id="mediaTotal">0</span> files
-              <span id="mediaFailed"></span>
-            </div>
-            <div class="bar"><div class="bar-fill" id="mediaBar"></div></div>
-            <div class="row">
-              <button id="mediaPause" class="btn ghost">Pause</button>
-              <button id="mediaResume" class="btn out" hidden>Resume</button>
-            </div>
-          </div>
-          <p class="media-done" id="mediaDoneMsg" hidden></p>
-        </div>
+        </section>
 
-        <button id="newBtn" class="btn ghost">New export</button>
-      </section>
+        <!-- Paused -->
+        <section class="card" id="paused" hidden>
+          <p class="paused-title" id="pausedTitle">Paused</p>
+          <p class="note" id="pausedNote"></p>
+          <p class="paused-count"><span id="pausedCount">0</span> collected so far.</p>
+          <div class="row">
+            <button id="resumeBtn" class="btn primary">Resume</button>
+            <button id="discardBtn" class="btn ghost">Discard</button>
+          </div>
+        </section>
+
+        <!-- Result (completed) -->
+        <section class="card" id="result" hidden>
+          <p class="result-text" id="resultText"></p>
+
+          <div class="stats" id="stats"></div>
+
+          <div class="block">
+            <h3 class="block-title">Your data</h3>
+            <div class="row">
+              <button id="dlCsv" class="btn out">Download CSV</button>
+              <button id="dlJson" class="btn out">Download JSON</button>
+            </div>
+          </div>
+
+          <div class="block" id="mediaBox">
+            <h3 class="block-title">Media files</h3>
+            <p class="note">
+              Saved straight from the data just collected, no re-scanning.
+              One folder per account in Downloads/instagram-saved/.
+            </p>
+            <div class="media-choice" id="mediaChoice">
+              <label class="mini"><input type="radio" name="mfilter" value="all" checked /> Everything (videos + images)</label>
+              <label class="mini"><input type="radio" name="mfilter" value="photos" /> Images only, incl. video previews (much smaller)</label>
+            </div>
+            <div class="quality-row">
+              <span class="quality-label">Quality</span>
+              <label class="chip"><input type="radio" name="mquality" value="high" checked /> Full</label>
+              <label class="chip"><input type="radio" name="mquality" value="low" /> Reduced</label>
+            </div>
+            <p class="estimate" id="mediaEstimate"></p>
+            <div class="row" id="mediaStart">
+              <button id="mediaBtn" class="btn primary">Download media</button>
+            </div>
+            <div class="media-progress" id="mediaProgress" hidden>
+              <div class="media-progress-line">
+                <span id="mediaDone">0</span> / <span id="mediaTotal">0</span> files
+                <span id="mediaFailed"></span>
+              </div>
+              <div class="bar"><div class="bar-fill" id="mediaBar"></div></div>
+              <div class="row">
+                <button id="mediaPause" class="btn ghost">Pause</button>
+                <button id="mediaResume" class="btn out" hidden>Resume</button>
+              </div>
+            </div>
+            <p class="done-line" id="mediaDoneMsg" hidden></p>
+          </div>
+
+          <button id="newBtn" class="btn ghost">New export</button>
+        </section>
+      </div>
+
+      <!-- ============================ FILE TAB ============================== -->
+      <div id="panelFile" class="tab-panel" role="tabpanel">
+        <section class="card" id="importBox">
+          <p class="note lead">
+            A JSON or CSV you exported earlier can do two things at once:
+            restore your archive index and download all its media. Media links
+            expire after a few days, so use a recent file.
+          </p>
+
+          <div class="step">
+            <span class="step-num">1</span>
+            <div class="step-body">
+              <h3 class="block-title">Load your export file</h3>
+              <div class="row">
+                <input type="file" id="fileInput" accept=".json,.csv" hidden />
+                <button id="fileBtn" class="btn primary">Choose file&hellip;</button>
+                <span id="fileName" class="file-name"></span>
+              </div>
+              <p class="done-line" id="seedNote" hidden></p>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">2</span>
+            <div class="step-body">
+              <h3 class="block-title">Download its media</h3>
+              <div class="media-choice" id="importChoice" hidden>
+                <label class="mini"><input type="radio" name="ifilter" value="all" checked /> Everything (videos + images)</label>
+                <label class="mini"><input type="radio" name="ifilter" value="photos" /> Images only, incl. video previews</label>
+              </div>
+              <div class="quality-row" id="importQualityRow" hidden>
+                <span class="quality-label">Quality</span>
+                <label class="chip"><input type="radio" name="iquality" value="high" checked /> Full</label>
+                <label class="chip"><input type="radio" name="iquality" value="low" /> Reduced</label>
+              </div>
+              <div class="row" id="importStart" hidden>
+                <button id="importBtn" class="btn primary">Download media from file</button>
+              </div>
+              <div class="media-progress" id="importProgress" hidden>
+                <div class="media-progress-line">
+                  <span id="impDone">0</span> / <span id="impTotal">0</span> files
+                  <span id="impFailed"></span>
+                </div>
+                <div class="bar"><div class="bar-fill" id="impBar"></div></div>
+                <div class="row">
+                  <button id="impPause" class="btn ghost">Pause</button>
+                  <button id="impResume" class="btn out" hidden>Resume</button>
+                </div>
+              </div>
+              <p class="done-line" id="impDoneMsg" hidden></p>
+            </div>
+          </div>
+
+          <p class="reset-line">
+            Downloads not starting, or everything skipped?
+            <button id="resetMediaBtn" class="linkbtn">Reset download history</button>
+          </p>
+        </section>
+      </div>
 
       <section class="message" id="message" hidden></section>
 
+      <div class="settings-bar">
+        <label class="switch">
+          <input type="checkbox" id="autoClean" checked />
+          <span>Auto-clear each download from Chrome's history (files stay on disk)</span>
+        </label>
+      </div>
+
       <footer class="foot">
-        <p>
-          Runs entirely in your browser with your existing instagram.com login.
-          Nothing is uploaded anywhere. Requests are paced to stay within limits
-          and resume automatically if interrupted.
-        </p>
+        Runs entirely in your browser with your instagram.com login.
+        Local exports stay in your browser. Media is uploaded only when you
+        explicitly start synchronization from Insta Post Explorer.
       </footer>
     </main>
 

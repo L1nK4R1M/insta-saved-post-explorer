@@ -33,9 +33,34 @@ const ui = {
   mediaBtn: el("mediaBtn"), mediaProgress: el("mediaProgress"),
   mediaDone: el("mediaDone"), mediaTotal: el("mediaTotal"), mediaFailed: el("mediaFailed"),
   mediaBar: el("mediaBar"), mediaPause: el("mediaPause"), mediaResume: el("mediaResume"),
-  mediaDoneMsg: el("mediaDoneMsg"),
+  mediaDoneMsg: el("mediaDoneMsg"), mediaEstimate: el("mediaEstimate"),
+  expTypes: el("expTypes"), expDateFrom: el("expDateFrom"), expDateTo: el("expDateTo"),
+  expAuthors: el("expAuthors"),
+  autoClean: el("autoClean"),
   message: el("message"),
 };
+
+// Read the export filter spec from the setup form.
+function collectExportFilterSpec() {
+  const types = [...ui.expTypes.querySelectorAll("input:checked")].map((i) => i.value);
+  const authors = ui.expAuthors.value
+    .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const dateFrom = ui.expDateFrom.value || null;
+  const dateTo = ui.expDateTo.value || null;
+  const spec = {};
+  if (types.length) spec.types = types;
+  if (authors.length) spec.authors = authors;
+  if (dateFrom) spec.dateFrom = dateFrom;
+  if (dateTo) spec.dateTo = dateTo;
+  return Object.keys(spec).length ? spec : null;
+}
+
+function fmtBytes(b) {
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return `${b.toFixed(1)} ${u[i]}`;
+}
 
 const send = (type, extra) =>
   chrome.runtime.sendMessage({ type, ...(extra || {}) }).catch(() => null);
@@ -200,6 +225,27 @@ function renderResult(task) {
     ui.stats.appendChild(block);
   }
 
+  refreshEstimate();
+}
+
+// Live download-size estimate for the result media box. Reads the current
+// filter + quality choices and asks the worker to size it from stored raw.
+let estimateTimer = null;
+async function refreshEstimate() {
+  if (!ui.mediaEstimate) return;
+  const filter = document.querySelector('input[name="mfilter"]:checked')?.value ?? "all";
+  const quality = document.querySelector('input[name="mquality"]:checked')?.value ?? "high";
+  ui.mediaEstimate.textContent = "Estimating\u2026";
+  const res = await send("estimateMedia", { data: { filter, quality } });
+  if (!res?.ok) { ui.mediaEstimate.textContent = ""; return; }
+  ui.mediaEstimate.innerHTML =
+    `About <strong>${fmtBytes(res.bytes)}</strong> in <strong>${res.files.toLocaleString()}</strong> files ` +
+    `(${res.photos.toLocaleString()} images, ${res.videos.toLocaleString()} videos). Rough estimate.`;
+}
+
+function scheduleEstimate() {
+  clearTimeout(estimateTimer);
+  estimateTimer = setTimeout(refreshEstimate, 150);
 }
 
 function showMessage(text) { ui.message.textContent = text; ui.message.hidden = false; }
@@ -297,11 +343,15 @@ ui.startBtn.addEventListener("click", async () => {
   hideMessage();
   runStart = null;
   const mode = document.querySelector('input[name="mode"]:checked')?.value ?? "full";
+  const mediaQuality = document.querySelector('input[name="expQuality"]:checked')?.value ?? "high";
   await send("startExport", {
     data: {
       collectionId: ui.collectionId.value.trim(),
       includeMedia: ui.includeMedia.checked,
       mode,
+      filterSpec: collectExportFilterSpec(),
+      mediaFilter: "all",
+      mediaQuality,
     },
   });
   poll();
@@ -349,11 +399,28 @@ function renderMediaTask(mt) {
 
 ui.mediaBtn.addEventListener("click", async () => {
   const filter = document.querySelector('input[name="mfilter"]:checked')?.value ?? "all";
-  await send("startMediaDownload", { data: { filter } });
+  const quality = document.querySelector('input[name="mquality"]:checked')?.value ?? "high";
+  await send("startMediaDownload", { data: { filter, quality } });
   pollMedia();
 });
 ui.mediaPause.addEventListener("click", async () => { await send("pauseMediaDownload"); pollMedia(); });
 ui.mediaResume.addEventListener("click", async () => { await send("resumeMediaDownload"); pollMedia(); });
+
+// Re-estimate when the user changes filter or quality in the result media box.
+for (const name of ["mfilter", "mquality"]) {
+  document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+    input.addEventListener("change", scheduleEstimate);
+  });
+}
+
+// Settings: history auto-clean toggle, persisted in the worker.
+(async () => {
+  const s = await send("getSettings");
+  if (s?.ok && ui.autoClean) ui.autoClean.checked = s.autoCleanHistory;
+})();
+ui.autoClean?.addEventListener("change", () => {
+  send("setSettings", { data: { autoCleanHistory: ui.autoClean.checked } });
+});
 
 async function pollMedia() {
   const res = await send("getMediaTask");
@@ -369,6 +436,7 @@ const importEls = {
   done: el("impDone"), total: el("impTotal"), failed: el("impFailed"),
   bar: el("impBar"), pause: el("impPause"), resume: el("impResume"),
   doneMsg: el("impDoneMsg"), seedNote: el("seedNote"),
+  qualityRow: el("importQualityRow"),
 };
 
 let parsedTargets = null;
@@ -398,43 +466,76 @@ function guessTypeFromUrl(url) {
 // Build download targets from parsed rows. Handles three shapes, in order of
 // richness: _raw carousel objects, carousel_media_urls string, single urls.
 // Files are placed under an author subfolder: instagram-saved/<author>/<code>.
-function targetsFromRows(rows, filter) {
+// A video's preview image shares the video basename with a .jpg extension.
+// quality: "high" (max res/bitrate) | "low" (smallest rendition, _raw only).
+function pickImg(candidates, quality) {
+  if (!candidates?.length) return "";
+  let pick = candidates[0];
+  for (const c of candidates) {
+    const a = (c.width ?? 0) * (c.height ?? 0);
+    const b = (pick.width ?? 0) * (pick.height ?? 0);
+    if (quality === "low" ? a < b : a > b) pick = c;
+  }
+  return pick.url ?? "";
+}
+function pickVid(versions, quality) {
+  if (!versions?.length) return "";
+  let pick = versions[0];
+  for (const v of versions) {
+    const a = v.bandwidth ?? (quality === "low" ? Infinity : 0);
+    const b = pick.bandwidth ?? (quality === "low" ? Infinity : 0);
+    if (quality === "low" ? a < b : a > b) pick = v;
+  }
+  return pick.url ?? "";
+}
+
+function targetsFromRows(rows, filter, quality = "high") {
   const targets = [];
   const seen = new Set();
   const add = (url, code, idx, type, author) => {
     if (!url || seen.has(url)) return;
     if (filter === "photos" && type === "video") return;
     seen.add(url);
-    const filename = fileNameFor(url, code, idx, type);
-    const path = `instagram-saved/${sanitizeSegment(author)}/${filename}`;
-    targets.push({ url, filename, path, type });
+    const suffix = idx == null ? "" : `_${idx + 1}`;
+    const ext = type === "video" ? "mp4" : "jpg";
+    const name = `${code || "post"}${suffix}.${ext}`;
+    const path = `instagram-saved/${sanitizeSegment(author)}/${name}`;
+    targets.push({ url, filename: name, path, type });
   };
 
   for (const row of rows) {
     const code = row.code || (row.permalink ? row.permalink.split("/").filter(Boolean).pop() : "");
     const author = row.owner_username || row._raw?.user?.username || "unknown";
 
-    // Richest: raw carousel children.
+    // Richest: raw carousel children (each video child carries its preview).
     if (row._raw?.carousel_media?.length) {
       row._raw.carousel_media.forEach((child, i) => {
-        const v = child.video_versions?.[0]?.url;
-        const img = child.image_versions2?.candidates?.[0]?.url;
-        if (child.media_type === 2 && v) add(v, code, i, "video", author);
-        else if (img) add(img, code, i, "photo", author);
+        const v = pickVid(child.video_versions, quality);
+        const img = pickImg(child.image_versions2?.candidates, quality);
+        if (child.media_type === 2 && v) {
+          add(v, code, i, "video", author);
+          if (img) add(img, code, i, "photo", author); // video preview
+        } else if (img) {
+          add(img, code, i, "photo", author);
+        }
       });
       continue;
     }
 
-    // Next: our carousel_media_urls column (pipe-separated).
+    // Next: our carousel_media_urls column (pipe-separated; best URL only).
     if (row.carousel_media_urls) {
       const urls = String(row.carousel_media_urls).split("|").map((s) => s.trim()).filter(Boolean);
       urls.forEach((u, i) => add(u, code, i, guessTypeFromUrl(u), author));
       continue;
     }
 
-    // Single media.
-    if (row.video_url) add(row.video_url, code, null, "video", author);
-    if (row.image_url) add(row.image_url, code, null, "photo", author);
+    // Single media. For a video row, image_url is its preview.
+    if (row.video_url) {
+      add(row.video_url, code, null, "video", author);
+      if (row.image_url) add(row.image_url, code, null, "photo", author);
+    } else if (row.image_url) {
+      add(row.image_url, code, null, "photo", author);
+    }
   }
   return targets;
 }
@@ -490,6 +591,7 @@ importEls.fileInput.addEventListener("change", async () => {
     parsedTargets = { rows };
     importEls.choice.hidden = false;
     importEls.start.hidden = false;
+    if (importEls.qualityRow) importEls.qualityRow.hidden = false;
     hideMessage();
 
     // Same file also restores "Update only": extract post pks and seed the
@@ -515,7 +617,8 @@ importEls.fileInput.addEventListener("change", async () => {
 importEls.importBtn.addEventListener("click", async () => {
   if (!parsedTargets) return;
   const filter = document.querySelector('input[name="ifilter"]:checked')?.value ?? "all";
-  const targets = targetsFromRows(parsedTargets.rows, filter);
+  const quality = document.querySelector('input[name="iquality"]:checked')?.value ?? "high";
+  const targets = targetsFromRows(parsedTargets.rows, filter, quality);
   if (!targets.length) { showMessage("No media URLs found in that file."); return; }
   await send("startMediaFromTargets", { targets });
   importEls.start.hidden = true;
@@ -577,3 +680,23 @@ async function poll() {
 refreshLogin();
 poll();
 setInterval(poll, 1500);
+
+// --- tabs --------------------------------------------------------------------
+
+const tabEls = {
+  export: el("tabExport"), file: el("tabFile"),
+  panelExport: el("panelExport"), panelFile: el("panelFile"),
+};
+
+function showTab(which) {
+  const exp = which === "export";
+  tabEls.export.classList.toggle("active", exp);
+  tabEls.file.classList.toggle("active", !exp);
+  tabEls.export.setAttribute("aria-selected", String(exp));
+  tabEls.file.setAttribute("aria-selected", String(!exp));
+  tabEls.panelExport.classList.toggle("active", exp);
+  tabEls.panelFile.classList.toggle("active", !exp);
+}
+
+tabEls.export.addEventListener("click", () => showTab("export"));
+tabEls.file.addEventListener("click", () => showTab("file"));

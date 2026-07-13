@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Instagram Saved Exporter",
-  "version": "4.0.0",
-  "description": "Synchronise les nouvelles publications Instagram sauvegardées avec Insta Post Explorer.",
+  "name": "Insta Saved Sync",
+  "version": "4.1.0",
+  "description": "Exportez vos posts Instagram sauvegardés et synchronisez les nouveaux médias avec Insta Post Explorer.",
   "action": {
-    "default_title": "Instagram Saved Exporter",
+    "default_title": "Insta Saved Sync",
     "default_icon": {
       "16": "icon/16.png",
       "32": "icon/32.png",
@@ -29,7 +29,8 @@
   "permissions": [
     "cookies",
     "alarms",
-    "downloads"
+    "downloads",
+    "storage"
   ],
   "host_permissions": [
     "https://www.instagram.com/*",
@@ -37,7 +38,7 @@
     "https://*.fbcdn.net/*",
     "https://insta-saved-post-explorer.vercel.app/*",
     "http://localhost:3000/*",
-    "https://*.r2.cloudflarestorage.com/*"
+    "https://insta-media.ea46bb39f3da0142d7eab15876a8a2a3.r2.cloudflarestorage.com/*"
   ],
   "content_scripts": [
     {
