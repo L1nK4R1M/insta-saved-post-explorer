@@ -37,13 +37,17 @@ lecture et écriture des objets. L’application a besoin de `PutObject` et
 
 ## Installation de l’extension
 
-1. Décompresser `outputs/insta-saved-sync-v4.1.1.zip` dans un dossier permanent.
+1. Décompresser `outputs/insta-saved-sync-v4.2.0.zip` dans un dossier permanent.
 2. Ouvrir `chrome://extensions`.
 3. Activer **Mode développeur**.
 4. Cliquer **Charger l’extension non empaquetée**.
 5. Sélectionner le dossier qui contient directement `manifest.json`.
 6. Ouvrir Instagram et vérifier que le compte est connecté.
 7. Recharger la page Insta Post Explorer après toute mise à jour de l’extension.
+
+Dans l’onglet **Work from file**, les filtres par type, période et compte sont
+appliqués avant le téléchargement. L’estimation affichée indique le nombre de
+posts et de fichiers médias réellement sélectionnés.
 
 Pour conserver l’archive IndexedDB et les réglages d’une version précédente,
 remplacer les fichiers dans le même dossier d’extension puis cliquer sur
