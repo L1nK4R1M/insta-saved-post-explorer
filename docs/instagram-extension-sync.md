@@ -37,7 +37,7 @@ lecture et écriture des objets. L’application a besoin de `PutObject` et
 
 ## Installation de l’extension
 
-1. Décompresser `outputs/insta-saved-sync-v4.1.0.zip` dans un dossier permanent.
+1. Décompresser `outputs/insta-saved-sync-v4.1.1.zip` dans un dossier permanent.
 2. Ouvrir `chrome://extensions`.
 3. Activer **Mode développeur**.
 4. Cliquer **Charger l’extension non empaquetée**.
