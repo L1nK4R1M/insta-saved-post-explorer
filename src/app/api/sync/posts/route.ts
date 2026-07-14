@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { importPosts } from "@/server/import-posts";
+import { enrichSyncedPost } from "@/lib/sync/enrich-post";
 import { prisma } from "@/server/db";
 import { publicMediaUrl, validateR2ObjectReference, verifyR2Object } from "@/server/r2";
 import { requireSyncToken } from "@/server/sync-auth";
@@ -73,6 +74,8 @@ export async function POST(request: Request) {
     const existingMetadata = existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
       ? existing.metadata
       : {};
+    const existingTags = existing?.postTags.map((postTag) => postTag.tag.name) ?? [];
+    const enrichment = enrichSyncedPost(post.caption);
     const report = await importPosts([{
       external_id: post.external_id,
       post_url: canonicalPostUrl,
@@ -86,8 +89,8 @@ export async function POST(request: Request) {
       likes_count: post.likes_count,
       comments_count: post.comments_count,
       saved_at: existing?.savedAt?.toISOString() ?? undefined,
-      main_theme: existing?.mainTheme ?? undefined,
-      tags: existing?.postTags.map((postTag) => postTag.tag.name) ?? [],
+      main_theme: existing?.mainTheme ?? enrichment.mainTheme,
+      tags: existingTags.length > 0 ? existingTags : enrichment.tags,
       metadata: { ...existingMetadata, sync_job_id: claims.sub },
     }], {
       ownerId: claims.ownerId,
