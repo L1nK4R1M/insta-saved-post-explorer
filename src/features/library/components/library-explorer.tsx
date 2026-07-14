@@ -1,6 +1,7 @@
 "use client";
 
-import { Grid2X2, Image, Images, LayoutGrid, LogIn, LogOut, Search, SlidersHorizontal, Sparkles, Upload, Video, Wrench, X } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Grid2X2, Image, Images, LayoutGrid, LogIn, LogOut, Search, Settings2, SlidersHorizontal, Sparkles, Upload, Video, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -33,6 +34,8 @@ export type LibraryInitialState = {
 export function LibraryExplorer({
   posts: initialPosts,
   initialNextCursor,
+  initialTotalFiltered,
+  initialTotalLibrary,
   initialState,
   initialMainThemes,
   initialTagFacets,
@@ -41,6 +44,8 @@ export function LibraryExplorer({
 }: {
   posts: LibraryPost[];
   initialNextCursor: string | null;
+  initialTotalFiltered: number;
+  initialTotalLibrary: number;
   initialState: LibraryInitialState;
   initialMainThemes: string[];
   initialTagFacets: TagFacet[];
@@ -49,6 +54,8 @@ export function LibraryExplorer({
 }) {
   const [posts, setPosts] = useState(initialPosts);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
+  const [totalFiltered, setTotalFiltered] = useState(initialTotalFiltered);
+  const [totalLibrary, setTotalLibrary] = useState(initialTotalLibrary);
   const [loadingMore, setLoadingMore] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [query, setQuery] = useState(initialState.query);
@@ -64,7 +71,9 @@ export function LibraryExplorer({
   const [importOpen, setImportOpen] = useState(false);
   const [mediaRepairOpen, setMediaRepairOpen] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const initialRequest = useRef(true);
   const debouncedQuery = useDebouncedValue(query, 250);
 
@@ -134,9 +143,11 @@ export function LibraryExplorer({
           sort,
         })}`, { signal: controller.signal });
         if (!response.ok) throw new Error("REQUEST_FAILED");
-        const page = (await response.json()) as { items: LibraryPost[]; nextCursor: string | null };
+        const page = (await response.json()) as { items: LibraryPost[]; nextCursor: string | null; totalFiltered: number; totalLibrary: number };
         setPosts(page.items);
         setNextCursor(page.nextCursor);
+        setTotalFiltered(page.totalFiltered);
+        setTotalLibrary(page.totalLibrary);
         setSelectedPostId(null);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -164,19 +175,31 @@ export function LibraryExplorer({
         cursor: nextCursor,
       })}`);
       if (!response.ok) throw new Error("REQUEST_FAILED");
-      const page = (await response.json()) as { items: LibraryPost[]; nextCursor: string | null };
+      const page = (await response.json()) as { items: LibraryPost[]; nextCursor: string | null; totalFiltered: number; totalLibrary: number };
       setPosts((current) => {
         const byId = new Map(current.map((post) => [post.id, post]));
         for (const post of page.items) byId.set(post.id, post);
         return [...byId.values()];
       });
       setNextCursor(page.nextCursor);
+      setTotalFiltered(page.totalFiltered);
+      setTotalLibrary(page.totalLibrary);
     } catch {
       setRequestError("Impossible de charger la suite des résultats.");
     } finally {
       setLoadingMore(false);
     }
   }, [debouncedQuery, loadingMore, nextCursor, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !nextCursor || loadingMore || isFiltering) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: "500px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [isFiltering, loadMore, loadingMore, nextCursor]);
 
   const toggleTag = useCallback((tag: string) => {
     setIsFiltering(true);
@@ -213,13 +236,30 @@ export function LibraryExplorer({
     setSort("newest");
   }, []);
 
-  const discoverPost = useCallback(() => {
-    if (!filteredPosts.length) return;
-    const candidates = filteredPosts.length > 1 && selectedPostId
-      ? filteredPosts.filter((post) => post.id !== selectedPostId)
-      : filteredPosts;
-    setSelectedPostId(candidates[Math.floor(Math.random() * candidates.length)].id);
-  }, [filteredPosts, selectedPostId]);
+  const discoverPost = useCallback(async () => {
+    setDiscovering(true);
+    setRequestError(null);
+    try {
+      const params = librarySearchParams({
+        query: debouncedQuery,
+        selectedTags,
+        selectedTheme,
+        selectedContentType,
+        tagMode,
+        sort,
+      });
+      const response = await fetch(`/api/posts?${params}&random=1`);
+      if (!response.ok) throw new Error("DISCOVERY_FAILED");
+      const { item } = (await response.json()) as { item: LibraryPost | null };
+      if (!item) return;
+      setPosts((current) => current.some((post) => post.id === item.id) ? current : [...current, item]);
+      setSelectedPostId(item.id);
+    } catch {
+      setRequestError("Impossible de proposer une découverte pour le moment.");
+    } finally {
+      setDiscovering(false);
+    }
+  }, [debouncedQuery, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
 
   const showPrevious = useCallback(() => {
     if (!filteredPosts.length) return;
@@ -247,7 +287,7 @@ export function LibraryExplorer({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={`Rechercher parmi ${posts.length.toLocaleString("fr-FR")} souvenirs`}
+            placeholder={`Rechercher parmi ${totalLibrary.toLocaleString("fr-FR")} souvenirs`}
           />
           <kbd>⌘ K</kbd>
         </label>
@@ -255,54 +295,52 @@ export function LibraryExplorer({
           <button
             className="header-tab desktop-only"
             type="button"
-            onClick={discoverPost}
+            disabled={discovering || totalFiltered === 0}
+            onClick={() => void discoverPost()}
           >
-            <Sparkles aria-hidden="true" className="size-4" /> Découverte
+            <Sparkles aria-hidden="true" className="size-4" /> {discovering ? "Recherche…" : "Découverte"}
           </button>
-          <div className="view-switch desktop-only" aria-label="Mode d’affichage">
-            <button type="button" aria-pressed={view === "grid"} className={cn(view === "grid" && "is-active")} onClick={() => setView("grid")}>
-              <Grid2X2 aria-hidden="true" className="size-4" /> Grille
-            </button>
-            <button type="button" aria-pressed={view === "masonry"} className={cn(view === "masonry" && "is-active")} onClick={() => setView("masonry")}>
-              <LayoutGrid aria-hidden="true" className="size-4" /> Masonry
-            </button>
-          </div>
           {isAdmin ? (
-            <>
-              <RefreshPostsButton onCompleted={() => window.location.reload()} />
-              <button
-                className="button"
-                type="button"
-                aria-label="Réparer les médias"
-                onClick={() => setMediaRepairOpen(true)}
-              >
-                <Wrench aria-hidden="true" className="size-4" /><span className="desktop-only">Réparer médias</span>
-              </button>
-              <button
-                className="button import-button"
-                type="button"
-                aria-label="Importer JSON"
-                onClick={() => setImportOpen(true)}
-              >
-                <Upload aria-hidden="true" className="size-4" /><span className="desktop-only">Importer JSON</span>
-              </button>
-            </>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button className="button manage-button" type="button" aria-label="Gérer la bibliothèque">
+                  <Settings2 aria-hidden="true" className="size-4" /><span>Gérer</span>
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content className="menu-content manage-menu" align="end" sideOffset={8}>
+                  <DropdownMenu.Label className="menu-label">Administration</DropdownMenu.Label>
+                  <RefreshPostsButton menuItem onCompleted={() => window.location.reload()} />
+                  <DropdownMenu.Item asChild>
+                    <button className="menu-item" type="button" onClick={() => setMediaRepairOpen(true)}>
+                      <Wrench aria-hidden="true" className="size-4" />Réparer les médias
+                    </button>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item asChild>
+                    <button className="menu-item" type="button" onClick={() => setImportOpen(true)}>
+                      <Upload aria-hidden="true" className="size-4" />Importer JSON
+                    </button>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="menu-separator" />
+                  <form action="/api/auth/logout" method="post" role="none">
+                    <DropdownMenu.Item asChild>
+                      <button className="menu-item" type="submit">
+                        <LogOut aria-hidden="true" className="size-4" />Quitter le mode admin
+                      </button>
+                    </DropdownMenu.Item>
+                  </form>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           ) : null}
           <LibraryStatsDialog />
           <ThemeMenu />
-          {isAdmin ? (
-            <form action="/api/auth/logout" method="post">
-              <button className="button" type="submit" aria-label="Se déconnecter du mode administrateur">
-                <LogOut aria-hidden="true" className="size-4" />
-                <span className="desktop-only">Quitter admin</span>
-              </button>
-            </form>
-          ) : (
+          {!isAdmin ? (
             <Link className="button" href="/login" aria-label="Ouvrir la connexion administrateur">
               <LogIn aria-hidden="true" className="size-4" />
               <span className="desktop-only">Admin</span>
             </Link>
-          )}
+          ) : null}
         </nav>
       </header>
 
@@ -368,9 +406,10 @@ export function LibraryExplorer({
         </div>
 
         <div className="ribbon-end">
-          <strong className="results-count tabular-nums">
-            {filteredPosts.length.toLocaleString("fr-FR")}{nextCursor ? "+" : ""} <span>résultats</span>
+          <strong className="results-count tabular-nums" aria-live="polite">
+            {totalFiltered.toLocaleString("fr-FR")} <span>résultats</span>
           </strong>
+          <span className="loaded-count tabular-nums">{filteredPosts.length.toLocaleString("fr-FR")} chargés</span>
           <select aria-label="Trier les résultats" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
             <option value="newest">Plus récents</option>
             <option value="oldest">Plus anciens</option>
@@ -379,7 +418,7 @@ export function LibraryExplorer({
             <option value="likes">Plus likés</option>
           </select>
           {(query || selectedTags.length || selectedTheme || selectedContentType) ? <button className="text-button desktop-only" type="button" onClick={resetFilters}>Effacer les filtres</button> : null}
-          <div className="view-switch mobile-only" aria-label="Mode d’affichage">
+          <div className="view-switch" aria-label="Mode d’affichage">
             <button type="button" aria-label="Grille régulière" aria-pressed={view === "grid"} className={cn(view === "grid" && "is-active")} onClick={() => setView("grid")}><Grid2X2 aria-hidden="true" className="size-4" /></button>
             <button type="button" aria-label="Grille masonry" aria-pressed={view === "masonry"} className={cn(view === "masonry" && "is-active")} onClick={() => setView("masonry")}><LayoutGrid aria-hidden="true" className="size-4" /></button>
           </div>
@@ -398,10 +437,11 @@ export function LibraryExplorer({
                 {filteredPosts.map((post) => <PostCard key={post.id} post={post} view={view} onOpen={() => setSelectedPostId(post.id)} isAdmin={isAdmin} onToggleFavorite={() => void toggleFavorite(post)} />)}
               </div>
               {nextCursor ? (
-                <div className="load-more-row">
+                <div className="load-more-row" ref={loadMoreRef}>
                   <button className="button" type="button" disabled={loadingMore} onClick={() => void loadMore()}>
-                    {loadingMore ? "Chargement…" : "Charger plus"}
+                    {loadingMore ? "Chargement…" : `Charger la suite (${filteredPosts.length.toLocaleString("fr-FR")} sur ${totalFiltered.toLocaleString("fr-FR")})`}
                   </button>
+                  {loadingMore ? <div className="loading-card-skeletons" aria-hidden="true"><span /><span /><span /></div> : null}
                 </div>
               ) : null}
             </>
@@ -427,7 +467,7 @@ export function LibraryExplorer({
       <PostDetailDialog
         post={selectedPost}
         position={selectedIndex}
-        total={filteredPosts.length}
+        total={totalFiltered}
         onClose={() => setSelectedPostId(null)}
         onPrevious={showPrevious}
         onNext={showNext}

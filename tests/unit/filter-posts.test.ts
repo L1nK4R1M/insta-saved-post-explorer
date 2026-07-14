@@ -75,6 +75,9 @@ describe("filterAndPaginatePosts", () => {
     expect(second.items.map((post) => post.id)).toEqual(["c", "d"]);
     expect(new Set([...first.items, ...second.items].map((post) => post.id)).size).toBe(4);
     expect(second.nextCursor).toBeNull();
+    expect(first.totalFiltered).toBe(4);
+    expect(first.totalLibrary).toBe(4);
+    expect(first.total).toBe(first.totalFiltered);
   });
 
   it("place les dates absentes en dernier pour les tris temporels", () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { CheckCircle2, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -50,7 +51,7 @@ function sendStart(candidate: ExtensionCandidate, requestId: string, payload: Re
   }, window.location.origin);
 }
 
-export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void }) {
+export function RefreshPostsButton({ onCompleted, menuItem = false }: { onCompleted: () => void; menuItem?: boolean }) {
   const [extensionReady, setExtensionReady] = useState(false);
   const [state, setState] = useState<SyncState>({ status: "idle" });
   const requestId = useRef<string | null>(null);
@@ -178,14 +179,18 @@ export function RefreshPostsButton({ onCompleted }: { onCompleted: () => void })
       ? `${state.synced} synchronisé${state.synced > 1 ? "s" : ""}`
       : "Actualiser les posts";
 
-  return (
-    <div className="sync-action">
-      <button className="button sync-button" type="button" disabled={busy} onClick={() => void start()} title={extensionReady ? undefined : "Nécessite l’extension Insta Saved Sync"}>
+  const trigger = (
+      <button className={menuItem ? "menu-item sync-button" : "button sync-button"} type="button" disabled={busy} onClick={() => void start()} title={extensionReady ? undefined : "Nécessite l’extension Insta Saved Sync"}>
         {state.status === "success"
           ? <CheckCircle2 aria-hidden="true" className="size-4" />
           : <RefreshCw aria-hidden="true" className={busy ? "size-4 sync-spin" : "size-4"} />}
-        <span className="desktop-only">{label}</span>
+        <span>{label}</span>
       </button>
+  );
+
+  return (
+    <div className="sync-action" role={menuItem ? "none" : undefined}>
+      {menuItem ? <DropdownMenu.Item asChild onSelect={(event) => event.preventDefault()}>{trigger}</DropdownMenu.Item> : trigger}
       {state.status === "paused" ? <span className="sync-status" role="status">{state.message}</span> : null}
       {state.status === "error" ? <span className="sync-error" role="alert">{state.message}</span> : null}
     </div>

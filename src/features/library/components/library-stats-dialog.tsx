@@ -47,8 +47,8 @@ export function LibraryStatsDialog() {
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Trigger asChild>
-        <button className="button" type="button" aria-label="Afficher les statistiques de la bibliothèque">
-          <BarChart3 aria-hidden="true" className="size-4" /><span className="desktop-only">Statistiques</span>
+        <button className="icon-button" type="button" aria-label="Afficher les statistiques de la bibliothèque">
+          <BarChart3 aria-hidden="true" className="size-4" />
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
