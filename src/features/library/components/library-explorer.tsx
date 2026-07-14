@@ -265,6 +265,9 @@ export function LibraryExplorer({
         selectedTags,
         selectedTheme,
         selectedContentType,
+        selectedAuthor,
+        selectedYear,
+        selectedCollection,
         tagMode,
         sort,
       });
@@ -279,7 +282,7 @@ export function LibraryExplorer({
     } finally {
       setDiscovering(false);
     }
-  }, [debouncedQuery, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
+  }, [debouncedQuery, selectedAuthor, selectedCollection, selectedContentType, selectedTags, selectedTheme, selectedYear, sort, tagMode]);
 
   const showPrevious = useCallback(() => {
     if (!filteredPosts.length) return;
