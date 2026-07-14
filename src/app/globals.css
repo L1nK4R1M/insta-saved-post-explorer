@@ -244,6 +244,7 @@ button { color: inherit; }
 .ribbon-end { margin-left: auto; display: flex; flex: none; align-items: center; gap: 12px; }
 .results-count { color: var(--accent); font-size: 0.875rem; }
 .results-count span { color: var(--muted); font-weight: 500; }
+.loaded-count { color: var(--muted); font-size: .75rem; }
 select, .gradient-input {
   border: 1px solid transparent;
   background:
@@ -283,7 +284,9 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 
 .library-content { position: relative; min-width: 0; min-height: 56dvh; }
 .request-error { margin-bottom: 12px; border: 1px solid var(--danger); border-radius: 10px; color: var(--danger); padding: 10px 12px; font-size: 0.875rem; }
-.load-more-row { display: flex; justify-content: center; padding: 24px 0 8px; }
+.load-more-row { display: grid; justify-items: center; gap: 14px; padding: 24px 0 8px; }
+.loading-card-skeletons { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.loading-card-skeletons span { aspect-ratio: 4 / 5; border-radius: 14px; background: var(--surface-subtle); }
 .posts-grid { display: grid; gap: 12px; }
 .posts-regular { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .posts-masonry { display: block; columns: 205px auto; column-gap: 12px; }
@@ -293,10 +296,6 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 .post-card-button { display: block; width: 100%; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; }
 .post-card-button:focus-visible { outline-offset: -3px; }
 .post-media { position: relative; aspect-ratio: 1; overflow: hidden; background: var(--surface-subtle); }
-.post-card-masonry.masonry-size-0 .post-media { aspect-ratio: 4 / 3; }
-.post-card-masonry.masonry-size-1 .post-media { aspect-ratio: 4 / 5; }
-.post-card-masonry.masonry-size-2 .post-media { aspect-ratio: 1; }
-.post-card-masonry.masonry-size-3 .post-media { aspect-ratio: 3 / 4; }
 .post-media img, .post-media video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .type-indicator { position: absolute; top: 9px; right: 9px; display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid rgb(255 255 255 / 0.45); border-radius: 8px; background: rgb(15 18 23 / 0.78); color: #fff; }
 .favorite-button { position: absolute; top: 9px; right: 9px; z-index: 10; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid rgb(255 255 255 / .55); border-radius: 10px; background: rgb(15 18 23 / .78); color: #fff; cursor: pointer; }
@@ -386,6 +385,10 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 .menu-label { padding: 7px 9px; color: var(--muted); font-size: 0.7rem; font-weight: 650; }
 .menu-item { display: flex; min-height: 38px; align-items: center; gap: 9px; border-radius: 7px; padding: 0 9px; outline: 0; cursor: pointer; }
 .menu-item[data-highlighted], .menu-item-active { background: var(--surface-subtle); color: var(--accent); }
+.manage-menu { min-width: 230px; }
+.manage-menu .menu-item, .manage-menu form, .manage-menu form button { width: 100%; }
+.manage-menu .menu-item { border: 0; background: transparent; color: var(--text); text-align: left; }
+.menu-separator { height: 1px; margin: 5px; background: var(--line); }
 
 .mobile-only { display: none; }
 
@@ -398,6 +401,8 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
   .brand-name { font-size: .95rem; }
   .header-actions { order: 1; }
   .header-actions .button { padding-inline: 10px; }
+  .header-actions .button, .header-actions .icon-button, .view-switch button, .mobile-filter-trigger { min-height: 44px; }
+  .header-actions .icon-button, .view-switch button { min-width: 44px; }
   .global-search { order: 2; width: 100%; }
   .global-search kbd { display: none; }
   .control-ribbon { top: 112px; flex-wrap: wrap; min-height: 104px; gap: 7px; padding: 8px 12px; }
@@ -406,6 +411,7 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
   .active-tags:not(:has(button)) { display: none; }
   .ribbon-end { min-width: 0; flex: 1; gap: 7px; }
   .results-count span { display: none; }
+  .loaded-count { display: none; }
   .ribbon-end select { min-width: 0; max-width: 130px; }
   .library-layout, .library-layout.has-filters { display: block; padding: 10px 9px 28px; }
   .posts-grid { gap: 8px; }

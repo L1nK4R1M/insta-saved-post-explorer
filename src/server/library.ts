@@ -73,20 +73,19 @@ export async function queryLibraryPosts(
 
   const cursor = query.cursor ? decodeLibraryCursor(query.cursor, query.sort) : null;
   const effectiveSort = query.sort === "relevance" ? "newest" : query.sort;
-  const where: Prisma.PostWhereInput = {
+  const baseWhere: Prisma.PostWhereInput = {
     ownerId,
     ...(query.theme ? { mainTheme: query.theme } : {}),
     ...(query.contentType ? { contentType: query.contentType.toUpperCase() as "IMAGE" | "CAROUSEL" | "REEL" } : {}),
     ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
     ...tagWhere(ownerId, query.tags, query.tagMode),
-    ...cursorWhere(cursor, effectiveSort),
   };
-  const rows = await prisma.post.findMany({
-    where,
-    include: postInclude,
-    orderBy: orderByFor(effectiveSort),
-    take: query.limit + 1,
-  });
+  const where: Prisma.PostWhereInput = { ...baseWhere, ...cursorWhere(cursor, effectiveSort) };
+  const [rows, totalFiltered, totalLibrary] = await prisma.$transaction([
+    prisma.post.findMany({ where, include: postInclude, orderBy: orderByFor(effectiveSort), take: query.limit + 1 }),
+    prisma.post.count({ where: baseWhere }),
+    prisma.post.count({ where: { ownerId } }),
+  ]);
 
   const hasNextPage = rows.length > query.limit;
   const pageRows = hasNextPage ? rows.slice(0, query.limit) : rows;
@@ -97,7 +96,63 @@ export async function queryLibraryPosts(
       ? encodeLibraryCursor(cursorFromRow(lastRow, query.sort, effectiveSort))
       : null;
 
-  return { items, nextCursor };
+  return { items, nextCursor, total: totalFiltered, totalFiltered, totalLibrary };
+}
+
+export async function getRandomLibraryPost(
+  input: LibraryQuery,
+  requestedOwnerId?: string,
+): Promise<LibraryPost | null> {
+  const query = parseLibraryQuery({ ...input, cursor: null });
+  const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
+  if (!databaseConfigured) {
+    const page = filterAndPaginatePosts(await readFallbackPosts(), { ...query, limit: Number.MAX_SAFE_INTEGER });
+    return page.items[Math.floor(Math.random() * page.totalFiltered)] ?? null;
+  }
+
+  if (query.sort === "relevance" && query.search) {
+    return getRandomRelevantPost(ownerId, query);
+  }
+
+  const where: Prisma.PostWhereInput = {
+    ownerId,
+    ...(query.theme ? { mainTheme: query.theme } : {}),
+    ...(query.contentType ? { contentType: query.contentType.toUpperCase() as "IMAGE" | "CAROUSEL" | "REEL" } : {}),
+    ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
+    ...tagWhere(ownerId, query.tags, query.tagMode),
+  };
+  const total = await prisma.post.count({ where });
+  if (total === 0) return null;
+  const row = await prisma.post.findFirst({
+    where,
+    include: postInclude,
+    orderBy: { id: "asc" },
+    skip: Math.floor(Math.random() * total),
+  });
+  return row ? toLibraryPost(row, true) : null;
+}
+
+async function getRandomRelevantPost(ownerId: string, query: LibraryQuery): Promise<LibraryPost | null> {
+  const search = foldForSearch(query.search);
+  const slugs = [...new Set(query.tags.map(tagSlug).filter(Boolean))];
+  const tagCondition = relevanceTagCondition(ownerId, slugs, query.tagMode);
+  const contentType = query.contentType?.toUpperCase() ?? null;
+  const total = await countRelevantPosts(ownerId, query, search, tagCondition, contentType);
+  if (total === 0) return null;
+  const offset = Math.floor(Math.random() * total);
+  const ids = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT p."id"
+    FROM "posts" p
+    WHERE p."owner_id" = ${ownerId}
+      AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
+      AND (${contentType}::text IS NULL OR p."content_type"::text = ${contentType})
+      AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
+      ${tagCondition}
+    ORDER BY p."id" ASC
+    OFFSET ${offset}
+    LIMIT 1
+  `);
+  return ids[0] ? getLibraryPost(ids[0].id, ownerId) : null;
 }
 
 async function queryRelevantPosts(
@@ -162,7 +217,30 @@ async function queryRelevantPosts(
         })
       : null;
 
-  return { items, nextCursor };
+  const [totalFiltered, totalLibrary] = await Promise.all([
+    countRelevantPosts(ownerId, query, search, tagCondition, contentType),
+    prisma.post.count({ where: { ownerId } }),
+  ]);
+  return { items, nextCursor, total: totalFiltered, totalFiltered, totalLibrary };
+}
+
+async function countRelevantPosts(
+  ownerId: string,
+  query: LibraryQuery,
+  search: string,
+  tagCondition: Prisma.Sql,
+  contentType: string | null,
+): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+    SELECT COUNT(*)::bigint AS total
+    FROM "posts" p
+    WHERE p."owner_id" = ${ownerId}
+      AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
+      AND (${contentType}::text IS NULL OR p."content_type"::text = ${contentType})
+      AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
+      ${tagCondition}
+  `);
+  return Number(rows[0]?.total ?? 0);
 }
 
 function relevanceTagCondition(

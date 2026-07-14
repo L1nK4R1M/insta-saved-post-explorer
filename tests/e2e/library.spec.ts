@@ -14,6 +14,23 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect(page.locator("[data-post-id]")).toHaveCount(18);
   });
 
+  test("expose les totaux exacts sans casser le champ total historique", async ({ request }) => {
+    const response = await request.get("/api/posts?limit=5");
+    const payload = await response.json() as { items: unknown[]; total: number; totalFiltered: number; totalLibrary: number };
+    expect(payload.items).toHaveLength(5);
+    expect(payload.total).toBe(18);
+    expect(payload.totalFiltered).toBe(18);
+    expect(payload.totalLibrary).toBe(18);
+  });
+
+  test("demande une découverte au serveur avec les filtres actifs", async ({ page }) => {
+    await page.getByRole("button", { name: "Sucré", exact: true }).click();
+    const requestPromise = page.waitForRequest((request) => request.url().includes("/api/posts?") && request.url().includes("random=1"));
+    await page.getByRole("button", { name: "Découverte", exact: true }).click();
+    const request = await requestPromise;
+    expect(new URL(request.url()).searchParams.get("theme")).toBe("Sucré");
+  });
+
   test("recherche sans accent et restaure la requete dans l'URL", async ({ page }) => {
     const search = page.getByRole("searchbox", { name: "Rechercher dans la bibliothèque" });
 
@@ -214,6 +231,27 @@ test.describe("bibliotheque Mosaïque", () => {
     expect(layout.cards.length).toBe(18);
     expect(layout.cards.every((card) => card.left >= 0 && card.right <= layout.viewport + 1)).toBe(true);
     expect(layout.cards.every((card) => card.width > 0 && card.height > 0)).toBe(true);
+  });
+
+  test("conserve l'ordre DOM au clavier dans le Masonry", async ({ page }) => {
+    const expected = await page.locator("[data-post-id]").evaluateAll((cards) => cards.slice(0, 3).map((card) => card.getAttribute("data-post-id")));
+    await page.locator("[data-post-id]").first().focus();
+    const focused = [await page.locator(":focus").getAttribute("data-post-id")];
+    await page.keyboard.press("Tab");
+    focused.push(await page.locator(":focus").getAttribute("data-post-id"));
+    await page.keyboard.press("Tab");
+    focused.push(await page.locator(":focus").getAttribute("data-post-id"));
+    expect(focused).toEqual(expected);
+  });
+
+  test("reste compact à 320 px avec des cibles tactiles de 44 px", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    await expect(page.getByRole("button", { name: /^Filtres/ })).toBeVisible();
+    const controls = await page.locator(".header-actions button:visible, .view-switch button:visible, .mobile-filter-trigger:visible").evaluateAll((items) =>
+      items.map((item) => ({ width: item.getBoundingClientRect().width, height: item.getBoundingClientRect().height })),
+    );
+    expect(controls.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   });
 });
 

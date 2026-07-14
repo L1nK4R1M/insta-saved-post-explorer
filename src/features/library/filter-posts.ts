@@ -9,6 +9,10 @@ import { foldForSearch, tagSlug } from "@/lib/import/normalize";
 export type LibraryPostPage = {
   items: LibraryPost[];
   nextCursor: string | null;
+  /** @deprecated Use totalFiltered. Kept for API consumers from phase 0. */
+  total: number;
+  totalFiltered: number;
+  totalLibrary: number;
 };
 
 export function filterAndPaginatePosts(
@@ -57,7 +61,13 @@ export function filterAndPaginatePosts(
         })
       : null;
 
-  return { items, nextCursor };
+  return {
+    items,
+    nextCursor,
+    total: filtered.length,
+    totalFiltered: filtered.length,
+    totalLibrary: posts.length,
+  };
 }
 
 export function comparePosts(

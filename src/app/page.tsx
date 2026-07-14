@@ -34,6 +34,8 @@ export default async function HomePage({ searchParams }: PageProps) {
     <LibraryExplorer
       posts={library.posts}
       initialNextCursor={library.nextCursor}
+      initialTotalFiltered={library.totalFiltered}
+      initialTotalLibrary={library.totalLibrary}
       initialState={initialState}
       initialMainThemes={mainThemes}
       initialTagFacets={tagFacets}
@@ -57,12 +59,14 @@ async function loadLibrary(initialState: LibraryInitialState, ownerId: string) {
       }),
       ownerId,
     );
-    return { posts: page.items, nextCursor: page.nextCursor, error: undefined };
+    return { posts: page.items, nextCursor: page.nextCursor, totalFiltered: page.totalFiltered, totalLibrary: page.totalLibrary, error: undefined };
   } catch (error) {
     console.error("Unable to load the library", error);
     return {
       posts: [],
       nextCursor: null,
+      totalFiltered: 0,
+      totalLibrary: 0,
       error: "Vérifiez la connexion à la base de données, puis réessayez.",
     };
   }
