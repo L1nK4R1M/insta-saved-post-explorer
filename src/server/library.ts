@@ -27,6 +27,7 @@ import {
 import { resolvePublicMediaUrl } from "@/lib/media-url";
 import { databaseConfigured, prisma } from "@/server/db";
 import { getApplicationOwnerId, parseOwnerId } from "@/server/owner";
+import { calculateDetailedFallbackStats, getDatabaseLibraryStats, getLibraryAuthors as queryLibraryAuthors } from "@/server/library-insights";
 
 type PostWithTags = Prisma.PostGetPayload<{
   include: {
@@ -323,27 +324,12 @@ export async function getLibraryMainThemes(requestedOwnerId?: string): Promise<s
 
 export async function getLibraryStats(requestedOwnerId?: string): Promise<LibraryStats> {
   const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
-  if (!databaseConfigured) return calculateFallbackStats(await readFallbackPosts());
+  if (!databaseConfigured) return calculateDetailedFallbackStats(await readFallbackPosts());
+  return getDatabaseLibraryStats(ownerId);
+}
 
-  const [posts, photos, carousels, videos, otherPosts, media, imageMedia, videoMedia, tags, themes] =
-    await prisma.$transaction([
-      prisma.post.count({ where: { ownerId } }),
-      prisma.post.count({ where: { ownerId, contentType: "IMAGE" } }),
-      prisma.post.count({ where: { ownerId, contentType: "CAROUSEL" } }),
-      prisma.post.count({ where: { ownerId, contentType: "REEL" } }),
-      prisma.post.count({ where: { ownerId, contentType: "OTHER" } }),
-      prisma.postMedia.count({ where: { post: { ownerId } } }),
-      prisma.postMedia.count({ where: { post: { ownerId }, type: "IMAGE" } }),
-      prisma.postMedia.count({ where: { post: { ownerId }, type: "VIDEO" } }),
-      prisma.tag.count({ where: { ownerId } }),
-      prisma.post.findMany({
-        where: { ownerId, mainTheme: { not: null } },
-        distinct: ["mainTheme"],
-        select: { mainTheme: true },
-      }),
-    ]);
-
-  return { posts, photos, carousels, videos, otherPosts, media, imageMedia, videoMedia, tags, mainThemes: themes.length };
+export async function getLibraryAuthors(requestedOwnerId: string, query: string, limit: number) {
+  return queryLibraryAuthors(requestedOwnerId, query, limit, readFallbackPosts);
 }
 
 export async function getLibraryPost(
@@ -570,20 +556,4 @@ async function readFallbackPosts(): Promise<LibraryPost[]> {
     });
   })();
   return fallbackPostsPromise;
-}
-
-function calculateFallbackStats(posts: LibraryPost[]): LibraryStats {
-  const media = posts.flatMap((post) => post.media);
-  return {
-    posts: posts.length,
-    photos: posts.filter((post) => post.contentType === "image").length,
-    carousels: posts.filter((post) => post.contentType === "carousel").length,
-    videos: posts.filter((post) => post.contentType === "reel").length,
-    otherPosts: posts.filter((post) => post.contentType === "other").length,
-    media: media.length,
-    imageMedia: media.filter((item) => item.type === "image").length,
-    videoMedia: media.filter((item) => item.type === "video").length,
-    tags: new Set(posts.flatMap((post) => post.tags)).size,
-    mainThemes: new Set(posts.flatMap((post) => post.mainTheme ? [post.mainTheme] : [])).size,
-  };
 }
