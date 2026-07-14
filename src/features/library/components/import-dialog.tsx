@@ -253,7 +253,7 @@ function importErrorMessage(code: unknown): string {
   return "L’import a échoué côté serveur.";
 }
 
-function parseFileInWorker(file: File): Promise<unknown[]> {
+export function parseFileInWorker(file: File): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
       new URL("../workers/import-parser.worker.ts", import.meta.url),

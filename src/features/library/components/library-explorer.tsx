@@ -1,6 +1,6 @@
 "use client";
 
-import { Grid2X2, Image, Images, LayoutGrid, LogIn, LogOut, Search, SlidersHorizontal, Sparkles, Upload, Video, X } from "lucide-react";
+import { Grid2X2, Image, Images, LayoutGrid, LogIn, LogOut, Search, SlidersHorizontal, Sparkles, Upload, Video, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -10,6 +10,7 @@ import { FilterContent, MobileFilterDrawer, type TagFacet } from "@/features/lib
 import { ImportDialog } from "@/features/library/components/import-dialog";
 import { EmptyLibrary, LibraryError, NoResults } from "@/features/library/components/library-states";
 import { LibraryStatsDialog } from "@/features/library/components/library-stats-dialog";
+import { MediaRepairDialog } from "@/features/library/components/media-repair-dialog";
 import { PostCard } from "@/features/library/components/post-card";
 import { PostDetailDialog } from "@/features/library/components/post-detail-dialog";
 import { RefreshPostsButton } from "@/features/library/components/refresh-posts-button";
@@ -61,6 +62,7 @@ export function LibraryExplorer({
   const [filtersVisible, setFiltersVisible] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [mediaRepairOpen, setMediaRepairOpen] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const initialRequest = useRef(true);
@@ -269,6 +271,14 @@ export function LibraryExplorer({
             <>
               <RefreshPostsButton onCompleted={() => window.location.reload()} />
               <button
+                className="button"
+                type="button"
+                aria-label="Réparer les médias"
+                onClick={() => setMediaRepairOpen(true)}
+              >
+                <Wrench aria-hidden="true" className="size-4" /><span className="desktop-only">Réparer médias</span>
+              </button>
+              <button
                 className="button import-button"
                 type="button"
                 aria-label="Importer JSON"
@@ -401,11 +411,18 @@ export function LibraryExplorer({
 
       <MobileFilterDrawer open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen} {...filterProps} />
       {isAdmin ? (
-        <ImportDialog
-          open={importOpen}
-          onOpenChange={setImportOpen}
-          onImported={() => window.location.reload()}
-        />
+        <>
+          <ImportDialog
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            onImported={() => window.location.reload()}
+          />
+          <MediaRepairDialog
+            open={mediaRepairOpen}
+            onOpenChange={setMediaRepairOpen}
+            onRepaired={() => window.location.reload()}
+          />
+        </>
       ) : null}
       <PostDetailDialog
         post={selectedPost}

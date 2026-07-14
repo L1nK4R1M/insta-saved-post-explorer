@@ -48,13 +48,7 @@ function r2Client() {
 
 export async function prepareR2Upload(input: z.input<typeof uploadSchema>) {
   const value = uploadSchema.parse(input);
-  const extension = extensionFor(value.contentType);
-  const suffix = value.carousel ? `_${value.position + 1}` : "";
-  const fileSuffix = value.kind === "thumbnail" ? `${suffix}_thumb` : suffix;
-  const relativePath = `${safeSegment(value.authorUsername)}/${value.postCode}${fileSuffix}.${extension}`;
-  const prefix = safePrefix(process.env.MEDIA_PATH_PREFIX ?? "originals");
-  const objectKey = `${prefix}/${relativePath}`;
-  const { bucket } = config();
+  const { bucket, objectKey, relativePath } = objectTarget(value);
   const command = new PutObjectCommand({
     Bucket: bucket,
     Key: objectKey,
@@ -62,6 +56,26 @@ export async function prepareR2Upload(input: z.input<typeof uploadSchema>) {
   });
   const uploadUrl = await getSignedUrl(r2Client(), command, { expiresIn: 15 * 60 });
   return { uploadUrl, objectKey, sourcePath: relativePath, contentType: value.contentType };
+}
+
+export async function uploadR2Object(
+  input: z.input<typeof uploadSchema>,
+  body: Uint8Array,
+) {
+  const value = uploadSchema.parse(input);
+  if (body.byteLength !== value.byteSize) throw new Error("R2_OBJECT_MISMATCH");
+  const target = objectTarget(value);
+  await r2Client().send(new PutObjectCommand({
+    Bucket: target.bucket,
+    Key: target.objectKey,
+    ContentType: value.contentType,
+    Body: body,
+  }));
+  return {
+    objectKey: target.objectKey,
+    sourcePath: target.relativePath,
+    contentType: value.contentType,
+  };
 }
 
 export async function verifyR2Object(objectKey: string, expectedSize: number) {
@@ -102,6 +116,46 @@ function extensionFor(contentType: string) {
   if (contentType === "image/webp") return "webp";
   if (contentType === "image/png") return "png";
   return "jpg";
+}
+
+export async function r2ObjectExists(objectKey: string): Promise<boolean> {
+  try {
+    const { bucket } = config();
+    await r2Client().send(new HeadObjectCommand({ Bucket: bucket, Key: objectKey }));
+    return true;
+  } catch (error) {
+    const status = typeof error === "object" && error && "$metadata" in error
+      ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+      : undefined;
+    if (status === 404) return false;
+    throw error;
+  }
+}
+
+export function objectKeyFromPublicMediaUrl(value: string): string {
+  const base = new URL(ensureSlash(z.string().url().parse(process.env.MEDIA_PUBLIC_BASE_URL)));
+  const url = new URL(value);
+  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
+    throw new Error("INVALID_PUBLIC_MEDIA_URL");
+  }
+  return url.pathname
+    .slice(base.pathname.length)
+    .split("/")
+    .map(decodeURIComponent)
+    .join("/");
+}
+
+function objectTarget(value: z.infer<typeof uploadSchema>) {
+  const extension = extensionFor(value.contentType);
+  const suffix = value.carousel ? `_${value.position + 1}` : "";
+  const fileSuffix = value.kind === "thumbnail" ? `${suffix}_thumb` : suffix;
+  const relativePath = `${safeSegment(value.authorUsername)}/${value.postCode}${fileSuffix}.${extension}`;
+  const prefix = safePrefix(process.env.MEDIA_PATH_PREFIX ?? "originals");
+  return {
+    bucket: config().bucket,
+    relativePath,
+    objectKey: `${prefix}/${relativePath}`,
+  };
 }
 
 function safeSegment(value: string) {
