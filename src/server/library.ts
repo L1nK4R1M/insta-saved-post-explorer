@@ -32,12 +32,14 @@ type PostWithTags = Prisma.PostGetPayload<{
   include: {
     postTags: { include: { tag: true } };
     media: true;
+    collectionPosts: { include: { collection: true } };
   };
 }>;
 
 const postInclude = {
   postTags: { include: { tag: true } },
   media: { orderBy: { position: "asc" as const } },
+  collectionPosts: { include: { collection: true } },
 } satisfies Prisma.PostInclude;
 
 export type LibraryTag = { name: string; slug: string; count: number };
@@ -77,6 +79,9 @@ export async function queryLibraryPosts(
     ownerId,
     ...(query.theme ? { mainTheme: query.theme } : {}),
     ...(query.contentType ? { contentType: query.contentType.toUpperCase() as "IMAGE" | "CAROUSEL" | "REEL" } : {}),
+    ...(query.author ? { authorSortKey: foldForSearch(query.author) } : {}),
+    ...(query.year ? { publishedAt: { gte: new Date(Date.UTC(query.year, 0, 1)), lt: new Date(Date.UTC(query.year + 1, 0, 1)) } } : {}),
+    ...(query.collection ? collectionWhere(ownerId, query.collection) : {}),
     ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
     ...tagWhere(ownerId, query.tags, query.tagMode),
   };
@@ -185,6 +190,9 @@ async function queryRelevantPosts(
       WHERE p."owner_id" = ${ownerId}
         AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
         AND (${contentType}::text IS NULL OR p."content_type"::text = ${contentType})
+        AND (${query.author ? foldForSearch(query.author) : null}::text IS NULL OR p."author_sort_key" = ${query.author ? foldForSearch(query.author) : null})
+        AND (${query.year}::integer IS NULL OR (p."published_at" >= make_date(${query.year ?? 2000}, 1, 1) AND p."published_at" < make_date(${query.year ?? 2000} + 1, 1, 1)))
+        AND (${query.collection}::text IS NULL OR EXISTS (SELECT 1 FROM "collection_posts" cp JOIN "collections" c ON c."id" = cp."collection_id" WHERE cp."post_id" = p."id" AND c."owner_id" = ${ownerId} AND c."slug" = ${query.collection} AND c."is_public" = true) OR (${query.collection} = 'favoris' AND EXISTS (SELECT 1 FROM "post_tags" fpt JOIN "tags" ft ON ft."id" = fpt."tag_id" WHERE fpt."post_id" = p."id" AND ft."owner_id" = ${ownerId} AND ft."slug" = 'favoris')))
         AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
         ${tagCondition}
     )
@@ -372,6 +380,23 @@ function tagWhere(
   return { postTags: { some: { tag: { ownerId, slug: { in: slugs } } } } };
 }
 
+function collectionWhere(ownerId: string, slug: string): Prisma.PostWhereInput {
+  const collection = { collectionPosts: { some: { collection: { ownerId, slug, isPublic: true } } } };
+  if (slug !== "favoris") return collection;
+  return { OR: [collection, { postTags: { some: { tag: { ownerId, slug: "favoris" } } } }] };
+}
+
+export async function getLibraryCollections(requestedOwnerId?: string): Promise<import("@/features/library/types").LibraryCollection[]> {
+  const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
+  if (!databaseConfigured) return [{ id: "fallback-favoris", name: "Favoris", slug: "favoris", isSystem: true, count: (await readFallbackPosts()).filter((post) => post.tags.includes("Favoris")).length }];
+  const rows = await prisma.collection.findMany({
+    where: { ownerId, isPublic: true },
+    select: { id: true, name: true, slug: true, isSystem: true, _count: { select: { posts: true } } },
+    orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+  });
+  return rows.map((row) => ({ id: row.id, name: row.name, slug: row.slug, isSystem: row.isSystem, count: row._count.posts }));
+}
+
 function cursorWhere(
   cursor: LibraryCursor | null,
   sort: Exclude<SortMode, "relevance">,
@@ -476,6 +501,9 @@ function toLibraryPost(row: PostWithTags, compact: boolean): LibraryPost {
     position: media.position,
   }));
   const firstImage = resolvedMedia.find((media) => media.type === "image");
+  const collections = row.collectionPosts.filter(({ collection }) => collection.isPublic).map(({ collection }) => collection.slug);
+  const tags = row.postTags.map(({ tag }) => tag.name);
+  if (collections.includes("favoris") && !tags.includes("Favoris")) tags.push("Favoris");
   return {
     id: row.id,
     externalId: row.externalId,
@@ -485,7 +513,7 @@ function toLibraryPost(row: PostWithTags, compact: boolean): LibraryPost {
     media: resolvedMedia,
     authorUsername: row.authorUsername,
     caption: compact ? row.caption.slice(0, 500) : row.caption,
-    tags: row.postTags.map(({ tag }) => tag.name).sort((a, b) => a.localeCompare(b, "fr")),
+    tags: tags.sort((a, b) => a.localeCompare(b, "fr")),
     savedAt: row.savedAt?.toISOString() ?? null,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     contentType: row.contentType.toLowerCase() as ContentType,
@@ -493,6 +521,7 @@ function toLibraryPost(row: PostWithTags, compact: boolean): LibraryPost {
     likesCount: row.likesCount,
     commentsCount: row.commentsCount,
     metadata: compact ? {} : metadata,
+    collections,
   };
 }
 
@@ -536,6 +565,7 @@ async function readFallbackPosts(): Promise<LibraryPost[]> {
         likesCount: post.likesCount,
         commentsCount: post.commentsCount,
         metadata: post.metadata,
+        collections: post.tags.includes("Favoris") ? ["favoris"] : [],
       };
     });
   })();

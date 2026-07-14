@@ -28,6 +28,7 @@ const videoPost: LibraryPost = {
   likesCount: 2617,
   commentsCount: null,
   metadata: {},
+  collections: ["favoris"],
 };
 
 describe("PostCard video preview", () => {

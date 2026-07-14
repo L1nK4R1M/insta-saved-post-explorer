@@ -12,6 +12,9 @@ export type LibraryQuery = {
   tags: string[];
   theme: string | null;
   contentType: ContentTypeFilter | null;
+  author: string | null;
+  year: number | null;
+  collection: string | null;
   tagMode: TagMode;
   sort: SortMode;
   cursor: string | null;
@@ -31,6 +34,9 @@ const querySchema = z.object({
   tagMode: z.enum(["and", "or"]).default("and"),
   theme: z.string().trim().min(1).max(120).nullable().default(null),
   contentType: z.enum(["image", "carousel", "reel"]).nullable().default(null),
+  author: z.string().trim().min(1).max(80).nullable().default(null),
+  year: z.coerce.number().int().min(1900).max(2100).nullable().default(null),
+  collection: z.string().trim().min(1).max(80).nullable().default(null),
   sort: z.enum(["newest", "oldest", "author", "relevance", "likes"]).default("newest"),
   cursor: z.string().trim().min(1).max(1_024).nullable().default(null),
   limit: z.coerce.number().int().min(1).max(MAX_LIBRARY_LIMIT).default(DEFAULT_LIBRARY_LIMIT),
@@ -48,6 +54,9 @@ export function parseLibraryQuery(input: {
   tags?: unknown;
   theme?: unknown;
   contentType?: unknown;
+  author?: unknown;
+  year?: unknown;
+  collection?: unknown;
   tagMode?: unknown;
   sort?: unknown;
   cursor?: unknown;
@@ -58,6 +67,9 @@ export function parseLibraryQuery(input: {
     tags: normalizeTags(input.tags),
     theme: input.theme === undefined || input.theme === "" ? null : input.theme,
     contentType: input.contentType === undefined || input.contentType === "" ? null : input.contentType,
+    author: input.author === undefined || input.author === "" ? null : input.author,
+    year: input.year === undefined || input.year === "" ? null : input.year,
+    collection: input.collection === undefined || input.collection === "" ? null : input.collection,
     cursor: input.cursor === undefined || input.cursor === "" ? null : input.cursor,
   });
 }
@@ -71,6 +83,9 @@ export function parseLibrarySearchParams(searchParams: URLSearchParams): Library
     tags,
     theme: searchParams.get("theme") ?? undefined,
     contentType: searchParams.get("type") ?? undefined,
+    author: searchParams.get("author") ?? undefined,
+    year: searchParams.get("year") ?? undefined,
+    collection: searchParams.get("collection") ?? undefined,
     tagMode: searchParams.get("tagMode") ?? searchParams.get("tag_mode") ?? undefined,
     sort: searchParams.get("sort") ?? undefined,
     cursor: searchParams.get("cursor") ?? undefined,

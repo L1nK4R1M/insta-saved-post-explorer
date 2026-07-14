@@ -252,6 +252,7 @@ select, .gradient-input {
     var(--brand-border-gradient) border-box;
 }
 select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30px 0 10px; }
+.compact-filter { width: 130px; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); padding: 0 10px; }
 .gradient-input { color: var(--text); }
 .gradient-input:focus,
 .gradient-input:focus-visible {
@@ -281,6 +282,14 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 .tag-option:hover, .tag-option.is-selected { background: var(--surface-subtle); }
 .tag-check { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border: 1px solid var(--line-strong); border-radius: 5px; }
 .tag-option.is-selected .tag-check { border-color: var(--accent); background: var(--accent); color: var(--accent-contrast); }
+.collection-manager { border-top: 1px solid var(--line); padding: 14px; font-size: .8rem; }
+.collection-manager summary { cursor: pointer; font-weight: 650; }
+.collection-manager form { display: flex; gap: 6px; margin: 10px 0; }
+.collection-manager input { min-width: 0; width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); padding: 0 8px; }
+.collection-manager ul { display: grid; gap: 7px; }
+.collection-manager li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.collection-manager li span:last-child { display: flex; gap: 5px; }
+.collection-manager li button { border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: .72rem; }
 
 .library-content { position: relative; min-width: 0; min-height: 56dvh; }
 .request-error { margin-bottom: 12px; border: 1px solid var(--danger); border-radius: 10px; color: var(--danger); padding: 10px 12px; font-size: 0.875rem; }

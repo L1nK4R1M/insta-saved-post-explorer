@@ -69,7 +69,7 @@ test.describe("bibliotheque Mosaïque", () => {
     await favoriteFilter.click();
     await expect(favoriteFilter).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".active-tags")).not.toContainText("Favoris");
-    await expect.poll(() => new URL(page.url()).searchParams.get("tags")).toBe("Favoris");
+    await expect.poll(() => new URL(page.url()).searchParams.get("collection")).toBe("favoris");
   });
 
   test("combine un filtre de type avec les thèmes principaux", async ({ page }) => {

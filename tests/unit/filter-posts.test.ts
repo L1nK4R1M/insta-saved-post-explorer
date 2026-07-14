@@ -58,6 +58,16 @@ describe("filterAndPaginatePosts", () => {
     expect(videos.items.map((post) => post.id)).toEqual(["b"]);
   });
 
+  it("combine auteur, année de publication et collection", () => {
+    const enriched = posts.map((post, index) => ({
+      ...post,
+      publishedAt: index < 2 ? "2025-06-15T10:00:00.000Z" : "2024-01-01T00:00:00.000Z",
+      collections: index === 1 ? ["voyages"] : [],
+    }));
+    const page = filterAndPaginatePosts(enriched, parseLibraryQuery({ author: "alice", year: 2025, collection: "voyages" }));
+    expect(page.items.map((post) => post.id)).toEqual(["b"]);
+  });
+
   it("trie par likes décroissants", () => {
     posts[0].likesCount = 20;
     posts[1].likesCount = 100;
@@ -110,5 +120,6 @@ function makePost(
     likesCount: null,
     commentsCount: null,
     metadata: {},
+    collections: [],
   };
 }
