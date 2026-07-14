@@ -3,6 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Image, Images, Search, SlidersHorizontal, Trash2, Video, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 
 import type { TagMode } from "@/features/library/types";
 import type { ContentTypeFilter } from "@/features/library/query-state";
@@ -130,9 +131,10 @@ export function FilterContent({
   );
 }
 
-export function MobileFilterDrawer({ open, onOpenChange, ...props }: FilterContentProps & {
+export function MobileFilterDrawer({ open, onOpenChange, mobileSecondaryControls, ...props }: FilterContentProps & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  mobileSecondaryControls?: ReactNode;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -152,6 +154,7 @@ export function MobileFilterDrawer({ open, onOpenChange, ...props }: FilterConte
               <X aria-hidden="true" className="size-4" />
             </button>
           </Dialog.Close>
+          {mobileSecondaryControls ? <div className="drawer-mobile-secondary" aria-label="Filtres auteur, année et collection">{mobileSecondaryControls}</div> : null}
           <FilterContent {...props} />
         </Dialog.Content>
       </Dialog.Portal>

@@ -408,6 +408,7 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 
 .filter-drawer { position: fixed; right: 0; bottom: 0; left: 0; z-index: 50; max-height: min(84dvh, 720px); overflow-y: auto; border: 1px solid var(--line-strong); border-bottom: 0; border-radius: 22px 22px 0 0; background: var(--surface); padding-bottom: env(safe-area-inset-bottom); }
 .drawer-close { position: absolute; top: 9px; right: 10px; z-index: 10; }
+.drawer-mobile-secondary { display: none; }
 
 .post-card,
 .detail-dialog,
@@ -486,6 +487,26 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 }
 
 @media (max-width: 420px) {
+  html, body, .app-shell { max-width: 100%; overflow-x: clip; }
+  .control-ribbon { display: grid; grid-template-columns: auto minmax(32px, auto) minmax(82px, 1fr) 88px; min-height: 0; gap: 6px; padding: 6px 8px; }
+  .mobile-filter-trigger { grid-column: 1; grid-row: 1; min-width: 0; padding-inline: 9px; }
+  .ribbon-end { display: contents; }
+  .ribbon-end .author-control, .ribbon-end .year-control, .ribbon-end .collection-control { display: none; }
+  .results-count { grid-column: 2; grid-row: 1; align-self: center; justify-self: center; white-space: nowrap; }
+  .sort-control { display: block; grid-column: 3; grid-row: 1; }
+  .sort-control .compact-control-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .sort-control select { width: 100%; min-width: 0; height: 44px; padding-inline: 8px 22px; font-size: .72rem; }
+  .view-switch { grid-column: 4; grid-row: 1; display: grid; grid-template-columns: repeat(2, 44px); justify-self: end; }
+  .main-theme-filters { grid-column: 1 / -1; grid-row: 2; width: 100%; max-width: 100%; overscroll-behavior-x: contain; }
+  .main-theme-filters button { min-height: 44px; }
+  .active-tags { display: none; }
+  .library-layout, .library-layout.has-filters { padding-top: 6px; }
+  .drawer-mobile-secondary { display: grid; gap: 12px; border-bottom: 1px solid var(--line); padding: 52px 14px 14px; }
+  .drawer-mobile-secondary .compact-control { display: grid; gap: 5px; }
+  .drawer-mobile-secondary .compact-control-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; color: var(--muted); font-size: .75rem; font-weight: 650; white-space: normal; }
+  .drawer-mobile-secondary select, .drawer-mobile-secondary .author-input-shell, .drawer-mobile-secondary .compact-filter { width: 100%; min-height: 44px; }
+  .filter-drawer .filter-content { padding-top: 14px; }
+  .filter-drawer button, .filter-drawer select, .filter-drawer input { min-height: 44px; }
   .posts-grid { gap: 6px; }
   .posts-regular { grid-template-columns: minmax(0, 1fr); }
   .posts-masonry { columns: 1; }
