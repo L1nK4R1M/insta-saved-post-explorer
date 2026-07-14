@@ -110,6 +110,13 @@ export function LibraryExplorer({
 
   const facets = initialTagFacets.filter((facet) => facet.name !== "Favoris");
   const regularSelectedTags = selectedTags.filter((tag) => tag !== "Favoris");
+  const activeFilterCount = selectedTags.length
+    + Number(Boolean(query.trim()))
+    + Number(Boolean(selectedTheme))
+    + Number(Boolean(selectedContentType))
+    + Number(Boolean(selectedAuthor))
+    + Number(Boolean(selectedYear))
+    + Number(Boolean(selectedCollection));
 
   const mainThemes = initialMainThemes;
 
@@ -393,9 +400,9 @@ export function LibraryExplorer({
         <button className="button desktop-only" type="button" aria-expanded={filtersVisible} onClick={() => setFiltersVisible((value) => !value)}>
           <SlidersHorizontal aria-hidden="true" className="size-4 text-accent" /> Filtres avancés
         </button>
-        <button className="button mobile-only mobile-filter-trigger" type="button" onClick={() => setMobileFiltersOpen(true)}>
+        <button className="button mobile-only mobile-filter-trigger" type="button" aria-label={`Ouvrir les filtres, ${activeFilterCount} actif${activeFilterCount === 1 ? "" : "s"}`} aria-haspopup="dialog" aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen(true)}>
           <SlidersHorizontal aria-hidden="true" className="size-4 text-accent" /> Filtres
-          {selectedTags.length ? <span className="count-badge">{selectedTags.length}</span> : null}
+          {activeFilterCount ? <span className="count-badge" aria-hidden="true">{activeFilterCount}</span> : null}
         </button>
 
         <div className="main-theme-filters" aria-label="Filtres principaux">
@@ -484,7 +491,23 @@ export function LibraryExplorer({
         </section>
       </main>
 
-      <MobileFilterDrawer open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen} {...filterProps} />
+      <MobileFilterDrawer
+        open={mobileFiltersOpen}
+        onOpenChange={setMobileFiltersOpen}
+        mobileSecondaryControls={(
+          <>
+            <div className="compact-control author-control"><span className="compact-control-label">Auteur</span><AuthorAutocomplete options={authorOptions} value={selectedAuthor} onValueChange={setSelectedAuthor} label="Filtrer par auteur dans le drawer" /></div>
+            <label className="compact-control year-control"><span className="compact-control-label">Année</span><select aria-label="Filtrer par année dans le drawer" value={selectedYear ?? ""} onChange={(event) => setSelectedYear(event.target.value ? Number(event.target.value) : null)}>
+              <option value="">Toutes les années</option>
+              {[...new Set(initialPosts.flatMap((post) => post.publishedAt ? [new Date(post.publishedAt).getUTCFullYear()] : []))].sort((a,b) => b-a).map((year) => <option key={year} value={year}>{year}</option>)}
+            </select></label>
+            <label className="compact-control collection-control"><span className="compact-control-label">Collection</span><select aria-label="Filtrer par collection dans le drawer" value={selectedCollection ?? ""} onChange={(event) => setSelectedCollection(event.target.value || null)}>
+              <option value="">Toutes les collections</option>{initialCollections.map((collection) => <option key={collection.id} value={collection.slug}>{collection.name} ({collection.count})</option>)}
+            </select></label>
+          </>
+        )}
+        {...filterProps}
+      />
       {showBackToTop ? <button className="back-to-top" type="button" aria-label="Retour en haut de la page" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowUp aria-hidden="true" className="size-4" /><span>Retour en haut</span></button> : null}
       {isAdmin ? (
         <>
