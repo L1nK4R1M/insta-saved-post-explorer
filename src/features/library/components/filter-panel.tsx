@@ -1,10 +1,11 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { Check, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { Check, Image, Images, Search, SlidersHorizontal, Trash2, Video, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import type { TagMode } from "@/features/library/types";
+import type { ContentTypeFilter } from "@/features/library/query-state";
 import { cn } from "@/lib/utils";
 
 export type TagFacet = { name: string; count: number };
@@ -16,6 +17,8 @@ type FilterContentProps = {
   onTagModeChange: (mode: TagMode) => void;
   onToggleTag: (tag: string) => void;
   onReset: () => void;
+  selectedContentType: ContentTypeFilter | null;
+  onContentTypeChange: (type: ContentTypeFilter | null) => void;
 };
 
 export function FilterContent({
@@ -25,6 +28,8 @@ export function FilterContent({
   onTagModeChange,
   onToggleTag,
   onReset,
+  selectedContentType,
+  onContentTypeChange,
 }: FilterContentProps) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"frequency" | "alphabetical">("frequency");
@@ -42,6 +47,17 @@ export function FilterContent({
         <SlidersHorizontal aria-hidden="true" className="size-4 text-accent" />
         <h2 className="text-balance font-semibold">Filtres avancés</h2>
       </div>
+
+      <fieldset className="media-type-fieldset">
+        <legend className="field-label">Type de média</legend>
+        <div className="segmented media-type-segmented">
+          {([null, "image", "carousel", "reel"] as const).map((type) => {
+            const config = type === null ? ["Tous", null] as const : type === "image" ? ["Photo", Image] as const : type === "carousel" ? ["Carrousel", Images] as const : ["Vidéo", Video] as const;
+            const Icon = config[1];
+            return <button key={type ?? "all"} type="button" className={cn(selectedContentType === type && "is-active")} aria-pressed={selectedContentType === type} onClick={() => onContentTypeChange(type)}>{Icon ? <Icon aria-hidden="true" className="size-3.5" /> : null}{config[0]}</button>;
+          })}
+        </div>
+      </fieldset>
 
       <label className="field-label" htmlFor="tag-search">
         Recherche de tags

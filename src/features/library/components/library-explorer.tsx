@@ -1,7 +1,7 @@
 "use client";
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Grid2X2, Image, Images, LayoutGrid, LogIn, LogOut, Search, Settings2, SlidersHorizontal, Sparkles, Upload, Video, Wrench, X } from "lucide-react";
+import { ArrowUp, Grid2X2, LayoutGrid, LogIn, LogOut, Search, Settings2, SlidersHorizontal, Sparkles, Upload, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -16,6 +16,7 @@ import { PostCard } from "@/features/library/components/post-card";
 import { PostDetailDialog } from "@/features/library/components/post-detail-dialog";
 import { RefreshPostsButton } from "@/features/library/components/refresh-posts-button";
 import { CollectionManager } from "@/features/library/components/collection-manager";
+import { AuthorAutocomplete } from "@/features/library/components/author-autocomplete";
 import { useDebouncedValue } from "@/features/library/hooks/use-debounced-value";
 import type { ContentTypeFilter } from "@/features/library/query-state";
 import type { LibraryCollection, LibraryPost, SortMode, TagMode, ViewMode } from "@/features/library/types";
@@ -81,10 +82,19 @@ export function LibraryExplorer({
   const [mediaRepairOpen, setMediaRepairOpen] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const [discovering, setDiscovering] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const initialRequest = useRef(true);
   const debouncedQuery = useDebouncedValue(query, 250);
+  const authorOptions = useMemo(() => [...new Set(initialPosts.map((post) => post.authorUsername))].sort((a, b) => a.localeCompare(b, "fr-FR")), [initialPosts]);
+
+  useEffect(() => {
+    const updateVisibility = () => setShowBackToTop(window.scrollY > 480);
+    updateVisibility();
+    window.addEventListener("scroll", updateVisibility, { passive: true });
+    return () => window.removeEventListener("scroll", updateVisibility);
+  }, []);
 
   const facets = initialTagFacets.filter((facet) => facet.name !== "Favoris");
   const regularSelectedTags = selectedTags.filter((tag) => tag !== "Favoris");
@@ -296,7 +306,7 @@ export function LibraryExplorer({
     setSelectedPostId(filteredPosts[nextIndex].id);
   }, [filteredPosts, selectedIndex]);
 
-  const filterProps = { facets, selectedTags, tagMode, onTagModeChange: setTagMode, onToggleTag: toggleTag, onReset: resetFilters };
+  const filterProps = { facets, selectedTags, tagMode, onTagModeChange: setTagMode, onToggleTag: toggleTag, onReset: resetFilters, selectedContentType, onContentTypeChange: (type: ContentTypeFilter | null) => { setIsFiltering(true); setSelectedContentType(type); } };
 
   return (
     <div className="app-shell">
@@ -399,24 +409,6 @@ export function LibraryExplorer({
           >
             Favoris
           </button>
-          {([
-            ["image", "Photos", Image],
-            ["carousel", "Carrousels", Images],
-            ["reel", "Vidéos", Video],
-          ] as const).map(([type, label, Icon]) => (
-            <button
-              key={type}
-              type="button"
-              className={cn("content-type-filter", selectedContentType === type && "is-active")}
-              aria-pressed={selectedContentType === type}
-              onClick={() => {
-                setIsFiltering(true);
-                setSelectedContentType((current) => current === type ? null : type);
-              }}
-            >
-              <Icon aria-hidden="true" className="size-3.5" /> {label}
-            </button>
-          ))}
         </div>
 
         <div className="active-tags" aria-label="Tags actifs">
@@ -429,25 +421,25 @@ export function LibraryExplorer({
         </div>
 
         <div className="ribbon-end">
-          <input className="compact-filter" aria-label="Filtrer par auteur" placeholder="Auteur" value={selectedAuthor} onChange={(event) => setSelectedAuthor(event.target.value)} />
-          <select aria-label="Filtrer par année" value={selectedYear ?? ""} onChange={(event) => setSelectedYear(event.target.value ? Number(event.target.value) : null)}>
+          <div className="compact-control author-control"><span className="compact-control-label">Auteur</span><AuthorAutocomplete options={authorOptions} value={selectedAuthor} onValueChange={setSelectedAuthor} /></div>
+          <label className="compact-control year-control"><span className="compact-control-label">Année</span><select aria-label="Filtrer par année" value={selectedYear ?? ""} onChange={(event) => setSelectedYear(event.target.value ? Number(event.target.value) : null)}>
             <option value="">Toutes les années</option>
             {[...new Set(initialPosts.flatMap((post) => post.publishedAt ? [new Date(post.publishedAt).getUTCFullYear()] : []))].sort((a,b) => b-a).map((year) => <option key={year} value={year}>{year}</option>)}
-          </select>
-          <select aria-label="Filtrer par collection" value={selectedCollection ?? ""} onChange={(event) => setSelectedCollection(event.target.value || null)}>
+          </select></label>
+          <label className="compact-control collection-control"><span className="compact-control-label">Collection</span><select aria-label="Filtrer par collection" value={selectedCollection ?? ""} onChange={(event) => setSelectedCollection(event.target.value || null)}>
             <option value="">Toutes les collections</option>{initialCollections.map((collection) => <option key={collection.id} value={collection.slug}>{collection.name} ({collection.count})</option>)}
-          </select>
+          </select></label>
           <strong className="results-count tabular-nums" aria-live="polite">
             {totalFiltered.toLocaleString("fr-FR")} <span>résultats</span>
           </strong>
           <span className="loaded-count tabular-nums">{filteredPosts.length.toLocaleString("fr-FR")} chargés</span>
-          <select aria-label="Trier les résultats" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
+          <label className="compact-control sort-control"><span className="compact-control-label">Trier par</span><select aria-label="Trier les résultats" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
             <option value="newest">Plus récents</option>
             <option value="oldest">Plus anciens</option>
             <option value="author">Auteur</option>
             <option value="relevance">Pertinence</option>
             <option value="likes">Plus likés</option>
-          </select>
+          </select></label>
           {(query || selectedTags.length || selectedTheme || selectedContentType) ? <button className="text-button desktop-only" type="button" onClick={resetFilters}>Effacer les filtres</button> : null}
           <div className="view-switch" aria-label="Mode d’affichage">
             <button type="button" aria-label="Grille régulière" aria-pressed={view === "grid"} className={cn(view === "grid" && "is-active")} onClick={() => setView("grid")}><Grid2X2 aria-hidden="true" className="size-4" /></button>
@@ -464,7 +456,7 @@ export function LibraryExplorer({
             <div className="filter-loading" role="status"><span className="loading-spinner" aria-hidden="true" />Chargement des résultats…</div>
           ) : initialError ? <LibraryError message={initialError} /> : posts.length === 0 ? <EmptyLibrary onImport={isAdmin ? () => setImportOpen(true) : undefined} /> : filteredPosts.length === 0 ? <NoResults onReset={resetFilters} /> : (
             <>
-              <div className={cn("posts-grid", view === "masonry" ? "posts-masonry" : "posts-regular")}>
+              <div className={cn("posts-grid", view === "masonry" ? "posts-masonry" : "posts-regular", view === "masonry" && filteredPosts.length <= 4 && "posts-masonry-sparse", view === "masonry" && filteredPosts.length === 1 && "posts-masonry-single")}>
                 {filteredPosts.map((post) => <PostCard key={post.id} post={post} view={view} onOpen={() => setSelectedPostId(post.id)} isAdmin={isAdmin} onToggleFavorite={() => void toggleFavorite(post)} />)}
               </div>
               {nextCursor ? (
@@ -481,6 +473,7 @@ export function LibraryExplorer({
       </main>
 
       <MobileFilterDrawer open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen} {...filterProps} />
+      {showBackToTop ? <button className="back-to-top" type="button" aria-label="Retour en haut de la page" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowUp aria-hidden="true" className="size-4" /><span>Retour en haut</span></button> : null}
       {isAdmin ? (
         <>
           <ImportDialog

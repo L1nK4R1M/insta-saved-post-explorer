@@ -31,17 +31,10 @@ export function LibraryStatsDialog() {
     if (nextOpen && error) setError(false);
     setOpen(nextOpen);
   };
-  const items = stats ? [
-    { label: "Publications", value: stats.posts, icon: BarChart3 },
-    { label: "Photos", value: stats.photos, icon: Images },
-    { label: "Carrousels", value: stats.carousels, icon: Images },
-    { label: "Vidéos", value: stats.videos, icon: Video },
-    { label: "Autres", value: stats.otherPosts, icon: BarChart3 },
-    { label: "Médias", value: stats.media, icon: Images },
-    { label: "Images", value: stats.imageMedia, icon: Images },
-    { label: "Fichiers vidéo", value: stats.videoMedia, icon: Video },
-    { label: "Tags", value: stats.tags, icon: Tags },
-    { label: "Thèmes", value: stats.mainThemes, icon: Tags },
+  const sections = stats ? [
+    { title: "Bibliothèque", description: "Volume total enregistré.", items: [{ label: "Publications", value: stats.posts, icon: BarChart3 }, { label: "Médias", value: stats.media, icon: Images }] },
+    { title: "Types de publications", description: "Répartition des publications disponibles.", items: [{ label: "Photos", value: stats.photos, icon: Images }, { label: "Carrousels", value: stats.carousels, icon: Images }, { label: "Vidéos", value: stats.videos, icon: Video }, { label: "Autres", value: stats.otherPosts, icon: BarChart3 }] },
+    { title: "Médias et classement", description: "Fichiers indexés et métadonnées de classement.", items: [{ label: "Images", value: stats.imageMedia, icon: Images }, { label: "Fichiers vidéo", value: stats.videoMedia, icon: Video }, { label: "Tags", value: stats.tags, icon: Tags }, { label: "Thèmes", value: stats.mainThemes, icon: Tags }] },
   ] : [];
 
   return (
@@ -63,9 +56,10 @@ export function LibraryStatsDialog() {
           </header>
           {!stats && !error ? <p className="stats-status" role="status"><span className="loading-spinner" aria-hidden="true" />Chargement des statistiques…</p> : null}
           {error ? <p className="stats-error" role="alert">Les statistiques sont momentanément indisponibles.</p> : null}
-          {stats ? <dl className="stats-grid">{items.map(({ label, value, icon: Icon }) => (
-            <div key={label}><dt><Icon aria-hidden="true" className="size-4" />{label}</dt><dd className="tabular-nums">{formatter.format(value)}</dd></div>
-          ))}</dl> : null}
+          {stats ? <div className="stats-sections">{sections.map((section, index) => <section key={section.title} aria-labelledby={`stats-section-${index}`}>
+            <div className="stats-section-heading"><div><h3 id={`stats-section-${index}`} className="text-balance">{section.title}</h3><p className="text-pretty">{section.description}</p></div><span className="tabular-nums">{section.items.length}</span></div>
+            <dl className="stats-grid">{section.items.map(({ label, value, icon: Icon }) => <div key={label}><dt><Icon aria-hidden="true" className="size-4" />{label}</dt><dd className="tabular-nums">{formatter.format(value)}</dd></div>)}</dl>
+          </section>)}</div> : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

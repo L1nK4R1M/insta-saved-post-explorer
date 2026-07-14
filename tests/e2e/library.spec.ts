@@ -36,7 +36,7 @@ test.describe("bibliotheque Mosaïque", () => {
 
     await search.fill("patisserie");
 
-    await expect(page.getByText("1 résultats", { exact: true })).toBeVisible();
+    await expect(page.getByText("2 résultats", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Ouvrir la publication de damienpichon_" })).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("patisserie");
   });
@@ -73,7 +73,7 @@ test.describe("bibliotheque Mosaïque", () => {
   });
 
   test("combine un filtre de type avec les thèmes principaux", async ({ page }) => {
-    const carousel = page.getByRole("button", { name: "Carrousels", exact: true });
+    const carousel = page.getByRole("button", { name: "Carrousel", exact: true });
     await carousel.click();
     await expect(carousel).toHaveAttribute("aria-pressed", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("carousel");
@@ -83,7 +83,7 @@ test.describe("bibliotheque Mosaïque", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("Sucré");
     await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("carousel");
 
-    await page.getByRole("button", { name: "Vidéos", exact: true }).click();
+    await page.getByRole("button", { name: "Vidéo", exact: true }).click();
     await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("reel");
     await expect(carousel).toHaveAttribute("aria-pressed", "false");
   });
@@ -244,14 +244,34 @@ test.describe("bibliotheque Mosaïque", () => {
     expect(focused).toEqual(expected);
   });
 
-  test("reste compact à 320 px avec des cibles tactiles de 44 px", async ({ page }) => {
-    await page.setViewportSize({ width: 320, height: 720 });
+  test("déploie les résultats rares et propose le retour en haut", async ({ page }) => {
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const backToTop = page.getByRole("button", { name: "Retour en haut de la page" });
+    await expect(backToTop).toBeVisible();
+    await backToTop.click();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+    const search = page.getByRole("searchbox", { name: "Rechercher dans la bibliothèque" });
+    await search.fill("patisserie");
+    const sparseGrid = page.locator(".posts-masonry-sparse");
+    await expect(sparseGrid).toBeVisible();
+    await expect(sparseGrid.locator("[data-post-id]")).toHaveCount(1);
+  });
+
+  test("structure la toolbar et la grille sans débordement à 360 px", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 760 });
     await expect(page.getByRole("button", { name: /^Filtres/ })).toBeVisible();
+    for (const label of ["Auteur", "Année", "Collection", "Trier par"]) {
+      await expect(page.locator(".compact-control-label", { hasText: label })).toBeVisible();
+    }
     const controls = await page.locator(".header-actions button:visible, .view-switch button:visible, .mobile-filter-trigger:visible").evaluateAll((items) =>
       items.map((item) => ({ width: item.getBoundingClientRect().width, height: item.getBoundingClientRect().height })),
     );
     expect(controls.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+    const firstTwoCards = await page.locator("[data-post-id]").evaluateAll((cards) => cards.slice(0, 2).map((card) => { const rect = card.getBoundingClientRect(); return { width: rect.width, top: rect.top, bottom: rect.bottom }; }));
+    expect(firstTwoCards[0].width).toBeGreaterThan(300);
+    expect(firstTwoCards[1].top).toBeGreaterThan(firstTwoCards[0].bottom);
   });
 });
 
