@@ -6,7 +6,8 @@ import { useId, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-export type AuthorAutocompleteProps = { options: string[]; value: string; onValueChange: (value: string) => void; label?: string; placeholder?: string };
+export type AuthorOption = string | { username: string; postCount: number };
+export type AuthorAutocompleteProps = { options: AuthorOption[]; value: string; onValueChange: (value: string) => void; label?: string; placeholder?: string };
 
 export function AuthorAutocomplete({ options, value, onValueChange, label = "Filtrer par auteur", placeholder = "Auteur" }: AuthorAutocompleteProps) {
   const listboxId = useId();
@@ -15,10 +16,10 @@ export function AuthorAutocomplete({ options, value, onValueChange, label = "Fil
   const [activeIndex, setActiveIndex] = useState(0);
   const suggestions = useMemo(() => {
     const query = normalize(value.replace(/^@/, ""));
-    return options.filter((option) => !query || normalize(option.replace(/^@/, "")).includes(query)).slice(0, 8);
+    return options.filter((option) => !query || normalize(optionName(option).replace(/^@/, "")).includes(query)).slice(0, 8);
   }, [options, value]);
   const activeOption = suggestions[activeIndex];
-  const select = (option: string) => { onValueChange(option); setOpen(false); inputRef.current?.focus(); };
+  const select = (option: AuthorOption) => { onValueChange(optionName(option)); setOpen(false); inputRef.current?.focus(); };
 
   return <Popover.Root open={open && suggestions.length > 0} onOpenChange={setOpen}>
     <div className="author-autocomplete">
@@ -34,10 +35,11 @@ export function AuthorAutocomplete({ options, value, onValueChange, label = "Fil
         {value ? <button type="button" className="author-clear" aria-label="Effacer le filtre auteur" onClick={() => { onValueChange(""); setActiveIndex(0); inputRef.current?.focus(); }}><X aria-hidden="true" className="size-3.5" /></button> : null}
       </div></Popover.Anchor>
       <Popover.Portal><Popover.Content className="author-suggestions" sideOffset={5} align="start" onOpenAutoFocus={(event) => event.preventDefault()}>
-        <div id={listboxId} role="listbox" aria-label="Suggestions d’auteurs">{suggestions.map((option, index) => <button id={`${listboxId}-${index}`} key={option} type="button" role="option" aria-selected={value === option} className={cn(index === activeIndex && "is-active")} onPointerMove={() => setActiveIndex(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => select(option)}><span className="truncate">@{option.replace(/^@/, "")}</span>{value === option ? <Check aria-hidden="true" className="size-4" /> : null}</button>)}</div>
+        <div id={listboxId} role="listbox" aria-label="Suggestions d’auteurs">{suggestions.map((option, index) => { const username = optionName(option); return <button id={`${listboxId}-${index}`} key={username} type="button" role="option" aria-selected={value === username} className={cn(index === activeIndex && "is-active")} onPointerMove={() => setActiveIndex(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => select(option)}><span className="truncate">@{username.replace(/^@/, "")}</span>{typeof option === "string" ? null : <span className="author-post-count tabular-nums">{option.postCount}</span>}{value === username ? <Check aria-hidden="true" className="size-4" /> : null}</button>; })}</div>
       </Popover.Content></Popover.Portal>
     </div>
   </Popover.Root>;
 }
 
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").trim(); }
+function optionName(option: AuthorOption) { return typeof option === "string" ? option : option.username; }

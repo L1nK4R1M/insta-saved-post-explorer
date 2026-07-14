@@ -16,7 +16,7 @@ import { PostCard } from "@/features/library/components/post-card";
 import { PostDetailDialog } from "@/features/library/components/post-detail-dialog";
 import { RefreshPostsButton } from "@/features/library/components/refresh-posts-button";
 import { CollectionManager } from "@/features/library/components/collection-manager";
-import { AuthorAutocomplete } from "@/features/library/components/author-autocomplete";
+import { AuthorAutocomplete, type AuthorOption } from "@/features/library/components/author-autocomplete";
 import { useDebouncedValue } from "@/features/library/hooks/use-debounced-value";
 import type { ContentTypeFilter } from "@/features/library/query-state";
 import type { LibraryCollection, LibraryPost, SortMode, TagMode, ViewMode } from "@/features/library/types";
@@ -87,7 +87,19 @@ export function LibraryExplorer({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const initialRequest = useRef(true);
   const debouncedQuery = useDebouncedValue(query, 250);
-  const authorOptions = useMemo(() => [...new Set(initialPosts.map((post) => post.authorUsername))].sort((a, b) => a.localeCompare(b, "fr-FR")), [initialPosts]);
+  const debouncedAuthor = useDebouncedValue(selectedAuthor, 200);
+  const [authorOptions, setAuthorOptions] = useState<AuthorOption[]>(() => [...new Set(initialPosts.map((post) => post.authorUsername))].sort((a, b) => a.localeCompare(b, "fr-FR")));
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ limit: "12" });
+    if (debouncedAuthor) params.set("q", debouncedAuthor.replace(/^@/, ""));
+    fetch(`/api/authors?${params}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((payload: { items?: Array<{ username: string; postCount: number }> }) => setAuthorOptions(payload.items ?? []))
+      .catch((error) => { if (error?.name !== "AbortError") setAuthorOptions([]); });
+    return () => controller.abort();
+  }, [debouncedAuthor]);
 
   useEffect(() => {
     const updateVisibility = () => setShowBackToTop(window.scrollY > 480);

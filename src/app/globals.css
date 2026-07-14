@@ -391,6 +391,13 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 .stats-grid div { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-raised); padding: 12px; }
 .stats-grid dt { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .75rem; }
 .stats-grid dd { margin: 8px 0 0; font-size: 1.25rem; font-weight: 700; }
+.stats-rankings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stats-ranking { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-raised); padding: 12px; }
+.stats-ranking h4 { margin: 0 0 8px; font-size: .78rem; }
+.stats-ranking ol { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.stats-ranking li { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: .75rem; }
+.stats-ranking strong { color: var(--foreground); }
+.author-post-count { margin-left: auto; color: var(--muted); font-size: .72rem; }
 .modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .drop-zone { display: grid; width: 100%; min-height: 190px; place-content: center; justify-items: center; gap: 8px; margin-top: 18px; border: 1px dashed var(--line-strong); border-radius: 14px; background: var(--surface-subtle); color: var(--text); cursor: pointer; }
 .drop-zone:hover { border-color: var(--accent); }
@@ -490,6 +497,7 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
   .metadata-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stats-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding: 16px; }
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats-rankings { grid-template-columns: 1fr; }
   .metadata-grid div { padding: 8px; }
   .metadata-grid dd { overflow-wrap: anywhere; font-size: .75rem; }
   .detail-navigation { grid-template-columns: 1fr 1fr; }
