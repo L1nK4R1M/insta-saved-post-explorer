@@ -20,6 +20,9 @@ export function filterAndPaginatePosts(
   const filtered = posts.filter((post) => {
     if (query.theme && post.mainTheme !== query.theme) return false;
     if (query.contentType && post.contentType !== query.contentType) return false;
+    if (query.author && foldForSearch(post.authorUsername) !== foldForSearch(query.author)) return false;
+    if (query.year && (!post.publishedAt || new Date(post.publishedAt).getUTCFullYear() !== query.year)) return false;
+    if (query.collection && !post.collections.includes(query.collection)) return false;
     if (search && !postSearchText(post).includes(search)) return false;
 
     if (expectedTags.length > 0) {

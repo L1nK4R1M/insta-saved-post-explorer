@@ -14,9 +14,10 @@ import { MediaRepairDialog } from "@/features/library/components/media-repair-di
 import { PostCard } from "@/features/library/components/post-card";
 import { PostDetailDialog } from "@/features/library/components/post-detail-dialog";
 import { RefreshPostsButton } from "@/features/library/components/refresh-posts-button";
+import { CollectionManager } from "@/features/library/components/collection-manager";
 import { useDebouncedValue } from "@/features/library/hooks/use-debounced-value";
 import type { ContentTypeFilter } from "@/features/library/query-state";
-import type { LibraryPost, SortMode, TagMode, ViewMode } from "@/features/library/types";
+import type { LibraryCollection, LibraryPost, SortMode, TagMode, ViewMode } from "@/features/library/types";
 import { cn } from "@/lib/utils";
 
 export type LibraryInitialState = {
@@ -24,6 +25,9 @@ export type LibraryInitialState = {
   tags: string[];
   theme: string | null;
   contentType: ContentTypeFilter | null;
+  author: string | null;
+  year: number | null;
+  collection: string | null;
   tagMode: TagMode;
   sort: SortMode;
   view: ViewMode;
@@ -36,6 +40,7 @@ export function LibraryExplorer({
   initialState,
   initialMainThemes,
   initialTagFacets,
+  initialCollections,
   initialError,
   isAdmin,
 }: {
@@ -44,6 +49,7 @@ export function LibraryExplorer({
   initialState: LibraryInitialState;
   initialMainThemes: string[];
   initialTagFacets: TagFacet[];
+  initialCollections: LibraryCollection[];
   initialError?: string;
   isAdmin: boolean;
 }) {
@@ -55,6 +61,9 @@ export function LibraryExplorer({
   const [selectedTags, setSelectedTags] = useState(initialState.tags);
   const [selectedTheme, setSelectedTheme] = useState(initialState.theme);
   const [selectedContentType, setSelectedContentType] = useState(initialState.contentType);
+  const [selectedAuthor, setSelectedAuthor] = useState(initialState.author ?? "");
+  const [selectedYear, setSelectedYear] = useState<number | null>(initialState.year);
+  const [selectedCollection, setSelectedCollection] = useState(initialState.collection);
   const [tagMode, setTagMode] = useState<TagMode>(initialState.tagMode);
   const [sort, setSort] = useState<SortMode>(initialState.sort);
   const [view, setView] = useState<ViewMode>(initialState.view);
@@ -81,10 +90,13 @@ export function LibraryExplorer({
         ? selectedTags.every((tag) => post.tags.includes(tag))
         : selectedTags.some((tag) => post.tags.includes(tag)));
       return matchesQuery && matchesTags && (!selectedTheme || post.mainTheme === selectedTheme)
-        && (!selectedContentType || post.contentType === selectedContentType);
+        && (!selectedContentType || post.contentType === selectedContentType)
+        && (!selectedAuthor || normalize(post.authorUsername) === normalize(selectedAuthor))
+        && (!selectedYear || (!!post.publishedAt && new Date(post.publishedAt).getUTCFullYear() === selectedYear))
+        && (!selectedCollection || post.collections.includes(selectedCollection) || (selectedCollection === "favoris" && post.tags.includes("Favoris")));
     });
     return filtered.sort((a, b) => comparePosts(a, b, sort));
-  }, [debouncedQuery, posts, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
+  }, [debouncedQuery, posts, selectedAuthor, selectedCollection, selectedContentType, selectedTags, selectedTheme, selectedYear, sort, tagMode]);
 
   const selectedIndex = filteredPosts.findIndex((post) => post.id === selectedPostId);
   const selectedPost = selectedIndex >= 0 ? filteredPosts[selectedIndex] : null;
@@ -95,13 +107,16 @@ export function LibraryExplorer({
     if (selectedTags.length) params.set("tags", selectedTags.join(","));
     if (selectedTheme) params.set("theme", selectedTheme);
     if (selectedContentType) params.set("type", selectedContentType);
+    if (selectedAuthor) params.set("author", selectedAuthor);
+    if (selectedYear) params.set("year", String(selectedYear));
+    if (selectedCollection) params.set("collection", selectedCollection);
     if (tagMode !== "and") params.set("tagMode", tagMode);
     if (sort !== "newest") params.set("sort", sort);
     if (view !== "masonry") params.set("view", view);
     if (selectedPostId) params.set("post", selectedPostId);
     const nextUrl = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`;
     window.history.replaceState(window.history.state, "", nextUrl);
-  }, [debouncedQuery, selectedContentType, selectedPostId, selectedTags, selectedTheme, sort, tagMode, view]);
+  }, [debouncedQuery, selectedAuthor, selectedCollection, selectedContentType, selectedPostId, selectedTags, selectedTheme, selectedYear, sort, tagMode, view]);
 
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
@@ -130,6 +145,9 @@ export function LibraryExplorer({
           selectedTags,
           selectedTheme,
           selectedContentType,
+          selectedAuthor,
+          selectedYear,
+          selectedCollection,
           tagMode,
           sort,
         })}`, { signal: controller.signal });
@@ -147,7 +165,7 @@ export function LibraryExplorer({
     };
     void refresh();
     return () => controller.abort();
-  }, [debouncedQuery, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
+  }, [debouncedQuery, selectedAuthor, selectedCollection, selectedContentType, selectedTags, selectedTheme, selectedYear, sort, tagMode]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -159,6 +177,9 @@ export function LibraryExplorer({
         selectedTags,
         selectedTheme,
         selectedContentType,
+        selectedAuthor,
+        selectedYear,
+        selectedCollection,
         tagMode,
         sort,
         cursor: nextCursor,
@@ -176,7 +197,7 @@ export function LibraryExplorer({
     } finally {
       setLoadingMore(false);
     }
-  }, [debouncedQuery, loadingMore, nextCursor, selectedContentType, selectedTags, selectedTheme, sort, tagMode]);
+  }, [debouncedQuery, loadingMore, nextCursor, selectedAuthor, selectedCollection, selectedContentType, selectedTags, selectedTheme, selectedYear, sort, tagMode]);
 
   const toggleTag = useCallback((tag: string) => {
     setIsFiltering(true);
@@ -190,25 +211,24 @@ export function LibraryExplorer({
       : item));
     setRequestError(null);
     try {
-      const response = await fetch(`/api/posts/${encodeURIComponent(post.id)}/tags`, {
-        method: favorite ? "DELETE" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tag: "Favoris" }),
+      const favoriteCollection = initialCollections.find((collection) => collection.slug === "favoris");
+      if (!favoriteCollection) throw new Error("FAVORITES_COLLECTION_MISSING");
+      const response = await fetch(`/api/collections/${encodeURIComponent(favoriteCollection.id)}/posts/${encodeURIComponent(post.id)}`, {
+        method: favorite ? "DELETE" : "PUT",
       });
       if (!response.ok) throw new Error("FAVORITE_FAILED");
-      const payload = (await response.json()) as { tags: string[] };
-      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, tags: payload.tags } : item));
     } catch {
       setPosts((current) => current.map((item) => item.id === post.id ? post : item));
       setRequestError("Impossible de modifier les favoris.");
     }
-  }, []);
+  }, [initialCollections]);
 
   const resetFilters = useCallback(() => {
     setQuery("");
     setSelectedTags([]);
     setSelectedTheme(null);
     setSelectedContentType(null);
+    setSelectedAuthor(""); setSelectedYear(null); setSelectedCollection(null);
     setTagMode("and");
     setSort("newest");
   }, []);
@@ -332,9 +352,9 @@ export function LibraryExplorer({
           ))}
           <button
             type="button"
-            className={cn(selectedTags.includes("Favoris") && "is-active")}
-            aria-pressed={selectedTags.includes("Favoris")}
-            onClick={() => toggleTag("Favoris")}
+            className={cn(selectedCollection === "favoris" && "is-active")}
+            aria-pressed={selectedCollection === "favoris"}
+            onClick={() => setSelectedCollection((current) => current === "favoris" ? null : "favoris")}
           >
             Favoris
           </button>
@@ -368,6 +388,14 @@ export function LibraryExplorer({
         </div>
 
         <div className="ribbon-end">
+          <input className="compact-filter" aria-label="Filtrer par auteur" placeholder="Auteur" value={selectedAuthor} onChange={(event) => setSelectedAuthor(event.target.value)} />
+          <select aria-label="Filtrer par année" value={selectedYear ?? ""} onChange={(event) => setSelectedYear(event.target.value ? Number(event.target.value) : null)}>
+            <option value="">Toutes les années</option>
+            {[...new Set(initialPosts.flatMap((post) => post.publishedAt ? [new Date(post.publishedAt).getUTCFullYear()] : []))].sort((a,b) => b-a).map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+          <select aria-label="Filtrer par collection" value={selectedCollection ?? ""} onChange={(event) => setSelectedCollection(event.target.value || null)}>
+            <option value="">Toutes les collections</option>{initialCollections.map((collection) => <option key={collection.id} value={collection.slug}>{collection.name} ({collection.count})</option>)}
+          </select>
           <strong className="results-count tabular-nums">
             {filteredPosts.length.toLocaleString("fr-FR")}{nextCursor ? "+" : ""} <span>résultats</span>
           </strong>
@@ -387,7 +415,7 @@ export function LibraryExplorer({
       </section>
 
       <main className={cn("library-layout", filtersVisible && "has-filters")}>
-        {filtersVisible ? <aside className="desktop-filter-panel desktop-only"><FilterContent {...filterProps} /></aside> : null}
+        {filtersVisible ? <aside className="desktop-filter-panel desktop-only"><FilterContent {...filterProps} />{isAdmin ? <CollectionManager initialCollections={initialCollections} /> : null}</aside> : null}
         <section className="library-content" aria-label="Publications sauvegardées" aria-live="polite" aria-busy={isFiltering}>
           {requestError ? <p className="request-error" role="alert">{requestError}</p> : null}
           {isFiltering ? (
@@ -459,6 +487,9 @@ function librarySearchParams(input: {
   selectedTags: string[];
   selectedTheme: string | null;
   selectedContentType: ContentTypeFilter | null;
+  selectedAuthor: string;
+  selectedYear: number | null;
+  selectedCollection: string | null;
   tagMode: TagMode;
   sort: SortMode;
   cursor?: string;
@@ -472,6 +503,9 @@ function librarySearchParams(input: {
   if (input.selectedTags.length) params.set("tags", input.selectedTags.join(","));
   if (input.selectedTheme) params.set("theme", input.selectedTheme);
   if (input.selectedContentType) params.set("type", input.selectedContentType);
+  if (input.selectedAuthor) params.set("author", input.selectedAuthor);
+  if (input.selectedYear) params.set("year", String(input.selectedYear));
+  if (input.selectedCollection) params.set("collection", input.selectedCollection);
   if (input.cursor) params.set("cursor", input.cursor);
   return params.toString();
 }

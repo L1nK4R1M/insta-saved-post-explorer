@@ -33,27 +33,28 @@ enum SyncStatus {
 }
 
 model Post {
-  id             String      @id @default(cuid())
-  ownerId        String      @default("local") @map("owner_id")
-  externalId     String?     @map("external_id")
-  postUrl        String      @map("post_url")
-  thumbnailUrl   String      @map("thumbnail_url")
-  mediaUrl       String?     @map("media_url")
-  authorUsername String      @map("author_username")
-  authorSortKey  String      @map("author_sort_key")
-  caption        String      @db.Text
-  savedAt        DateTime?   @map("saved_at") @db.Timestamptz(3)
-  publishedAt    DateTime?   @map("published_at") @db.Timestamptz(3)
-  contentType    ContentType @default(OTHER) @map("content_type")
-  mainTheme      String?     @map("main_theme")
-  likesCount     Int?        @map("likes_count")
-  commentsCount  Int?        @map("comments_count")
-  metadata       Json        @default("{}")
-  searchText     String      @map("search_text") @db.Text
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
-  postTags       PostTag[]
-  media          PostMedia[]
+  id              String           @id @default(cuid())
+  ownerId         String           @default("local") @map("owner_id")
+  externalId      String?          @map("external_id")
+  postUrl         String           @map("post_url")
+  thumbnailUrl    String           @map("thumbnail_url")
+  mediaUrl        String?          @map("media_url")
+  authorUsername  String           @map("author_username")
+  authorSortKey   String           @map("author_sort_key")
+  caption         String           @db.Text
+  savedAt         DateTime?        @map("saved_at") @db.Timestamptz(3)
+  publishedAt     DateTime?        @map("published_at") @db.Timestamptz(3)
+  contentType     ContentType      @default(OTHER) @map("content_type")
+  mainTheme       String?          @map("main_theme")
+  likesCount      Int?             @map("likes_count")
+  commentsCount   Int?             @map("comments_count")
+  metadata        Json             @default("{}")
+  searchText      String           @map("search_text") @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  postTags        PostTag[]
+  media           PostMedia[]
+  collectionPosts CollectionPost[]
 
   @@unique([ownerId, postUrl], map: "posts_owner_id_post_url_key")
   @@index([ownerId, savedAt, id], map: "posts_owner_saved_at_id_idx")
@@ -63,6 +64,34 @@ model Post {
   @@index([ownerId, likesCount, id], map: "posts_owner_likes_count_id_idx")
   @@index([ownerId, commentsCount, id], map: "posts_owner_comments_count_id_idx")
   @@map("posts")
+}
+
+model Collection {
+  id        String           @id @default(cuid())
+  ownerId   String           @default("local") @map("owner_id")
+  name      String
+  slug      String
+  isSystem  Boolean          @default(false) @map("is_system")
+  isPublic  Boolean          @default(true) @map("is_public")
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  posts     CollectionPost[]
+
+  @@unique([ownerId, slug], map: "collections_owner_id_slug_key")
+  @@index([ownerId, isPublic, name], map: "collections_owner_public_name_idx")
+  @@map("collections")
+}
+
+model CollectionPost {
+  collectionId String     @map("collection_id")
+  postId       String     @map("post_id")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  post         Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, postId])
+  @@index([postId, collectionId], map: "collection_posts_post_id_collection_id_idx")
+  @@map("collection_posts")
 }
 
 model PostMedia {
@@ -129,20 +158,20 @@ model ImportJob {
 }
 
 model SyncJob {
-  id             String     @id @default(cuid())
-  ownerId        String     @default("local") @map("owner_id")
-  status         SyncStatus @default(PENDING)
-  collected      Int        @default(0)
-  imported       Int        @default(0)
-  updated        Int        @default(0)
-  mediaUploaded  Int        @default(0) @map("media_uploaded")
-  mediaFailed    Int        @default(0) @map("media_failed")
-  errorCode      String?    @map("error_code")
-  startedAt      DateTime   @default(now()) @map("started_at") @db.Timestamptz(3)
-  heartbeatAt    DateTime   @default(now()) @map("heartbeat_at") @db.Timestamptz(3)
-  finishedAt     DateTime?  @map("finished_at") @db.Timestamptz(3)
-  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id            String     @id @default(cuid())
+  ownerId       String     @default("local") @map("owner_id")
+  status        SyncStatus @default(PENDING)
+  collected     Int        @default(0)
+  imported      Int        @default(0)
+  updated       Int        @default(0)
+  mediaUploaded Int        @default(0) @map("media_uploaded")
+  mediaFailed   Int        @default(0) @map("media_failed")
+  errorCode     String?    @map("error_code")
+  startedAt     DateTime   @default(now()) @map("started_at") @db.Timestamptz(3)
+  heartbeatAt   DateTime   @default(now()) @map("heartbeat_at") @db.Timestamptz(3)
+  finishedAt    DateTime?  @map("finished_at") @db.Timestamptz(3)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([ownerId, startedAt], map: "sync_jobs_owner_started_idx")
   @@map("sync_jobs")

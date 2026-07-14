@@ -4,7 +4,7 @@ import { LibraryExplorer, type LibraryInitialState } from "@/features/library/co
 import { parseLibraryQuery } from "@/features/library/query-state";
 import type { ContentTypeFilter } from "@/features/library/query-state";
 import type { SortMode, TagMode, ViewMode } from "@/features/library/types";
-import { getLibraryMainThemes, getLibraryTags, queryLibraryPosts } from "@/server/library";
+import { getLibraryCollections, getLibraryMainThemes, getLibraryTags, queryLibraryPosts } from "@/server/library";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -17,6 +17,9 @@ export default async function HomePage({ searchParams }: PageProps) {
     tags: valueOf(params.tags).split(",").map((tag) => tag.trim()).filter(Boolean),
     theme: valueOf(params.theme) || null,
     contentType: contentTypeOf(valueOf(params.type)),
+    author: valueOf(params.author) || null,
+    year: yearOf(valueOf(params.year)),
+    collection: valueOf(params.collection) || null,
     tagMode: oneOf(valueOf(params.tagMode), ["and", "or"], "and"),
     sort: oneOf(valueOf(params.sort), ["newest", "oldest", "author", "relevance", "likes"], "newest"),
     view: oneOf(valueOf(params.view), ["grid", "masonry"], "masonry"),
@@ -25,10 +28,11 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   const session = await getSession().catch(() => null);
   const ownerId = getConfiguredOwnerId();
-  const [library, mainThemes, tagFacets] = await Promise.all([
+  const [library, mainThemes, tagFacets, collections] = await Promise.all([
     loadLibrary(initialState, ownerId),
     getLibraryMainThemes(ownerId).catch(() => []),
     getLibraryTags(ownerId).catch(() => []),
+    getLibraryCollections(ownerId).catch(() => []),
   ]);
   return (
     <LibraryExplorer
@@ -37,6 +41,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       initialState={initialState}
       initialMainThemes={mainThemes}
       initialTagFacets={tagFacets}
+      initialCollections={collections}
       initialError={library.error}
       isAdmin={session?.role === "admin"}
     />
@@ -51,6 +56,9 @@ async function loadLibrary(initialState: LibraryInitialState, ownerId: string) {
         tags: initialState.tags,
         theme: initialState.theme,
         contentType: initialState.contentType,
+        author: initialState.author,
+        year: initialState.year,
+        collection: initialState.collection,
         tagMode: initialState.tagMode,
         sort: initialState.sort,
         limit: 30,
@@ -67,6 +75,8 @@ async function loadLibrary(initialState: LibraryInitialState, ownerId: string) {
     };
   }
 }
+
+function yearOf(value: string): number | null { const year = Number(value); return Number.isInteger(year) && year >= 1900 && year <= 2100 ? year : null; }
 
 function valueOf(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";

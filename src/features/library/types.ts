@@ -28,7 +28,10 @@ export type LibraryPost = {
   likesCount: number | null;
   commentsCount: number | null;
   metadata: Record<string, unknown>;
+  collections: string[];
 };
+
+export type LibraryCollection = { id: string; name: string; slug: string; isSystem: boolean; count: number };
 
 export type LibraryStats = {
   posts: number;
