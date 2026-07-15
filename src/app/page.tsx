@@ -4,7 +4,7 @@ import { LibraryExplorer, type LibraryInitialState } from "@/features/library/co
 import { parseLibraryQuery } from "@/features/library/query-state";
 import type { ContentTypeFilter } from "@/features/library/query-state";
 import type { SortMode, TagMode, ViewMode } from "@/features/library/types";
-import { getLibraryCollections, getLibraryMainThemes, getLibraryTags, queryLibraryPosts } from "@/server/library";
+import { getLibraryCollections, getLibraryMainThemes, getLibraryTags, getLibraryYears, queryLibraryPosts } from "@/server/library";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -28,11 +28,12 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   const session = await getSession().catch(() => null);
   const ownerId = getConfiguredOwnerId();
-  const [library, mainThemes, tagFacets, collections] = await Promise.all([
+  const [library, mainThemes, tagFacets, collections, years] = await Promise.all([
     loadLibrary(initialState, ownerId),
     getLibraryMainThemes(ownerId).catch(() => []),
     getLibraryTags(ownerId).catch(() => []),
     getLibraryCollections(ownerId).catch(() => []),
+    getLibraryYears(ownerId).catch(() => []),
   ]);
   return (
     <LibraryExplorer
@@ -44,6 +45,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       initialMainThemes={mainThemes}
       initialTagFacets={tagFacets}
       initialCollections={collections}
+      initialYears={years}
       initialError={library.error}
       isAdmin={session?.role === "admin"}
     />
