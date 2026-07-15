@@ -19,7 +19,7 @@ import { CollectionManager } from "@/features/library/components/collection-mana
 import { AuthorAutocomplete, type AuthorOption } from "@/features/library/components/author-autocomplete";
 import { useDebouncedValue } from "@/features/library/hooks/use-debounced-value";
 import type { ContentTypeFilter } from "@/features/library/query-state";
-import type { LibraryCollection, LibraryPost, SortMode, TagMode, ViewMode } from "@/features/library/types";
+import type { LibraryCollection, LibraryPost, LibraryYear, SortMode, TagMode, ViewMode } from "@/features/library/types";
 import { cn } from "@/lib/utils";
 
 export type LibraryInitialState = {
@@ -45,6 +45,7 @@ export function LibraryExplorer({
   initialMainThemes,
   initialTagFacets,
   initialCollections,
+  initialYears,
   initialError,
   isAdmin,
 }: {
@@ -56,6 +57,7 @@ export function LibraryExplorer({
   initialMainThemes: string[];
   initialTagFacets: TagFacet[];
   initialCollections: LibraryCollection[];
+  initialYears: LibraryYear[];
   initialError?: string;
   isAdmin: boolean;
 }) {
@@ -458,7 +460,7 @@ export function LibraryExplorer({
           <div className="compact-control author-control"><span className="compact-control-label">Auteur</span><AuthorAutocomplete options={authorOptions} value={selectedAuthor} onValueChange={setSelectedAuthor} /></div>
           <label className="compact-control year-control"><span className="compact-control-label">Année</span><select aria-label="Filtrer par année" value={selectedYear ?? ""} onChange={(event) => setSelectedYear(event.target.value ? Number(event.target.value) : null)}>
             <option value="">Toutes les années</option>
-            {[...new Set(initialPosts.flatMap((post) => post.publishedAt ? [new Date(post.publishedAt).getUTCFullYear()] : []))].sort((a,b) => b-a).map((year) => <option key={year} value={year}>{year}</option>)}
+            {initialYears.map(({ year, count }) => <option key={year} value={year}>{year} ({count})</option>)}
           </select></label>
           <label className="compact-control collection-control"><span className="compact-control-label">Collection</span><select aria-label="Filtrer par collection" value={selectedCollection ?? ""} onChange={(event) => setSelectedCollection(event.target.value || null)}>
             <option value="">Toutes les collections</option>{initialCollections.map((collection) => <option key={collection.id} value={collection.slug}>{collection.name} ({collection.count})</option>)}
@@ -514,7 +516,7 @@ export function LibraryExplorer({
             <div className="compact-control author-control"><span className="compact-control-label">Auteur</span><AuthorAutocomplete options={authorOptions} value={selectedAuthor} onValueChange={setSelectedAuthor} label="Filtrer par auteur dans le drawer" /></div>
             <label className="compact-control year-control"><span className="compact-control-label">Année</span><select aria-label="Filtrer par année dans le drawer" value={selectedYear ?? ""} onChange={(event) => setSelectedYear(event.target.value ? Number(event.target.value) : null)}>
               <option value="">Toutes les années</option>
-              {[...new Set(initialPosts.flatMap((post) => post.publishedAt ? [new Date(post.publishedAt).getUTCFullYear()] : []))].sort((a,b) => b-a).map((year) => <option key={year} value={year}>{year}</option>)}
+              {initialYears.map(({ year, count }) => <option key={year} value={year}>{year} ({count})</option>)}
             </select></label>
             <label className="compact-control collection-control"><span className="compact-control-label">Collection</span><select aria-label="Filtrer par collection dans le drawer" value={selectedCollection ?? ""} onChange={(event) => setSelectedCollection(event.target.value || null)}>
               <option value="">Toutes les collections</option>{initialCollections.map((collection) => <option key={collection.id} value={collection.slug}>{collection.name} ({collection.count})</option>)}

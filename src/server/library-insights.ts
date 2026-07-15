@@ -2,7 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
-import type { ContentType, LibraryAuthor, LibraryPost, LibraryStats } from "@/features/library/types";
+import type { ContentType, LibraryAuthor, LibraryPost, LibraryStats, LibraryYear } from "@/features/library/types";
 import { foldForSearch } from "@/lib/import/normalize";
 import { databaseConfigured, prisma } from "@/server/db";
 import { parseOwnerId } from "@/server/owner";
@@ -40,6 +40,19 @@ export function calculateFallbackAuthors(posts: LibraryPost[], search: string, l
   return [...authors.values()]
     .sort((a, b) => b.postCount - a.postCount || a.username.localeCompare(b.username, "fr", { sensitivity: "base" }))
     .slice(0, limit);
+}
+
+export function calculateLibraryYears(posts: LibraryPost[]): LibraryYear[] {
+  const counts = new Map<number, number>();
+  for (const post of posts) {
+    if (!post.publishedAt) continue;
+    const year = new Date(post.publishedAt).getUTCFullYear();
+    if (!Number.isFinite(year)) continue;
+    counts.set(year, (counts.get(year) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([year, count]) => ({ year, count }))
+    .sort((left, right) => right.year - left.year);
 }
 
 export async function getDatabaseLibraryStats(ownerIdInput: string): Promise<LibraryStats> {
@@ -94,7 +107,7 @@ export async function getDatabaseLibraryStats(ownerIdInput: string): Promise<Lib
 export function calculateDetailedFallbackStats(posts: LibraryPost[]): LibraryStats {
   const media = posts.flatMap((post) => post.media);
   const themes = countBy(posts.flatMap((post) => post.mainTheme ? [post.mainTheme] : []));
-  const years = countBy(posts.flatMap((post) => post.publishedAt ? [String(new Date(post.publishedAt).getUTCFullYear())] : []));
+  const years = calculateLibraryYears(posts);
   const ratedLikes = posts.filter((post) => post.likesCount !== null);
   const ratedComments = posts.filter((post) => post.commentsCount !== null);
   const contentCount = (type: ContentType) => posts.filter((post) => post.contentType === type).length;
@@ -114,7 +127,7 @@ export function calculateDetailedFallbackStats(posts: LibraryPost[]): LibrarySta
     },
     distributions: {
       themes: themes.map(([name, count]) => ({ name, count })),
-      years: years.map(([year, count]) => ({ year: Number(year), count })).sort((a, b) => b.year - a.year),
+      years,
       topAuthors: calculateFallbackAuthors(posts, "", TOP_DISTRIBUTION_LIMIT),
       mediaTypes: (["image", "carousel", "reel", "other"] as const).map((type) => ({ type, count: contentCount(type) })),
     },

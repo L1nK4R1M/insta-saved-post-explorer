@@ -7,7 +7,7 @@ import { vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { LibraryPost } from "@/features/library/types";
-import { calculateDetailedFallbackStats, calculateFallbackAuthors } from "@/server/library-insights";
+import { calculateDetailedFallbackStats, calculateFallbackAuthors, calculateLibraryYears } from "@/server/library-insights";
 
 const post = (overrides: Partial<LibraryPost>): LibraryPost => ({
   id: "1", externalId: null, postUrl: "https://instagram.com/p/1", thumbnailUrl: "", mediaUrl: null,
@@ -30,5 +30,16 @@ describe("library insights fallback", () => {
     expect(stats.averages).toMatchObject({ likesPerRatedPost: 10, commentsPerRatedPost: 3, mediaPerPost: 1, tagsPerPost: 1.5 });
     expect(stats.distributions.mediaTypes).toContainEqual({ type: "reel", count: 1 });
     expect(stats.distributions.years).toEqual([{ year: 2025, count: 2 }]);
+  });
+
+  it("lists every publication year with global counts in descending order", () => {
+    expect(calculateLibraryYears([
+      ...posts,
+      post({ id: "3", publishedAt: "2023-12-31T23:00:00.000Z" }),
+      post({ id: "4", publishedAt: null }),
+    ])).toEqual([
+      { year: 2025, count: 2 },
+      { year: 2023, count: 1 },
+    ]);
   });
 });

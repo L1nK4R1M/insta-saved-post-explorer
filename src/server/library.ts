@@ -7,7 +7,7 @@ import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
-import type { ContentType, LibraryPost, LibraryStats, SortMode } from "@/features/library/types";
+import type { ContentType, LibraryPost, LibraryStats, LibraryYear, SortMode } from "@/features/library/types";
 import {
   filterAndPaginatePosts,
   type LibraryPostPage,
@@ -27,7 +27,7 @@ import {
 import { resolvePublicMediaUrl } from "@/lib/media-url";
 import { databaseConfigured, prisma } from "@/server/db";
 import { getApplicationOwnerId, parseOwnerId } from "@/server/owner";
-import { calculateDetailedFallbackStats, getDatabaseLibraryStats, getLibraryAuthors as queryLibraryAuthors } from "@/server/library-insights";
+import { calculateDetailedFallbackStats, calculateLibraryYears, getDatabaseLibraryStats, getLibraryAuthors as queryLibraryAuthors } from "@/server/library-insights";
 
 type PostWithTags = Prisma.PostGetPayload<{
   include: {
@@ -378,6 +378,18 @@ export async function getLibraryMainThemes(requestedOwnerId?: string): Promise<s
     orderBy: { mainTheme: "asc" },
   });
   return rows.flatMap((row) => row.mainTheme ? [row.mainTheme] : []);
+}
+
+export async function getLibraryYears(requestedOwnerId?: string): Promise<LibraryYear[]> {
+  const ownerId = parseOwnerId(requestedOwnerId ?? getApplicationOwnerId());
+  if (!databaseConfigured) {
+    return calculateLibraryYears(await readFallbackPosts());
+  }
+
+  const rows = await prisma.$queryRaw<Array<{ year: number; count: bigint }>>(
+    Prisma.sql`SELECT EXTRACT(YEAR FROM "published_at")::integer AS year, COUNT(*)::bigint AS count FROM "posts" WHERE "owner_id" = ${ownerId} AND "published_at" IS NOT NULL GROUP BY 1 ORDER BY 1 DESC`,
+  );
+  return rows.map((row) => ({ year: row.year, count: Number(row.count) }));
 }
 
 export async function getLibraryStats(requestedOwnerId?: string): Promise<LibraryStats> {

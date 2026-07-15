@@ -64,6 +64,7 @@ export type LibraryStats = {
 };
 
 export type LibraryAuthor = { username: string; postCount: number };
+export type LibraryYear = { year: number; count: number };
 
 export type TagMode = "and" | "or";
 export type ViewMode = "grid" | "masonry";
