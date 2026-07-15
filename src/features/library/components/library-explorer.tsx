@@ -548,8 +548,8 @@ function comparePosts(a: LibraryPost, b: LibraryPost, sort: SortMode) {
   if (sort === "author") return a.authorUsername.localeCompare(b.authorUsername, "fr-FR");
   if (sort === "relevance") return 0;
   if (sort === "likes") return (b.likesCount ?? -1) - (a.likesCount ?? -1);
-  const aDate = Date.parse(a.savedAt || a.publishedAt || "1970-01-01");
-  const bDate = Date.parse(b.savedAt || b.publishedAt || "1970-01-01");
+  const aDate = Date.parse(a.savedAt || a.createdAt || "1970-01-01");
+  const bDate = Date.parse(b.savedAt || b.createdAt || "1970-01-01");
   return sort === "oldest" ? aDate - bDate : bDate - aDate;
 }
 

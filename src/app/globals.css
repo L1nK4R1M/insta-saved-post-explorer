@@ -488,6 +488,11 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 
 @media (max-width: 420px) {
   html, body, .app-shell { max-width: 100%; overflow-x: clip; }
+  .app-header { position: static; display: grid; grid-template-columns: 1fr; min-height: 0; gap: 10px; padding: 10px 12px 12px; }
+  .header-actions { order: 1; justify-self: center; margin-left: 0; }
+  .brand { order: 2; justify-self: center; }
+  .global-search { order: 3; }
+  .control-ribbon { position: static; top: auto; }
   .control-ribbon { display: grid; grid-template-columns: auto minmax(32px, auto) minmax(82px, 1fr) 88px; min-height: 0; gap: 6px; padding: 6px 8px; }
   .mobile-filter-trigger { grid-column: 1; grid-row: 1; min-width: 0; padding-inline: 9px; }
   .ribbon-end { display: contents; }

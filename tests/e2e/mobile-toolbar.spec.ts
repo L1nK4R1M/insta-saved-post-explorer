@@ -30,6 +30,15 @@ for (const width of mobileWidths) {
       await expect(page.locator(".ribbon-end .year-control")).toBeHidden();
       await expect(page.locator(".ribbon-end .collection-control")).toBeHidden();
       await expect(page.locator(".main-theme-filters")).toHaveCSS("overflow-x", "auto");
+      await expect(page.locator(".app-header")).toHaveCSS("position", "static");
+      await expect(ribbon).toHaveCSS("position", "static");
+
+      const brandBox = await page.locator(".brand").boundingBox();
+      const actionsBox = await page.locator(".header-actions").boundingBox();
+      expect(brandBox).not.toBeNull();
+      expect(actionsBox).not.toBeNull();
+      expect(Math.abs((brandBox!.x + brandBox!.width / 2) - width / 2)).toBeLessThan(3);
+      expect(actionsBox!.y).toBeLessThan(brandBox!.y);
 
       const ribbonBottom = await ribbon.evaluate((node) => node.getBoundingClientRect().bottom);
       const postTop = await firstPost.evaluate((node) => node.getBoundingClientRect().top);

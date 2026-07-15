@@ -22,6 +22,7 @@ export type LibraryPost = {
   caption: string;
   tags: string[];
   savedAt: string | null;
+  createdAt?: string | null;
   publishedAt: string | null;
   contentType: ContentType;
   mainTheme: string | null;
