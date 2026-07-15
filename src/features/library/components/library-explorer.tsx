@@ -396,6 +396,21 @@ export function LibraryExplorer({
         </nav>
       </header>
 
+      <section className="mobile-sticky-toolbar" aria-label="Filtres et tri rapides">
+        <button className="button mobile-filter-trigger" type="button" aria-label={`Ouvrir les filtres, ${activeFilterCount} actif${activeFilterCount === 1 ? "" : "s"}`} aria-haspopup="dialog" aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen(true)}>
+          <SlidersHorizontal aria-hidden="true" className="size-4 text-accent" /> Filtres
+          {activeFilterCount ? <span className="count-badge" aria-hidden="true">{activeFilterCount}</span> : null}
+        </button>
+        <strong className="results-count tabular-nums" aria-live="polite">{totalFiltered.toLocaleString("fr-FR")}</strong>
+        <label className="mobile-sort-control"><span className="sr-only">Trier les résultats</span><select aria-label="Trier les résultats" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
+          <option value="newest">Plus récents</option><option value="oldest">Plus anciens</option><option value="author">Auteur</option><option value="relevance">Pertinence</option><option value="likes">Plus likés</option>
+        </select></label>
+        <div className="view-switch" aria-label="Mode d’affichage">
+          <button type="button" aria-label="Grille régulière" aria-pressed={view === "grid"} className={cn(view === "grid" && "is-active")} onClick={() => setView("grid")}><Grid2X2 aria-hidden="true" className="size-4" /></button>
+          <button type="button" aria-label="Grille masonry" aria-pressed={view === "masonry"} className={cn(view === "masonry" && "is-active")} onClick={() => setView("masonry")}><LayoutGrid aria-hidden="true" className="size-4" /></button>
+        </div>
+      </section>
+
       <section className="control-ribbon" aria-label="Filtres et tri">
         <button className="button desktop-only" type="button" aria-expanded={filtersVisible} onClick={() => setFiltersVisible((value) => !value)}>
           <SlidersHorizontal aria-hidden="true" className="size-4 text-accent" /> Filtres avancés

@@ -446,6 +446,7 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 .tag-admin-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }.tag-admin-list > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 11px; padding: 9px 10px; }.tag-admin-list > div > span { display: flex; align-items: center; gap: 6px; }.tag-admin-list > div > span:first-child { display: grid; }.tag-admin-list small { color: var(--muted); }.tag-admin-list svg { width: 14px; height: 14px; }
 
 .mobile-only { display: none; }
+.mobile-sticky-toolbar { display: none; }
 
 @media (max-width: 920px) {
   .admin-shell { padding: 12px; }.admin-header { grid-template-columns: auto 1fr; }.admin-header > .button { grid-column: 1 / -1; justify-content: center; }.admin-grid { grid-template-columns: 1fr; }.admin-panel, .admin-overview, .admin-tags { grid-column: 1; }.admin-kpis, .health-grid, .admin-breakdowns, .tag-admin-list { grid-template-columns: 1fr 1fr; }.admin-breakdowns > div:last-child { grid-column: 1 / -1; }.variant-list > div { align-items: flex-start; flex-direction: column; }
@@ -488,12 +489,18 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 
 @media (max-width: 420px) {
   html, body, .app-shell { max-width: 100%; overflow-x: clip; }
-  .app-header { position: static; display: grid; grid-template-columns: 1fr; min-height: 0; gap: 10px; padding: 10px 12px 12px; }
-  .header-actions { order: 1; justify-self: center; margin-left: 0; }
-  .brand { order: 2; justify-self: center; }
+  .app-header { position: static; display: grid; grid-template-columns: 1fr; min-height: 0; gap: 8px; padding: 10px 12px 12px; }
+  .brand { order: 1; justify-self: center; }
+  .header-actions { order: 2; justify-self: end; margin-left: 0; }
   .global-search { order: 3; }
-  .control-ribbon { position: static; top: auto; }
-  .control-ribbon { display: grid; grid-template-columns: auto minmax(32px, auto) minmax(82px, 1fr) 88px; min-height: 0; gap: 6px; padding: 6px 8px; }
+  .mobile-sticky-toolbar { position: sticky; top: 0; z-index: 25; display: grid; grid-template-columns: auto minmax(32px, auto) minmax(82px, 1fr) 88px; min-height: 56px; align-items: center; gap: 6px; border-bottom: 1px solid var(--line); background: var(--background); padding: 6px 8px; }
+  .mobile-sticky-toolbar .mobile-filter-trigger { min-width: 0; padding-inline: 9px; }
+  .mobile-sticky-toolbar .results-count { justify-self: center; white-space: nowrap; }
+  .mobile-sort-control { min-width: 0; }
+  .mobile-sort-control select { width: 100%; min-width: 0; height: 44px; padding-inline: 8px 22px; font-size: .72rem; }
+  .mobile-sticky-toolbar .view-switch { display: grid; grid-template-columns: repeat(2, 44px); justify-self: end; }
+  .control-ribbon { position: static; top: auto; display: block; min-height: 0; padding: 6px 8px; }
+  .control-ribbon > .mobile-filter-trigger, .control-ribbon > .ribbon-end { display: none; }
   .mobile-filter-trigger { grid-column: 1; grid-row: 1; min-width: 0; padding-inline: 9px; }
   .ribbon-end { display: contents; }
   .ribbon-end .author-control, .ribbon-end .year-control, .ribbon-end .collection-control { display: none; }
@@ -502,7 +509,7 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
   .sort-control .compact-control-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .sort-control select { width: 100%; min-width: 0; height: 44px; padding-inline: 8px 22px; font-size: .72rem; }
   .view-switch { grid-column: 4; grid-row: 1; display: grid; grid-template-columns: repeat(2, 44px); justify-self: end; }
-  .main-theme-filters { grid-column: 1 / -1; grid-row: 2; width: 100%; max-width: 100%; overscroll-behavior-x: contain; }
+  .main-theme-filters { width: 100%; max-width: 100%; overscroll-behavior-x: contain; }
   .main-theme-filters button { min-height: 44px; }
   .active-tags { display: none; }
   .library-layout, .library-layout.has-filters { padding-top: 6px; }
