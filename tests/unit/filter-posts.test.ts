@@ -97,7 +97,7 @@ describe("filterAndPaginatePosts", () => {
 
   it("utilise la date d'ajout en base quand la date de sauvegarde manque", () => {
     const dated = posts.map((post) => ({ ...post }));
-    dated[3].createdAt = "2025-01-20T10:00:00.000Z";
+    dated[3].createdAt = "2027-01-20T10:00:00.000Z";
     expect(filterAndPaginatePosts(dated, parseLibraryQuery({ sort: "newest" })).items.map((post) => post.id)).toEqual(["d", "a", "b", "c"]);
   });
 });
