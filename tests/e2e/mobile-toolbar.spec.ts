@@ -11,8 +11,10 @@ for (const width of mobileWidths) {
 
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       const ribbon = page.locator(".control-ribbon");
+      const stickyToolbar = page.locator(".mobile-sticky-toolbar");
       const firstPost = page.locator("[data-post-id]").first();
       await expect(ribbon).toBeVisible();
+      await expect(stickyToolbar).toBeVisible();
       await expect(firstPost).toBeVisible();
 
       const compactControls = [
@@ -32,13 +34,20 @@ for (const width of mobileWidths) {
       await expect(page.locator(".main-theme-filters")).toHaveCSS("overflow-x", "auto");
       await expect(page.locator(".app-header")).toHaveCSS("position", "static");
       await expect(ribbon).toHaveCSS("position", "static");
+      await expect(stickyToolbar).toHaveCSS("position", "sticky");
 
       const brandBox = await page.locator(".brand").boundingBox();
       const actionsBox = await page.locator(".header-actions").boundingBox();
       expect(brandBox).not.toBeNull();
       expect(actionsBox).not.toBeNull();
       expect(Math.abs((brandBox!.x + brandBox!.width / 2) - width / 2)).toBeLessThan(3);
-      expect(actionsBox!.y).toBeLessThan(brandBox!.y);
+      expect(actionsBox!.y).toBeGreaterThan(brandBox!.y);
+      expect(Math.abs((actionsBox!.x + actionsBox!.width) - (width - 12))).toBeLessThan(3);
+
+      await page.evaluate(() => window.scrollTo(0, 700));
+      await expect.poll(() => page.locator(".app-header").evaluate((node) => node.getBoundingClientRect().bottom < 0)).toBe(true);
+      await expect.poll(() => stickyToolbar.evaluate((node) => Math.abs(node.getBoundingClientRect().top) < 2)).toBe(true);
+      await expect.poll(() => page.locator(".main-theme-filters").evaluate((node) => node.getBoundingClientRect().bottom < 0)).toBe(true);
 
       const ribbonBottom = await ribbon.evaluate((node) => node.getBoundingClientRect().bottom);
       const postTop = await firstPost.evaluate((node) => node.getBoundingClientRect().top);
