@@ -88,13 +88,13 @@ export function comparePosts(
     );
   } else if (sort === "relevance") {
     comparison = relevanceScore(right, search) - relevanceScore(left, search);
-    if (comparison === 0) comparison = compareNullableDates(left.savedAt, right.savedAt, "desc");
+    if (comparison === 0) comparison = compareNullableDates(effectiveLibraryDate(left), effectiveLibraryDate(right), "desc");
   } else if (sort === "oldest") {
-    comparison = compareNullableDates(left.savedAt, right.savedAt);
+    comparison = compareNullableDates(effectiveLibraryDate(left), effectiveLibraryDate(right));
   } else if (sort === "likes") {
     comparison = compareNullableNumbers(left.likesCount, right.likesCount);
   } else {
-    comparison = compareNullableDates(left.savedAt, right.savedAt, "desc");
+    comparison = compareNullableDates(effectiveLibraryDate(left), effectiveLibraryDate(right), "desc");
   }
 
   return comparison || left.id.localeCompare(right.id);
@@ -104,7 +104,11 @@ export function cursorValue(post: LibraryPost, sort: SortMode, search = ""): str
   if (sort === "author") return foldForSearch(post.authorUsername);
   if (sort === "relevance") return String(relevanceScore(post, search));
   if (sort === "likes") return leftPadMetric(post.likesCount);
-  return post.savedAt;
+  return effectiveLibraryDate(post);
+}
+
+function effectiveLibraryDate(post: LibraryPost): string | null {
+  return post.savedAt ?? post.createdAt ?? null;
 }
 
 function compareNullableNumbers(left: number | null, right: number | null): number {

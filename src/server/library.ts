@@ -86,6 +86,9 @@ export async function queryLibraryPosts(
     ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
     ...tagWhere(ownerId, query.tags, query.tagMode),
   };
+  if (effectiveSort === "newest" || effectiveSort === "oldest") {
+    return queryPostsByEffectiveSavedDate(ownerId, query, baseWhere, cursor, effectiveSort);
+  }
   const where: Prisma.PostWhereInput = { ...baseWhere, ...cursorWhere(cursor, effectiveSort) };
   const [rows, totalFiltered, totalLibrary] = await prisma.$transaction([
     prisma.post.findMany({ where, include: postInclude, orderBy: orderByFor(effectiveSort), take: query.limit + 1 }),
@@ -103,6 +106,61 @@ export async function queryLibraryPosts(
       : null;
 
   return { items, nextCursor, total: totalFiltered, totalFiltered, totalLibrary };
+}
+
+async function queryPostsByEffectiveSavedDate(
+  ownerId: string,
+  query: LibraryQuery,
+  baseWhere: Prisma.PostWhereInput,
+  cursor: LibraryCursor | null,
+  sort: "newest" | "oldest",
+): Promise<LibraryPostPage> {
+  const [candidates, totalLibrary] = await prisma.$transaction([
+    prisma.post.findMany({
+      where: baseWhere,
+      select: { id: true, savedAt: true, createdAt: true },
+    }),
+    prisma.post.count({ where: { ownerId } }),
+  ]);
+  candidates.sort((left, right) => {
+    const leftTime = (left.savedAt ?? left.createdAt).getTime();
+    const rightTime = (right.savedAt ?? right.createdAt).getTime();
+    const dateOrder = sort === "oldest" ? leftTime - rightTime : rightTime - leftTime;
+    return dateOrder || left.id.localeCompare(right.id);
+  });
+
+  let start = 0;
+  if (cursor) {
+    const cursorIndex = candidates.findIndex((post) =>
+      post.id === cursor.id && (post.savedAt ?? post.createdAt).toISOString() === cursor.value,
+    );
+    if (cursorIndex < 0) throw cursorValidationError();
+    start = cursorIndex + 1;
+  }
+
+  const pageCandidates = candidates.slice(start, start + query.limit + 1);
+  const hasNextPage = pageCandidates.length > query.limit;
+  const selectedCandidates = hasNextPage ? pageCandidates.slice(0, query.limit) : pageCandidates;
+  const rows = selectedCandidates.length
+    ? await prisma.post.findMany({ where: { id: { in: selectedCandidates.map((post) => post.id) } }, include: postInclude })
+    : [];
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const orderedRows = selectedCandidates.flatMap((post) => {
+    const row = rowsById.get(post.id);
+    return row ? [row] : [];
+  });
+  const last = selectedCandidates.at(-1);
+  const nextCursor = hasNextPage && last
+    ? encodeLibraryCursor({ version: 1, sort: query.sort, value: (last.savedAt ?? last.createdAt).toISOString(), id: last.id })
+    : null;
+
+  return {
+    items: orderedRows.map((row) => toLibraryPost(row, true)),
+    nextCursor,
+    total: candidates.length,
+    totalFiltered: candidates.length,
+    totalLibrary,
+  };
 }
 
 export async function getRandomLibraryPost(
@@ -457,7 +515,7 @@ function cursorFromRow(
       ? row.authorSortKey
       : effectiveSort === "likes"
         ? String(row.likesCount ?? "") || null
-        : row.savedAt?.toISOString() ?? null,
+        : (row.savedAt ?? row.createdAt).toISOString(),
     id: row.id,
   };
 }
@@ -501,6 +559,7 @@ function toLibraryPost(row: PostWithTags, compact: boolean): LibraryPost {
     caption: compact ? row.caption.slice(0, 500) : row.caption,
     tags: tags.sort((a, b) => a.localeCompare(b, "fr")),
     savedAt: row.savedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
     publishedAt: row.publishedAt?.toISOString() ?? null,
     contentType: row.contentType.toLowerCase() as ContentType,
     mainTheme: row.mainTheme,
@@ -545,6 +604,7 @@ async function readFallbackPosts(): Promise<LibraryPost[]> {
         caption: post.caption,
         tags: post.tags,
         savedAt: post.savedAt?.toISOString() ?? null,
+        createdAt: null,
         publishedAt: post.publishedAt?.toISOString() ?? null,
         contentType: post.contentType,
         mainTheme: post.mainTheme,
