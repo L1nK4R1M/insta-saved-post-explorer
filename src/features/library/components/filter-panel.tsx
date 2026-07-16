@@ -20,6 +20,7 @@ type FilterContentProps = {
   onReset: () => void;
   selectedContentType: ContentTypeFilter | null;
   onContentTypeChange: (type: ContentTypeFilter | null) => void;
+  canReset?: boolean;
 };
 
 export function FilterContent({
@@ -31,6 +32,7 @@ export function FilterContent({
   onReset,
   selectedContentType,
   onContentTypeChange,
+  canReset,
 }: FilterContentProps) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"frequency" | "alphabetical">("frequency");
@@ -123,7 +125,7 @@ export function FilterContent({
         {visibleFacets.length === 0 ? <p className="p-3 text-pretty text-sm text-muted">Aucun tag trouvé.</p> : null}
       </div>
 
-      <button className="button w-full" type="button" onClick={onReset} disabled={selectedTags.length === 0}>
+      <button className="button w-full" type="button" onClick={onReset} disabled={canReset ?? (selectedTags.length === 0 && selectedContentType === null)}>
         <Trash2 aria-hidden="true" className="size-4" />
         Effacer les filtres
       </button>

@@ -284,7 +284,6 @@ export function LibraryExplorer({
     setSelectedContentType(null);
     setSelectedAuthor(""); setSelectedYear(null); setSelectedCollection(null);
     setTagMode("and");
-    setSort("newest");
   }, []);
 
   const discoverPost = useCallback(async () => {
@@ -327,7 +326,8 @@ export function LibraryExplorer({
     setSelectedPostId(filteredPosts[nextIndex].id);
   }, [filteredPosts, selectedIndex]);
 
-  const filterProps = { facets, selectedTags, tagMode, onTagModeChange: setTagMode, onToggleTag: toggleTag, onReset: resetFilters, selectedContentType, onContentTypeChange: (type: ContentTypeFilter | null) => { setIsFiltering(true); setSelectedContentType(type); } };
+  const filterProps = { facets, selectedTags, tagMode, onTagModeChange: setTagMode, onToggleTag: toggleTag, onReset: resetFilters, selectedContentType, onContentTypeChange: (type: ContentTypeFilter | null) => { setIsFiltering(true); setSelectedContentType(type); }, canReset: activeFilterCount > 0 };
+  const selectedCollectionName = initialCollections.find((collection) => collection.slug === selectedCollection)?.name ?? selectedCollection;
 
   return (
     <div className="app-shell">
@@ -399,7 +399,7 @@ export function LibraryExplorer({
       </header>
 
       <section className="mobile-sticky-toolbar" aria-label="Filtres et tri rapides">
-        <button className="button mobile-filter-trigger" type="button" aria-label={`Ouvrir les filtres, ${activeFilterCount} actif${activeFilterCount === 1 ? "" : "s"}`} aria-haspopup="dialog" aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen(true)}>
+        <button className={cn("button mobile-filter-trigger", activeFilterCount > 0 && "is-active")} type="button" aria-label={`Ouvrir les filtres, ${activeFilterCount} actif${activeFilterCount === 1 ? "" : "s"}`} aria-haspopup="dialog" aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen(true)}>
           <SlidersHorizontal aria-hidden="true" className="size-4 text-accent" /> Filtres
           {activeFilterCount ? <span className="count-badge" aria-hidden="true">{activeFilterCount}</span> : null}
         </button>
@@ -411,6 +411,18 @@ export function LibraryExplorer({
           <button type="button" aria-label="Grille régulière" aria-pressed={view === "grid"} className={cn(view === "grid" && "is-active")} onClick={() => setView("grid")}><Grid2X2 aria-hidden="true" className="size-4" /></button>
           <button type="button" aria-label="Grille masonry" aria-pressed={view === "masonry"} className={cn(view === "masonry" && "is-active")} onClick={() => setView("masonry")}><LayoutGrid aria-hidden="true" className="size-4" /></button>
         </div>
+        {activeFilterCount > 0 ? (
+          <div className="mobile-active-filters" aria-label="Filtres actifs">
+            {query.trim() ? <ActiveMobileFilter label={`Recherche : ${query.trim()}`} onRemove={() => setQuery("")} /> : null}
+            {selectedTheme ? <ActiveMobileFilter label={themeLabel(selectedTheme)} onRemove={() => setSelectedTheme(null)} /> : null}
+            {selectedContentType ? <ActiveMobileFilter label={contentTypeLabel(selectedContentType)} onRemove={() => setSelectedContentType(null)} /> : null}
+            {selectedAuthor ? <ActiveMobileFilter label={`@${selectedAuthor.replace(/^@/, "")}`} onRemove={() => setSelectedAuthor("")} /> : null}
+            {selectedYear ? <ActiveMobileFilter label={String(selectedYear)} onRemove={() => setSelectedYear(null)} /> : null}
+            {selectedCollection ? <ActiveMobileFilter label={selectedCollectionName ?? selectedCollection} onRemove={() => setSelectedCollection(null)} /> : null}
+            {selectedTags.map((tag) => <ActiveMobileFilter key={tag} label={tag} onRemove={() => toggleTag(tag)} />)}
+            <button className="mobile-clear-filters" type="button" onClick={resetFilters}>Tout effacer</button>
+          </div>
+        ) : null}
       </section>
 
       <section className="control-ribbon" aria-label="Filtres et tri">
@@ -513,7 +525,7 @@ export function LibraryExplorer({
         onOpenChange={setMobileFiltersOpen}
         mobileSecondaryControls={(
           <>
-            <div className="compact-control author-control"><span className="compact-control-label">Auteur</span><AuthorAutocomplete options={authorOptions} value={selectedAuthor} onValueChange={setSelectedAuthor} label="Filtrer par auteur dans le drawer" /></div>
+            <div className="compact-control author-control"><span className="compact-control-label">Auteur</span><AuthorAutocomplete options={authorOptions} value={selectedAuthor} onValueChange={setSelectedAuthor} label="Filtrer par auteur dans le drawer" forceBelow /></div>
             <label className="compact-control year-control"><span className="compact-control-label">Année</span><select aria-label="Filtrer par année dans le drawer" value={selectedYear ?? ""} onChange={(event) => setSelectedYear(event.target.value ? Number(event.target.value) : null)}>
               <option value="">Toutes les années</option>
               {initialYears.map(({ year, count }) => <option key={year} value={year}>{year} ({count})</option>)}
@@ -555,6 +567,14 @@ export function LibraryExplorer({
 
 function themeLabel(theme: string) {
   return ["cuisne", "cusine"].includes(normalize(theme)) ? "Cuisine" : theme;
+}
+
+function contentTypeLabel(type: ContentTypeFilter) {
+  return type === "image" ? "Photos" : type === "carousel" ? "Carrousels" : "Vidéos";
+}
+
+function ActiveMobileFilter({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return <button type="button" className="mobile-filter-chip" aria-label={`Retirer le filtre ${label}`} onClick={onRemove}><span className="truncate">{label}</span><X aria-hidden="true" className="size-3" /></button>;
 }
 
 function normalize(value: string) {
