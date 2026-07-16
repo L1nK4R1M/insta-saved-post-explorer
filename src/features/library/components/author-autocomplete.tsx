@@ -7,9 +7,9 @@ import { useId, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type AuthorOption = string | { username: string; postCount: number };
-export type AuthorAutocompleteProps = { options: AuthorOption[]; value: string; onValueChange: (value: string) => void; label?: string; placeholder?: string };
+export type AuthorAutocompleteProps = { options: AuthorOption[]; value: string; onValueChange: (value: string) => void; label?: string; placeholder?: string; forceBelow?: boolean };
 
-export function AuthorAutocomplete({ options, value, onValueChange, label = "Filtrer par auteur", placeholder = "Auteur" }: AuthorAutocompleteProps) {
+export function AuthorAutocomplete({ options, value, onValueChange, label = "Filtrer par auteur", placeholder = "Auteur", forceBelow = false }: AuthorAutocompleteProps) {
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
@@ -34,7 +34,7 @@ export function AuthorAutocomplete({ options, value, onValueChange, label = "Fil
           }} />
         {value ? <button type="button" className="author-clear" aria-label="Effacer le filtre auteur" onClick={() => { onValueChange(""); setActiveIndex(0); inputRef.current?.focus(); }}><X aria-hidden="true" className="size-3.5" /></button> : null}
       </div></Popover.Anchor>
-      <Popover.Portal><Popover.Content className="author-suggestions" sideOffset={5} align="start" onOpenAutoFocus={(event) => event.preventDefault()}>
+      <Popover.Portal><Popover.Content className="author-suggestions" side="bottom" sideOffset={5} align="start" avoidCollisions={!forceBelow} collisionPadding={8} onOpenAutoFocus={(event) => event.preventDefault()}>
         <div id={listboxId} role="listbox" aria-label="Suggestions d’auteurs">{suggestions.map((option, index) => { const username = optionName(option); return <button id={`${listboxId}-${index}`} key={username} type="button" role="option" aria-selected={value === username} className={cn(index === activeIndex && "is-active")} onPointerMove={() => setActiveIndex(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => select(option)}><span className="truncate">@{username.replace(/^@/, "")}</span>{typeof option === "string" ? null : <span className="author-post-count tabular-nums">{option.postCount}</span>}{value === username ? <Check aria-hidden="true" className="size-4" /> : null}</button>; })}</div>
       </Popover.Content></Popover.Portal>
     </div>

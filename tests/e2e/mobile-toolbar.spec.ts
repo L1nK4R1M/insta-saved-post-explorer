@@ -73,6 +73,38 @@ for (const width of mobileWidths) {
   });
 }
 
+test.describe("retour visuel des filtres sur mobile", () => {
+  test.use({ viewport: { width: 390, height: 800 } });
+
+  test("affiche les filtres actifs et permet de les retirer rapidement", async ({ page }) => {
+    await openLibrary(page);
+    await page.getByRole("button", { name: /Ouvrir les filtres/ }).click();
+    const drawer = page.getByRole("dialog", { name: "Filtres avancés" });
+    const firstTag = drawer.locator(".tag-option").first();
+    const tag = (await firstTag.locator("span").nth(1).textContent())?.trim();
+    expect(tag).toBeTruthy();
+    await firstTag.click();
+    await drawer.getByRole("button", { name: "Fermer les filtres" }).click();
+
+    const chip = page.getByRole("button", { name: `Retirer le filtre ${tag}` });
+    await expect(chip).toBeVisible();
+    await expect(page.locator(".mobile-sticky-toolbar .mobile-filter-trigger")).toHaveClass(/is-active/);
+    await chip.click();
+    await expect(chip).toBeHidden();
+  });
+
+  test("maintient les suggestions d’auteur sous le champ dans le drawer", async ({ page }) => {
+    await openLibrary(page);
+    await page.getByRole("button", { name: /Ouvrir les filtres/ }).click();
+    const input = page.getByRole("combobox", { name: "Filtrer par auteur dans le drawer" });
+    await input.fill("a");
+    const suggestions = page.locator(".author-suggestions");
+    await expect(suggestions).toBeVisible();
+    await expect(suggestions).toHaveAttribute("data-side", "bottom");
+    await expect(suggestions).toHaveCSS("z-index", "70");
+  });
+});
+
 test("préserve la structure du ruban desktop à 1280px", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openLibrary(page);
