@@ -19,6 +19,27 @@ Lire dans cet ordre :
 
 Le rapport d’audit décrit l’état observé le 21 juillet 2026. En cas de conflit sur une décision future, `AGENTS.md` puis `CODEX_IMPLEMENTATION_ORDER.md` puis le brief spécifique le plus récent ont priorité.
 
+### 2.1 Décision postérieure à l’audit
+
+Le rapport d’audit supposait que Places dépendrait d’une collection Instagram `Lieux`. Cette hypothèse est abandonnée.
+
+La source d’éligibilité de Places est désormais exclusivement le champ existant `Post.mainTheme` :
+
+```text
+Voyages
+Restaurant
+```
+
+La comparaison doit utiliser la normalisation de recherche existante, insensible à la casse et aux accents. Les valeurs canoniques attendues restent exactement `Voyages` et `Restaurant`.
+
+Conséquences :
+
+- ne pas ajouter de provenance de collection pour débloquer Places ;
+- ne pas créer ni rechercher une collection `Lieux` ;
+- ne pas filtrer Places par appartenance à une collection ;
+- ne pas modifier le modèle `Collection` pour répondre au besoin Places ;
+- les constats historiques de l’audit sur `Lieux` ne sont plus une gate de développement.
+
 ## 3. Architecture imposée
 
 ```text
@@ -87,12 +108,13 @@ Une phase bloquée ne doit pas être contournée par du code provisoire dans la 
 Ne pas implémenter le pipeline Places profond tant que ces points ne sont pas prouvés :
 
 1. les filtres SQL liste, comptage et aléatoire utilisent le même périmètre ;
-2. la provenance de la collection Instagram `Lieux` est synchronisée et idempotente ;
-3. le média possède une identité R2 autoritaire exploitable par un rôle en lecture seule ;
-4. l’isolation `ownerId` du worker est définie et testée ;
-5. l’API externe V1 en lecture est stable et testée ;
-6. la base du worker global existe avec claim, lease, heartbeat et nettoyage ;
-7. les artefacts temporaires sont supprimés après succès, erreur et reprise.
+2. l’éligibilité par `mainTheme` reconnaît exactement `Voyages` et `Restaurant` après normalisation ;
+3. les autres thèmes et les valeurs nulles ne déclenchent pas automatiquement Places ;
+4. le média possède une identité R2 autoritaire exploitable par un rôle en lecture seule ;
+5. l’isolation `ownerId` du worker est définie et testée ;
+6. l’API externe V1 en lecture est stable et testée ;
+7. la base du worker global existe avec claim, lease, heartbeat et nettoyage ;
+8. les artefacts temporaires sont supprimés après succès, erreur et reprise.
 
 Avant ces gates, seules la documentation, les fondations génériques et l’analyse de métadonnées explicitement autorisée peuvent être réalisées.
 
@@ -111,6 +133,11 @@ Avant ces gates, seules la documentation, les fondations génériques et l’ana
 
 ## 7. Règles Places critiques
 
+- L’éligibilité automatique repose sur `Post.mainTheme`, jamais sur une collection.
+- Seuls les thèmes canoniques `Voyages` et `Restaurant` sont éligibles automatiquement.
+- Utiliser la normalisation existante, sans ajouter d’heuristique ou de thème voisin.
+- Un changement de thème vers une valeur éligible peut créer un job idempotent.
+- Un changement vers un thème non éligible bloque les futures analyses automatiques, mais ne supprime jamais silencieusement un lieu déjà confirmé.
 - L’IA propose des candidats textuels. Elle ne crée jamais directement des coordonnées.
 - Un fournisseur géographique vérifie le candidat avant persistance.
 - `APPROXIMATE` utilise une zone et un rayon, jamais un faux pin exact.
@@ -136,7 +163,7 @@ Arrêter l’implémentation et documenter le blocage si :
 - le code réel contredit le brief ;
 - une migration destructive devient nécessaire ;
 - une dépendance structurelle manque ;
-- l’identité de la collection ou du média est ambiguë ;
+- l’identité du thème ou du média est ambiguë ;
 - un test existant doit être supprimé pour faire passer le changement ;
 - le changement impose un second worker, MCP, API, système d’authentification ou stockage ;
 - la phase active dépend d’une gate non satisfaite.
