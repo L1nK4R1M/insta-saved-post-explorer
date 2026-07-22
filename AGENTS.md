@@ -11,13 +11,17 @@ Toute modification doit préserver l’application existante et progresser par p
 Lire dans cet ordre :
 
 1. `AGENTS.md`
-2. `docs/api-places-phase-0-audit.md`
-3. `docs/CODEX_IMPLEMENTATION_ORDER.md`
-4. `docs/CODEX_API_READY_ARCHITECTURE.md`
-5. `docs/CODEX_PLACES_EXTENSION.md` uniquement pour une tâche liée à Places
-6. les fichiers du code réellement concernés par la phase active
+2. `docs/HANDOFF.md`
+3. `docs/IMPLEMENTATION_STATUS.md`
+4. `docs/api-places-phase-0-audit.md`
+5. `docs/CODEX_IMPLEMENTATION_ORDER.md`
+6. `docs/CODEX_API_READY_ARCHITECTURE.md`
+7. `docs/CODEX_PLACES_EXTENSION.md` uniquement pour une tâche liée à Places
+8. les fichiers du code réellement concernés par la phase active
 
-Le rapport d’audit décrit l’état observé le 21 juillet 2026. En cas de conflit sur une décision future, `AGENTS.md` puis `CODEX_IMPLEMENTATION_ORDER.md` puis le brief spécifique le plus récent ont priorité.
+`docs/HANDOFF.md` indique le point de reprise opérationnel et `docs/IMPLEMENTATION_STATUS.md` résume l’état des phases. Aucun de ces fichiers ne peut autoriser une phase bloquée, modifier l’architecture ou remplacer les gates de `CODEX_IMPLEMENTATION_ORDER.md`.
+
+Le rapport d’audit décrit l’état observé le 21 juillet 2026. En cas de conflit sur une décision future, `AGENTS.md` puis `CODEX_IMPLEMENTATION_ORDER.md` puis le brief spécifique le plus récent ont priorité. Le handoff doit être corrigé s’il contredit ces documents ou le code réel.
 
 ### 2.1 Décision postérieure à l’audit
 
