@@ -361,9 +361,9 @@ Do not expose:
 
 Reuse the current error handling where possible, but add a V1 adapter if the existing error shape is inconsistent.
 
-## 9. Required Corrections Before Exposing the API
+## 9. Prerequisites Before Exposing the API
 
-Review and fix these issues without changing expected UI behavior.
+The consistency corrections in this section belong to Phase A in `CODEX_IMPLEMENTATION_ORDER.md`. They must be reviewed and merged before this Phase D brief is executed. Do not bundle Phase A corrections into the API V1 pull request.
 
 ### 9.1 Relevance count consistency
 
@@ -397,19 +397,11 @@ The relevant-search query calls:
 to_tsvector('simple', search_text)
 ```
 
-Add an expression GIN index through a Prisma SQL migration if no equivalent index already exists:
-
-```sql
-CREATE INDEX IF NOT EXISTS posts_search_text_fts_idx
-ON posts
-USING GIN (to_tsvector('simple', search_text));
-```
-
-Do not add a second equivalent index.
+The phase-0 audit records that the equivalent `posts_search_text_fts_idx` index already exists. Confirm the latest migrations before Phase D and do not add a second equivalent index.
 
 ### 9.4 Large date-sorted queries
 
-`queryPostsByEffectiveSavedDate()` currently loads candidate identifiers before sorting in memory. Do not rewrite it in the first PR unless tests or benchmarks show a concrete problem. Add a technical-debt note for a future SQL-native cursor implementation.
+`queryPostsByEffectiveSavedDate()` currently loads candidate identifiers before sorting in memory. Do not rewrite it in the first API PR unless tests or benchmarks show a concrete problem. Add a technical-debt note for a future SQL-native cursor implementation.
 
 ## 10. API Route Pattern
 
@@ -596,11 +588,13 @@ Test:
 
 ### Consistency
 
-Add regression tests proving:
+Phase D must retain the Phase A regression coverage proving:
 
 - relevance result count uses the same filters as results;
-- random relevance respects author, year, and collection;
+- normal and relevance random selection respect author, year, and collection;
 - existing `/api/posts` behavior remains unchanged.
+
+Do not recreate the filter implementation inside API tests.
 
 ## 15. Documentation
 
@@ -685,25 +679,39 @@ The implementation is complete when:
 
 ## 19. Codex Execution Protocol
 
-Follow this order:
+This brief defines Phase D only.
 
-1. Inspect the latest `develop` branch.
-2. Confirm current route names and service signatures.
+Do not execute it until:
+
+- `docs/HANDOFF.md` identifies Phase D as the active phase;
+- `docs/IMPLEMENTATION_STATUS.md` marks its prerequisites complete;
+- every required predecessor in `CODEX_IMPLEMENTATION_ORDER.md` has been reviewed and merged.
+
+This brief does not authorize combining Phase A, B, C, or D in one pull request. If the latest code still contains a Phase A filter defect or lacks a required earlier gate, stop and update the handoff instead of fixing it inside `feat/external-api-v1`.
+
+After the Phase D entry gate is proven, follow this order:
+
+1. Inspect the latest `develop` branch and the recorded proof for prerequisite phases.
+2. Confirm current route names, service signatures, contracts, and owner partitioning.
 3. Create `feat/external-api-v1`.
-4. Add API-key authentication and tests.
-5. Fix relevance filter inconsistencies.
-6. Add the full-text index migration if missing.
-7. Add `/api/v1` routes as thin adapters.
-8. Add consistent errors.
-9. Update environment validation and deployment docs.
+4. Add API-key authentication and focused tests.
+5. Add `/api/v1` routes as thin adapters over existing server services.
+6. Add consistent V1 error mapping and security headers.
+7. Update environment validation and deployment documentation.
+8. Add concise external API documentation.
+9. Run API, compatibility, security, and regression tests.
 10. Run all quality gates.
-11. Produce a final summary with:
+11. Update `docs/HANDOFF.md` and `docs/IMPLEMENTATION_STATUS.md`.
+12. Produce a final summary with:
+    - phase and entry gate;
     - changed files;
     - migrations;
     - endpoints;
     - environment variables;
-    - test results;
-    - deferred work.
+    - tests and command results;
+    - risks and deferred work;
+    - next gate.
+13. Stop for review. Do not begin the worker, Places, or MCP phases.
 
 ## 20. Non-Negotiable Constraints
 
