@@ -19,7 +19,7 @@ for (const width of mobileWidths) {
 
       const compactControls = [
         page.getByRole("button", { name: /Ouvrir les filtres/ }),
-        page.getByLabel("Trier les résultats"),
+        stickyToolbar.getByLabel("Trier les résultats"),
         page.getByRole("button", { name: "Grille régulière" }),
         page.getByRole("button", { name: "Grille masonry" }),
       ];
