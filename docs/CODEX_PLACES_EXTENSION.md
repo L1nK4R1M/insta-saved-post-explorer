@@ -3,12 +3,19 @@
 > Extension officielle de `CODEX_API_READY_ARCHITECTURE.md`  
 > Projet : **Insta Post Explorer**  
 > Module : **Places**  
-> Version : **1.2 - architecture unifiée worker et MCP**  
+> Version : **1.3 - éligibilité par thèmes Voyages et Restaurant**  
 > Ordre d’exécution : `CODEX_IMPLEMENTATION_ORDER.md`
 
 ## 1. Mission
 
-Ajouter une section **Places** à l’application existante afin d’identifier les lieux mentionnés ou visibles dans les posts de la collection Instagram `Lieux`, puis de les explorer dans :
+Ajouter une section **Places** à l’application existante afin d’identifier les lieux mentionnés ou visibles dans les posts dont le thème principal est :
+
+```text
+Voyages
+Restaurant
+```
+
+Les lieux sont ensuite explorables dans :
 
 - une carte 2D ;
 - un globe 3D ;
@@ -16,6 +23,8 @@ Ajouter une section **Places** à l’application existante afin d’identifier 
 - l’API `/api/v1` ;
 - Hermes ;
 - le serveur MCP unique d’Insta Post Explorer.
+
+Places ne dépend d’aucune collection Instagram ou collection interne.
 
 Ce document ne donne pas l’autorisation de sauter les gates définies dans `CODEX_IMPLEMENTATION_ORDER.md`.
 
@@ -36,7 +45,91 @@ En cas de contradiction :
 3. ce document ;
 4. conventions existantes du dépôt.
 
-## 3. Architecture verrouillée
+Le rapport d’audit est une photographie historique. Toute recommandation de cet audit reposant sur une collection `Lieux` est remplacée par le contrat d’éligibilité par thème défini ci-dessous.
+
+## 3. Contrat d’éligibilité
+
+### 3.1 Source unique
+
+La source unique d’éligibilité est :
+
+```text
+Post.mainTheme
+```
+
+Valeurs canoniques autorisées :
+
+```text
+Voyages
+Restaurant
+```
+
+La relation avec Places ne doit jamais dépendre de :
+
+- `Collection` ;
+- `CollectionPost` ;
+- un nom ou slug de collection ;
+- une collection Instagram ;
+- une provenance de collection ;
+- la présence d’un tag nommé `Lieux`.
+
+### 3.2 Normalisation
+
+Créer un prédicat partagé, testé et réutilisé par tous les points d’entrée :
+
+```ts
+const PLACES_ELIGIBLE_THEME_KEYS = new Set([
+  "voyages",
+  "restaurant",
+]);
+
+export function isPlacesEligibleTheme(
+  mainTheme: string | null | undefined,
+): boolean {
+  if (!mainTheme) return false;
+  return PLACES_ELIGIBLE_THEME_KEYS.has(foldForSearch(mainTheme));
+}
+```
+
+Le code réel peut adapter l’emplacement de cette fonction, mais doit :
+
+- réutiliser `foldForSearch()` ou une primitive partagée strictement équivalente ;
+- être insensible à la casse et aux accents ;
+- accepter `Voyages` et `Restaurant` ;
+- refuser `Voyage`, `Restaurants`, `Cuisine`, chaîne vide et `null` ;
+- ne jamais utiliser une heuristique sémantique pour élargir la liste.
+
+### 3.3 Points d’utilisation obligatoires
+
+Le même prédicat doit être utilisé pour :
+
+- sélectionner les posts à analyser automatiquement ;
+- créer un job Places ;
+- afficher l’action `Analyser le lieu` ;
+- calculer les posts éligibles non analysés ;
+- lancer un traitement par lot ;
+- valider une commande Hermes ou MCP d’analyse ;
+- protéger le handler du worker contre un job obsolète.
+
+Ne pas recopier les chaînes `Voyages` et `Restaurant` dans plusieurs services.
+
+### 3.4 Changement de thème
+
+Lorsqu’un post passe vers un thème éligible :
+
+- il devient candidat à une analyse automatique ;
+- un job metadata-first peut être créé de manière idempotente ;
+- aucun doublon ne doit être créé si le contenu pertinent n’a pas changé.
+
+Lorsqu’un post quitte un thème éligible :
+
+- aucune nouvelle analyse automatique ne doit être créée ;
+- un job encore en attente peut être annulé proprement ;
+- un résultat confirmé par l’utilisateur ne doit jamais être supprimé ;
+- les relations de lieu existantes ne sont pas supprimées silencieusement ;
+- une réanalyse manuelle doit exiger une action explicite et une permission adaptée.
+
+## 4. Architecture verrouillée
 
 Places est un domaine interne du même produit, pas un microservice autonome.
 
@@ -51,11 +144,11 @@ Places est un domaine interne du même produit, pas un microservice autonome.
 plusieurs modules métier et handlers internes
 ```
 
-### 3.1 Flux internes et externes
+### 4.1 Flux internes et externes
 
 ```text
 Server Component -> src/server -> Prisma -> PostgreSQL
-Browser UI -> routes internes ou services prévus par l’application
+Browser UI -> routes internes ou services de l’application
 Hermes/MCP -> /api/v1 -> src/server -> Prisma
 Worker global -> rôle PostgreSQL limité + R2 lecture seule
 ```
@@ -69,9 +162,9 @@ Règles :
 - ne pas casser les routes historiques `/api/*` ;
 - aucune logique métier dans MCP ou les composants cartographiques.
 
-### 3.2 Worker unique
+### 4.2 Worker unique
 
-Nom conceptuel :
+Nom conceptuel et emplacement :
 
 ```text
 insta-post-explorer-worker
@@ -103,11 +196,11 @@ Interdictions :
 - ne pas créer un second déploiement worker ;
 - ne pas dupliquer les clients d’infrastructure.
 
-La table `place_analysis_jobs` peut rester spécifique au domaine Places en V1. Ne pas généraliser la queue avant qu’un second domaine asynchrone réel le justifie.
+La table `place_analysis_jobs` peut rester spécifique à Places en V1. Ne pas généraliser la queue avant qu’un second domaine asynchrone réel le justifie.
 
-### 3.3 MCP unique
+### 4.3 MCP unique
 
-Nom conceptuel :
+Nom conceptuel et emplacement :
 
 ```text
 insta-post-explorer-mcp
@@ -134,28 +227,28 @@ Interdictions :
 - ne pas créer une seconde intégration Hermes ;
 - ne pas dupliquer le client `/api/v1`.
 
-## 4. Préconditions avant développement Places
+## 5. Préconditions avant développement Places
 
 Ne pas créer le pipeline profond tant que les gates suivantes ne sont pas prouvées :
 
 - cohérence des filtres SQL liste, total et random ;
-- provenance fiable de la collection Instagram `Lieux` ;
+- prédicat d’éligibilité `Voyages` ou `Restaurant` centralisé et testé ;
 - identité R2 canonique du média ;
 - isolation `ownerId` pour le worker ;
 - API externe V1 stable ;
 - fondation du worker global ;
 - nettoyage temporaire démontré par tests.
 
-Un simple nom ou slug local `lieux` ne suffit pas à déclencher l’analyse automatique sans provenance Instagram vérifiée.
+Il n’existe aucune gate de provenance de collection pour Places.
 
-## 5. Périmètre V1
+## 6. Périmètre V1
 
 Inclus :
 
-- détection des posts éligibles ;
+- détection des posts éligibles par thème ;
 - analyse caption, hashtags et métadonnées ;
 - résolution géographique vérifiée ;
-- analyse audio/vidéo conditionnelle ;
+- analyse audio ou vidéo conditionnelle ;
 - OCR et transcription ;
 - keyframes temporaires ;
 - plusieurs lieux par post ;
@@ -177,11 +270,13 @@ Hors V1 :
 - reconnaissance faciale ;
 - géolocalisation d’une personne privée ;
 - entraînement de modèle sur les données utilisateur ;
-- conservation d’artefacts intermédiaires.
+- conservation d’artefacts intermédiaires ;
+- déduction automatique d’un thème manquant ;
+- synchronisation de collections Instagram pour Places.
 
-## 6. Invariants de localisation
+## 7. Invariants de localisation
 
-### 6.1 L’IA ne crée jamais les coordonnées finales
+### 7.1 L’IA ne crée jamais les coordonnées finales
 
 Flux obligatoire :
 
@@ -195,7 +290,7 @@ Interdit :
 caption vague -> coordonnées inventées -> insertion
 ```
 
-### 6.2 Précision
+### 7.2 Précision
 
 ```text
 EXACT
@@ -225,11 +320,11 @@ APPROXIMATE >= 0.50
 UNKNOWN     < 0.50
 ```
 
-## 7. Modèle de données
+## 8. Modèle de données
 
 Toutes les tables de premier niveau accessibles au worker doivent inclure `ownerId` et être filtrées par propriétaire.
 
-### 7.1 `Place`
+### 8.1 `Place`
 
 Champs minimums :
 
@@ -267,7 +362,7 @@ Contraintes :
 - `continentCode` dérivé de `countryCode` par table déterministe ;
 - `approximationRadiusMeters` obligatoire pour `APPROXIMATE`.
 
-### 7.2 `PostPlace`
+### 8.2 `PostPlace`
 
 ```text
 id
@@ -292,7 +387,7 @@ Relation plusieurs-à-plusieurs obligatoire :
 Post N <-> N Place
 ```
 
-### 7.3 `PlaceEvidence`
+### 8.3 `PlaceEvidence`
 
 ```text
 id
@@ -332,12 +427,13 @@ audioObjectKey
 temporaryMediaUrl
 ```
 
-### 7.4 `PlaceAnalysisJob`
+### 8.4 `PlaceAnalysisJob`
 
 ```text
 id
 ownerId
 postId
+sourceTheme
 status
 stage
 priority
@@ -357,6 +453,8 @@ completedAt
 updatedAt
 ```
 
+`sourceTheme` conserve le thème canonique observé lors de la création du job afin de faciliter l’audit. Le worker doit toutefois relire le post et revérifier son éligibilité avant le traitement.
+
 Statuts :
 
 ```text
@@ -374,39 +472,55 @@ Contraintes :
 - idempotence sur propriétaire + post + input hash + version ;
 - aucun résultat partiel publié après erreur ;
 - reprise après lease expiré ;
-- trois tentatives par défaut.
+- trois tentatives par défaut ;
+- un job automatique devenu inéligible est annulé avant l’analyse coûteuse.
 
-## 8. Pipeline
+## 9. Pipeline
 
 Ordre obligatoire afin de limiter le coût :
 
 ```text
-métadonnées -> résolution -> OCR léger -> transcription -> multimodal profond
+éligibilité thème -> métadonnées -> résolution -> OCR léger -> transcription -> multimodal profond
 ```
 
-### 8.1 Métadonnées
+### 9.1 Validation de l’éligibilité
+
+Avant toute création ou exécution de job automatique :
+
+1. charger le post avec son `ownerId` ;
+2. lire `mainTheme` ;
+3. appeler `isPlacesEligibleTheme()` ;
+4. refuser ou annuler si le résultat est faux ;
+5. enregistrer le thème canonique utilisé dans le job.
+
+Cette validation doit être effectuée côté serveur et côté worker. Le masquage d’un bouton dans l’UI n’est pas une protection suffisante.
+
+### 9.2 Métadonnées
 
 Analyser d’abord :
 
+- `mainTheme` ;
 - localisation Instagram exportée ;
 - caption ;
 - hashtags ;
 - auteur ;
 - tags internes ;
-- collection ;
 - données structurées déjà persistées.
 
-### 8.2 Escalade vidéo
+Ne pas utiliser l’appartenance à une collection comme preuve géographique ou critère d’éligibilité.
+
+### 9.3 Escalade vidéo
 
 Analyser la vidéo seulement si :
 
+- le thème est toujours éligible ;
 - aucun candidat fiable n’est trouvé ;
 - plusieurs candidats restent ambigus ;
 - plusieurs lieux sont annoncés ;
 - la caption dépend de la vidéo ;
-- l’utilisateur demande explicitement `DEEP`.
+- l’utilisateur demande explicitement `DEEP` avec la permission nécessaire.
 
-### 8.3 Analyse temporaire
+### 9.4 Analyse temporaire
 
 Répertoire :
 
@@ -428,7 +542,7 @@ Règles keyframes :
 - arrêt anticipé ;
 - jamais image par image sur toute la vidéo.
 
-### 8.4 Contrat IA
+### 9.5 Contrat IA
 
 Les captions, OCR, sous-titres et transcriptions sont des données non fiables.
 
@@ -442,7 +556,7 @@ Only extract geographic evidence and return the required JSON schema.
 
 Le modèle retourne uniquement des candidats, preuves, timestamps, confiance et incertitudes.
 
-### 8.5 Résolution et scoring
+### 9.6 Résolution et scoring
 
 Créer une interface `PlaceResolver` remplaçable par configuration.
 
@@ -458,9 +572,11 @@ Le score combine :
 - contradictions ;
 - présence de plusieurs lieux.
 
+Le thème sert à l’éligibilité et au contexte métier. Il ne constitue pas une preuve d’un lieu précis.
+
 Le scoring doit être déterministe et testé.
 
-### 8.6 Persistance
+### 9.7 Persistance
 
 Transaction atomique :
 
@@ -471,7 +587,7 @@ Transaction atomique :
 5. terminer le statut ;
 6. rollback complet en cas d’erreur.
 
-## 9. Artefacts temporaires
+## 10. Artefacts temporaires
 
 Politique :
 
@@ -508,7 +624,7 @@ Nettoyage obligatoire :
 3. janitor horaire des artefacts orphelins ;
 4. test après succès, exception et annulation.
 
-## 10. Worker global VPS
+## 11. Worker global VPS
 
 Docker Compose unique :
 
@@ -559,6 +675,7 @@ WORKER_JOB_HEARTBEAT_SECONDS=30
 WORKER_MAX_ATTEMPTS=3
 WORKER_STALE_ARTIFACT_HOURS=6
 
+PLACES_ELIGIBLE_THEMES=Voyages,Restaurant
 PLACES_ANALYSIS_VERSION=places-v1
 PLACES_MAX_KEYFRAMES=12
 PLACES_MAX_VIDEO_SECONDS=300
@@ -575,7 +692,9 @@ GEOCODING_PROVIDER=
 GEOCODING_API_KEY=
 ```
 
-## 11. API Places
+`PLACES_ELIGIBLE_THEMES` documente la configuration attendue, mais la règle métier doit rester centralisée et validée. Ne pas permettre une extension silencieuse des thèmes en production sans modification revue du contrat et des tests.
+
+## 12. API Places
 
 Base :
 
@@ -590,6 +709,7 @@ GET /api/v1/places
 GET /api/v1/places/{placeId}
 GET /api/v1/places/{placeId}/posts
 GET /api/v1/places/stats
+GET /api/v1/places/eligible-posts
 GET /api/v1/places/nearby
 GET /api/v1/places/unresolved
 GET /api/v1/places/analysis-jobs/{jobId}
@@ -605,7 +725,7 @@ POST  /api/v1/places/merge
 POST  /api/v1/places/{placeId}/reject
 ```
 
-Création de job :
+### 12.1 Création de job
 
 ```json
 {
@@ -623,11 +743,54 @@ AUTO
 DEEP
 ```
 
-Actions de correction, fusion, rejet ou relance coûteuse nécessitent une permission d’écriture et une confirmation explicite.
+Validation obligatoire :
 
-## 12. Navigation et interface
+- vérifier le propriétaire ;
+- charger `mainTheme` depuis la base ;
+- refuser un job automatique non éligible avec une erreur stable ;
+- ne jamais faire confiance à un thème fourni par le client ;
+- calculer l’idempotency hash avec le thème, les données du post, le média et la version du pipeline.
 
-### 12.1 Accès global
+Exemple d’erreur :
+
+```json
+{
+  "error": {
+    "code": "POST_NOT_PLACES_ELIGIBLE",
+    "message": "The post theme is not eligible for Places analysis"
+  }
+}
+```
+
+Les actions de correction, fusion, rejet ou relance coûteuse nécessitent une permission d’écriture et une confirmation explicite.
+
+### 12.2 Filtres de lecture
+
+`GET /api/v1/places` accepte notamment :
+
+```text
+query
+source_theme
+country_code
+continent_code
+city
+category
+precision
+review_status
+min_confidence
+bbox
+cursor
+limit
+sort
+```
+
+`source_theme` accepte uniquement `Voyages` ou `Restaurant` après normalisation.
+
+Aucun filtre `collection` n’est requis pour Places.
+
+## 13. Navigation et interface
+
+### 13.1 Accès global
 
 Ajouter un bouton permanent **Places** à la navigation principale :
 
@@ -637,7 +800,9 @@ Ajouter un bouton permanent **Places** à la navigation principale :
 - feature flag `PLACES_ENABLED` ;
 - route `/places`.
 
-### 12.2 Accès depuis un post
+Le fait que Collections reste visible dans l’application ne crée aucune dépendance entre Places et une collection.
+
+### 13.2 Accès depuis un post
 
 Un post possédant un lieu valide affiche :
 
@@ -671,21 +836,28 @@ Voir les N lieux
 - afficher les autres lieux ;
 - permettre le passage entre eux.
 
-Ne pas afficher le bouton pour `UNKNOWN` ou en absence de lieu valide.
+Ne pas afficher `Voir dans Places` pour `UNKNOWN` ou en absence de lieu valide.
 
-### 12.3 État URL
+Pour un post sans lieu valide :
+
+- afficher `Analyser le lieu` uniquement si `isPlacesEligibleTheme(mainTheme)` retourne vrai ;
+- ne pas afficher l’action pour un autre thème ;
+- revérifier l’éligibilité côté serveur au clic.
+
+### 13.3 État URL
 
 ```text
 view=map|globe|list|review
 placeId={uuid}
 postId={uuid}
+sourceTheme=Voyages|Restaurant
 country={ISO-2}
 continent={code}
 ```
 
 Rechargement, historique navigateur et partage de liens doivent fonctionner.
 
-### 12.4 Statistiques
+### 13.4 Statistiques
 
 Cartes principales :
 
@@ -707,6 +879,14 @@ Définitions :
 
 Un même lieu associé à dix posts compte comme un lieu et dix posts associés.
 
+Les statistiques peuvent être filtrées par :
+
+```text
+Voyages
+Restaurant
+Tous les thèmes éligibles
+```
+
 Répartition pays :
 
 - nom et code ;
@@ -724,7 +904,7 @@ Répartition continent :
 - part du total ;
 - clic = filtre + `fly-to`.
 
-### 12.5 Modes
+### 13.5 Modes
 
 ```text
 Map
@@ -753,12 +933,12 @@ Globe 3D :
 - aucune logique métier dupliquée ;
 - réduction de mouvement accessible.
 
-## 13. Statistiques API
+## 14. Statistiques API
 
 `GET /api/v1/places/stats` accepte au minimum :
 
 ```text
-collection
+source_theme
 country_code
 continent_code
 category
@@ -771,21 +951,41 @@ Réponse minimale :
 {
   "data": {
     "totals": {
+      "eligible_posts": 840,
       "identified_places": 347,
       "countries": 28,
       "continents": 5,
       "posts_with_places": 612,
       "needs_review": 19
     },
+    "by_theme": [
+      {
+        "theme": "Voyages",
+        "place_count": 241,
+        "post_count": 390
+      },
+      {
+        "theme": "Restaurant",
+        "place_count": 106,
+        "post_count": 222
+      }
+    ],
     "by_country": [],
     "by_continent": []
   }
 }
 ```
 
-Exclure `UNKNOWN` des lieux identifiés. Inclure EXACT, PROBABLE et APPROXIMATE avec filtres disponibles.
+Règles :
 
-## 14. Hermes et MCP
+- exclure `UNKNOWN` des lieux identifiés ;
+- inclure EXACT, PROBABLE et APPROXIMATE avec filtres disponibles ;
+- compter les lieux canoniques uniques ;
+- ne pas multiplier le total lorsqu’un même lieu apparaît dans plusieurs posts ;
+- calculer `eligible_posts` avec le prédicat partagé ;
+- ne pas joindre `CollectionPost` pour calculer ces métriques.
+
+## 15. Hermes et MCP
 
 Outils Places ajoutés au MCP global :
 
@@ -824,9 +1024,76 @@ Confirmation obligatoire :
 - modification d’un résultat confirmé ;
 - analyse profonde en masse.
 
-## 15. Tests obligatoires
+Les outils d’analyse :
 
-Unitaires :
+- ne reçoivent pas le thème comme source de vérité ;
+- demandent uniquement un `post_id` ;
+- laissent l’API charger et valider `Post.mainTheme` ;
+- retournent une erreur explicite pour un post non éligible.
+
+Exemples valides :
+
+```text
+Quels lieux de mes posts Voyages n’ont pas encore été localisés ?
+```
+
+```text
+Montre-moi les restaurants sauvegardés à Istanbul.
+```
+
+## 16. Sécurité et coûts
+
+### 16.1 Entrées média
+
+- ne jamais accepter une URL arbitraire fournie par le client ou le modèle ;
+- télécharger uniquement une clé R2 connue en base ;
+- vérifier MIME, taille et durée ;
+- limiter les ressources FFmpeg ;
+- rejeter les formats inconnus ;
+- nettoyer les noms de fichiers.
+
+### 16.2 Providers IA
+
+- envoyer les données minimales ;
+- valider toutes les réponses JSON ;
+- timeout et retry bornés ;
+- circuit breaker simple ;
+- limite quotidienne de coût ;
+- ne jamais loguer les secrets ou médias.
+
+### 16.3 Ordre de coût
+
+```text
+éligibilité -> métadonnées -> résolution -> OCR -> transcription -> multimodal
+```
+
+Mesures :
+
+- hash d’entrée ;
+- cache des résultats ;
+- vidéo uniquement si nécessaire ;
+- nombre maximal de frames ;
+- durée maximale ;
+- arrêt anticipé ;
+- pas de réanalyse d’un résultat confirmé sans demande.
+
+## 17. Tests obligatoires
+
+### 17.1 Éligibilité
+
+- `Voyages` accepté ;
+- `Restaurant` accepté ;
+- variantes de casse acceptées ;
+- normalisation commune utilisée ;
+- `Voyage` refusé ;
+- `Restaurants` refusé ;
+- `Cuisine` refusé ;
+- `null` et chaîne vide refusés ;
+- aucune requête de collection dans le prédicat ;
+- changement de thème vers éligible crée un job idempotent ;
+- changement hors éligibilité bloque les nouveaux jobs sans supprimer un résultat confirmé.
+
+### 17.2 Unitaires
 
 - parsing et validation ;
 - normalisation ;
@@ -834,12 +1101,14 @@ Unitaires :
 - déduplication ;
 - précision ;
 - protection correction humaine ;
-- hash d’entrée ;
+- hash d’entrée incluant le thème ;
 - cleanup.
 
-Intégration :
+### 17.3 Intégration
 
 - création idempotente ;
+- rejet d’un post non éligible ;
+- revérification du thème par le worker ;
 - claim, lease, heartbeat et reprise ;
 - retry borné ;
 - transaction atomique ;
@@ -849,18 +1118,22 @@ Intégration :
 - échecs IA, R2 et PostgreSQL ;
 - absence d’artefacts persistants.
 
-API :
+### 17.4 API
 
 - authentification ;
 - scopes ;
-- filtres ;
+- filtres `source_theme` ;
 - pagination ;
 - erreurs stables ;
-- compatibilité Hermes/MCP.
+- compatibilité Hermes et MCP ;
+- aucune dépendance à une collection.
 
-E2E :
+### 17.5 E2E
 
 - bouton Places ;
+- action d’analyse sur `Voyages` ;
+- action d’analyse sur `Restaurant` ;
+- absence d’action sur un autre thème ;
 - deep link depuis un post ;
 - Map, Globe, List et Review ;
 - pays et continents ;
@@ -869,20 +1142,23 @@ E2E :
 - résultat approximatif ;
 - navigation mobile.
 
-Sécurité :
+### 17.6 Sécurité
 
-- prompt injection caption/OCR/audio ;
+- prompt injection caption, OCR et audio ;
 - média surdimensionné ;
 - MIME invalide ;
 - secret absent des logs ;
 - isolation propriétaire ;
 - permissions worker limitées.
 
-## 16. Critères d’acceptation
+## 18. Critères d’acceptation
 
 - [ ] architecture à un seul worker et un seul MCP respectée ;
 - [ ] aucune seconde API ou authentification Places ;
-- [ ] collection `Lieux` avec provenance vérifiée ;
+- [ ] éligibilité centralisée sur `Post.mainTheme` ;
+- [ ] `Voyages` et `Restaurant` sont les deux seuls thèmes automatiques ;
+- [ ] aucune collection ne déclenche ou filtre Places ;
+- [ ] aucune migration de provenance de collection n’est ajoutée pour Places ;
 - [ ] média R2 autoritaire ;
 - [ ] plusieurs lieux par post et plusieurs posts par lieu ;
 - [ ] coordonnées finales vérifiées par provider ;
@@ -891,8 +1167,10 @@ Sécurité :
 - [ ] correction humaine protégée ;
 - [ ] bouton Places desktop et mobile ;
 - [ ] bouton contextuel sur les posts localisés ;
+- [ ] action d’analyse uniquement sur les thèmes éligibles ;
 - [ ] deep links persistants ;
 - [ ] statistiques uniques globales, pays et continents ;
+- [ ] statistiques filtrables entre Voyages et Restaurant ;
 - [ ] carte 2D ;
 - [ ] globe 3D synchronisé ;
 - [ ] aucune analyse lourde sur Vercel ;
@@ -901,14 +1179,18 @@ Sécurité :
 - [ ] API documentée ;
 - [ ] outils ajoutés au MCP global ;
 - [ ] lint, typecheck, tests, build et E2E ciblés réussis ;
-- [ ] pilote manuel de 30 à 50 posts validé.
+- [ ] pilote manuel de 30 à 50 posts Voyages et Restaurant validé.
 
-## 17. Interdictions Codex
+## 19. Interdictions Codex
 
 Codex ne doit pas :
 
 - reconstruire l’application ;
 - déplacer massivement les fichiers existants ;
+- créer ou utiliser une collection `Lieux` pour Places ;
+- ajouter une provenance de collection pour débloquer Places ;
+- utiliser `CollectionPost` dans le prédicat d’éligibilité ;
+- élargir les thèmes sans décision revue ;
 - créer `places-worker` ;
 - créer `places-mcp` ;
 - connecter MCP ou Hermes à PostgreSQL ;
@@ -922,7 +1204,7 @@ Codex ne doit pas :
 - ajouter Redis en V1 sans nécessité mesurée ;
 - commencer une phase dont la gate d’entrée n’est pas validée.
 
-## 18. Définition finale
+## 20. Définition finale
 
 ```text
 Insta Post Explorer
@@ -931,9 +1213,11 @@ Insta Post Explorer
 ├── API /api/v1
 │   └── endpoints Places
 ├── PostgreSQL
+│   └── éligibilité Post.mainTheme = Voyages | Restaurant
 ├── R2 original media only
 ├── worker VPS unique
 │   └── handler Places
+│       ├── theme eligibility gate
 │       ├── metadata-first
 │       ├── temporary keyframes/audio
 │       ├── OCR/transcription/multimodal
@@ -946,4 +1230,4 @@ Insta Post Explorer
 
 Règle centrale :
 
-> Les médias originaux restent dans R2. Les artefacts générés restent temporaires sur le VPS. Seuls les lieux vérifiés, les preuves textuelles, les timestamps et les résultats structurés deviennent persistants.
+> Places analyse automatiquement uniquement les posts dont `mainTheme` est `Voyages` ou `Restaurant`. Les médias originaux restent dans R2. Les artefacts générés restent temporaires sur le VPS. Seuls les lieux vérifiés, les preuves textuelles, les timestamps et les résultats structurés deviennent persistants.
