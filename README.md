@@ -41,7 +41,7 @@ without changing code, set `NEXT_PUBLIC_APP_LOGO_URL` to its HTTPS URL.
 
 ## Requirements
 
-- Node.js 22 or later
+- Node.js 24.x
 - npm 10 or later
 - PostgreSQL 15 or later for persistent imports
 
@@ -163,6 +163,20 @@ tests/unit/             business-logic tests
 tests/e2e/              browser journeys
 docs/                   architecture, design, deployment, operations
 ```
+
+## Agent workflow
+
+Claude Code starts with [`CLAUDE.md`](CLAUDE.md), which imports the global rules
+and the current handoff. Other coding agents must begin with [`AGENTS.md`](AGENTS.md).
+
+Current work state and phase tracking are documented in:
+
+- [`docs/HANDOFF.md`](docs/HANDOFF.md) for the exact next task and stop condition;
+- [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) for the phase ledger;
+- [`docs/CODEX_IMPLEMENTATION_ORDER.md`](docs/CODEX_IMPLEMENTATION_ORDER.md) for authoritative phase dependencies and gates.
+
+A detailed brief being present does not make its phase executable. Work only on
+the active phase identified by the handoff and stop for review at its exit gate.
 
 ## Deployment
 
