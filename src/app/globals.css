@@ -449,6 +449,14 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 .mobile-sticky-toolbar { display: none; }
 .mobile-active-filters { display: none; }
 
+@media (max-width: 1300px) {
+  /* Below ~1300px the rigid ribbon content no longer fits on one line: let it
+     wrap instead of overflowing the viewport and covering the theme chips. */
+  .control-ribbon { flex-wrap: wrap; }
+  .ribbon-end { flex: 1 1 auto; flex-wrap: wrap; min-width: 0; justify-content: flex-end; }
+  .desktop-filter-panel { top: 190px; max-height: calc(100dvh - 206px); }
+}
+
 @media (max-width: 920px) {
   .admin-shell { padding: 12px; }.admin-header { grid-template-columns: auto 1fr; }.admin-header > .button { grid-column: 1 / -1; justify-content: center; }.admin-grid { grid-template-columns: 1fr; }.admin-panel, .admin-overview, .admin-tags { grid-column: 1; }.admin-kpis, .health-grid, .admin-breakdowns, .tag-admin-list { grid-template-columns: 1fr 1fr; }.admin-breakdowns > div:last-child { grid-column: 1 / -1; }.variant-list > div { align-items: flex-start; flex-direction: column; }
   .desktop-only, .desktop-filter-panel { display: none !important; }
