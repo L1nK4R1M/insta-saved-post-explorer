@@ -114,7 +114,7 @@ Every future entry point (services, jobs, statistics, UI actions, worker handler
 
 ## 5. Known Pre-existing Failures
 
-- The `Browser tests` CI job (Playwright) has been failing on `develop` since 14 July 2026 (last green: `fd143a9`). Full diagnosis, failure-to-cause map, local reproduction commands, and re-green plan: **issue #20**. Summary: accumulated UI-to-test desynchronization from the mid-July toolbar reworks (obsolete selectors, DOM-duplicated controls breaking strict mode, one possible real 10px horizontal overflow at 1280px to investigate first). Not a CI infrastructure problem: the seeded database is correct. Restoring this suite is its own separate change (one coherent PR); do not fold it into a phase implementation.
+- The `Browser tests` CI job (Playwright) had been failing on `develop` since 14 July 2026 (18 identical failures per run). Diagnosis: **issue #20**; fix: **PR #21** (awaiting review). Two causes: a real CSS regression (the rigid ribbon overflowed horizontally below ~1300px and its author input intercepted clicks on the theme chips — fixed in `globals.css`), and accumulated UI-to-test desynchronization from the mid-July toolbar reworks (fixed in `tests/e2e/`). Local result with the CI environment replicated: 65 passed / 13 skipped / 0 failed. Open product question recorded in PR #21: the Découverte button is desktop-only, its e2e test is skipped on mobile viewports.
 - Vercel preview deployments fail during `deploy:check` with `AUTH_SECRET is required`: the variable exists only in the Production environment of the Vercel project. Owner action required in Vercel settings; nothing to change in the repository.
 
 ## 6. Blocked Later Phases
