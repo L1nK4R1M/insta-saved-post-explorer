@@ -8,7 +8,8 @@ import { canonicalPlacesTheme } from "@/lib/places/eligibility";
 import { continentCodeForCountry } from "@/lib/places/continents";
 import { scoreResolvedCandidate, type ScoredResolution } from "@/lib/places/scoring";
 import { prisma } from "@/server/db";
-import { createMetadataAnalysisJob, PLACES_ANALYSIS_VERSION, PlacesJobError } from "@/server/places/jobs";
+import { computePlacesInputHash } from "@/server/places/hash";
+import { createMetadataAnalysisJob, PlacesJobError } from "@/server/places/jobs";
 import { loadAnalysisPostInputs } from "@/server/places/repository";
 import type { PlaceResolutionInput, PlaceResolver, ResolvedPlaceCandidate } from "@/server/places/resolvers/types";
 
@@ -33,7 +34,6 @@ export type AnalyzeRecordInput = {
   ownerId: string;
   record: PlaceCandidateRecord;
   resolver: PlaceResolver;
-  analysisVersion?: string;
   commit?: boolean;
 };
 
@@ -79,8 +79,11 @@ async function planCandidate(
 }
 
 export async function analyzeCandidateBatchRecord(input: AnalyzeRecordInput): Promise<AnalyzeRecordResult> {
-  const analysisVersion = input.analysisVersion?.trim() || PLACES_ANALYSIS_VERSION;
   const commit = input.commit ?? false;
+  // The record's analysis_version is the single source of truth: it drives both
+  // the freshness hash below and the job identity. There is no external override,
+  // so a hash can never be verified with one version and a job created with another.
+  const analysisVersion = input.record.analysis_version;
 
   // Owner-scoped load and eligibility, reusing the F1 predicate and repository.
   const post = await loadAnalysisPostInputs(input.ownerId, input.record.post_id);
@@ -92,6 +95,24 @@ export async function analyzeCandidateBatchRecord(input: AnalyzeRecordInput): Pr
     // instead of leaving them queued. Confirmed data is never touched.
     if (commit) await cancelNonTerminalJobs(input.ownerId, post.id);
     throw new PlacesJobError("POST_NOT_PLACES_ELIGIBLE");
+  }
+
+  // Freshness gate. Recompute the current input hash with the record's version
+  // and reject a stale result — one generated from an older caption, tags,
+  // structured location, or verified media — BEFORE any Geoapify call, job
+  // creation, or Prisma transaction. Nothing is written for a stale line.
+  const currentInputHash = computePlacesInputHash({
+    analysisVersion,
+    postId: post.id,
+    sourceTheme,
+    caption: post.caption,
+    authorUsername: post.authorUsername,
+    internalTags: post.internalTags,
+    structuredLocation: post.structuredLocation,
+    verifiedMedia: post.verifiedMedia,
+  });
+  if (currentInputHash !== input.record.input_hash) {
+    throw new PlacesJobError("PLACES_INPUT_STALE");
   }
 
   // Dry-run previews the plan without writing anything and without a job.

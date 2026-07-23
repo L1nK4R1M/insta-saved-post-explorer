@@ -5,7 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 
 vi.mock("server-only", () => ({}));
 
-import type { PlaceCandidate } from "@/lib/places/candidates";
+import type { PlaceCandidate, PlaceCandidateRecord } from "@/lib/places/candidates";
 import type { PlaceResolutionInput, PlaceResolver, ResolvedPlaceCandidate } from "@/server/places/resolvers/types";
 
 const databaseUrl = process.env.TEST_DATABASE_URL?.trim() ?? "";
@@ -15,8 +15,16 @@ const OWNER_B = "owner-analysis-b";
 
 let prisma: PrismaClient;
 let analysis: typeof import("@/server/places/analysis");
+let batch: typeof import("@/server/places/caption-batch");
 let jobs: typeof import("@/server/places/jobs");
 const previousDatabaseUrl = process.env.DATABASE_URL;
+
+// Build a candidate record carrying the current input_hash + analysis_version,
+// exactly as the exporter would stamp them, so the freshness gate passes.
+async function freshRecord(ownerId: string, postId: string, candidates: PlaceCandidate[]): Promise<PlaceCandidateRecord> {
+  const [line] = await batch.exportCaptionBatch({ ownerId, postId, force: true });
+  return { post_id: postId, input_hash: line.input_hash, analysis_version: line.analysis_version, candidates };
+}
 
 // In-memory resolver: no network, no real Geoapify. Returns a scripted list per
 // candidate name, or throws to simulate a provider failure.
@@ -69,6 +77,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
     process.env.DATABASE_URL = databaseUrl;
     ({ prisma } = await import("@/server/db"));
     analysis = await import("@/server/places/analysis");
+    batch = await import("@/server/places/caption-batch");
     jobs = await import("@/server/places/jobs");
     await resetDatabase();
   });
@@ -87,7 +96,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
     const result = await analysis.analyzeCandidateBatchRecord({
       ownerId: OWNER_A,
-      record: { post_id: "nobu-post", candidates: [candidate()] },
+      record: await freshRecord(OWNER_A, "nobu-post", [candidate()]),
       resolver,
       commit: true,
     });
@@ -113,7 +122,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
     await analysis.analyzeCandidateBatchRecord({
       ownerId: OWNER_A,
-      record: { post_id: "kyoto-post", candidates: [candidate({ name: "Kyoto", city: "Kyoto", country: "Japan", confidence: 0.7 })] },
+      record: await freshRecord(OWNER_A, "kyoto-post", [candidate({ name: "Kyoto", city: "Kyoto", country: "Japan", confidence: 0.7 })]),
       resolver,
       commit: true,
     });
@@ -132,7 +141,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
     const result = await analysis.analyzeCandidateBatchRecord({
       ownerId: OWNER_A,
-      record: { post_id: "country-post", candidates: [candidate({ name: "Japan", city: null, country: "Japan", evidence: [{ type: "CAPTION", excerpt: "Somewhere in Japan" }] })] },
+      record: await freshRecord(OWNER_A, "country-post", [candidate({ name: "Japan", city: null, country: "Japan", evidence: [{ type: "CAPTION", excerpt: "Somewhere in Japan" }] })]),
       resolver,
       commit: true,
     });
@@ -155,13 +164,10 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
     await analysis.analyzeCandidateBatchRecord({
       ownerId: OWNER_A,
-      record: {
-        post_id: "multi-post",
-        candidates: [
-          candidate({ confidence: 0.95 }),
-          candidate({ name: "Louvre Abu Dhabi", city: "Abu Dhabi", confidence: 0.8 }),
-        ],
-      },
+      record: await freshRecord(OWNER_A, "multi-post", [
+        candidate({ confidence: 0.95 }),
+        candidate({ name: "Louvre Abu Dhabi", city: "Abu Dhabi", confidence: 0.8 }),
+      ]),
       resolver,
       commit: true,
     });
@@ -177,13 +183,10 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
     await analysis.analyzeCandidateBatchRecord({
       ownerId: OWNER_A,
-      record: {
-        post_id: "dup-post",
-        candidates: [
-          candidate({ evidence: [{ type: "CAPTION", excerpt: "Nobu again" }] }),
-          candidate({ evidence: [{ type: "HASHTAG", excerpt: "#nobu" }] }),
-        ],
-      },
+      record: await freshRecord(OWNER_A, "dup-post", [
+        candidate({ evidence: [{ type: "CAPTION", excerpt: "Nobu again" }] }),
+        candidate({ evidence: [{ type: "HASHTAG", excerpt: "#nobu" }] }),
+      ]),
       resolver,
       commit: true,
     });
@@ -194,17 +197,13 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
   it("cancels non-terminal jobs when the post left an eligible theme", async () => {
     await seedPost("stale-post", OWNER_A, "Voyages");
+    const record = await freshRecord(OWNER_A, "stale-post", [candidate()]);
     const job = await jobs.createMetadataAnalysisJob({ ownerId: OWNER_A, postId: "stale-post" });
     await prisma.post.update({ where: { id: "stale-post" }, data: { mainTheme: "Cuisine" } });
     const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
 
     await expect(
-      analysis.analyzeCandidateBatchRecord({
-        ownerId: OWNER_A,
-        record: { post_id: "stale-post", candidates: [candidate()] },
-        resolver,
-        commit: true,
-      }),
+      analysis.analyzeCandidateBatchRecord({ ownerId: OWNER_A, record, resolver, commit: true }),
     ).rejects.toMatchObject({ code: "POST_NOT_PLACES_ELIGIBLE" });
 
     const refreshed = await prisma.placeAnalysisJob.findUniqueOrThrow({ where: { id: job.id } });
@@ -234,7 +233,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
     const resolver = new FakeResolver({ "Nobu Dubai": [resolved({ providerRank: 0.5 })] });
     await analysis.analyzeCandidateBatchRecord({
       ownerId: OWNER_A,
-      record: { post_id: "confirmed-post", candidates: [candidate({ confidence: 0.6 })] },
+      record: await freshRecord(OWNER_A, "confirmed-post", [candidate({ confidence: 0.6 })]),
       resolver,
       commit: true,
     });
@@ -247,15 +246,11 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
   it("rolls back and marks the job FAILED on a provider failure", async () => {
     await seedPost("fail-post", OWNER_A, "Voyages");
+    const record = await freshRecord(OWNER_A, "fail-post", [candidate()]);
     const resolver = new FakeResolver({}, Object.assign(new Error("GEOAPIFY_UNAVAILABLE"), { code: "GEOAPIFY_UNAVAILABLE" }));
 
     await expect(
-      analysis.analyzeCandidateBatchRecord({
-        ownerId: OWNER_A,
-        record: { post_id: "fail-post", candidates: [candidate()] },
-        resolver,
-        commit: true,
-      }),
+      analysis.analyzeCandidateBatchRecord({ ownerId: OWNER_A, record, resolver, commit: true }),
     ).rejects.toThrow();
 
     expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(0);
@@ -266,15 +261,11 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
   it("isolates analysis by owner", async () => {
     await seedPost("owned-post", OWNER_A, "Voyages");
+    const record = await freshRecord(OWNER_A, "owned-post", [candidate()]);
     const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
 
     await expect(
-      analysis.analyzeCandidateBatchRecord({
-        ownerId: OWNER_B,
-        record: { post_id: "owned-post", candidates: [candidate()] },
-        resolver,
-        commit: true,
-      }),
+      analysis.analyzeCandidateBatchRecord({ ownerId: OWNER_B, record, resolver, commit: true }),
     ).rejects.toMatchObject({ code: "POST_NOT_FOUND" });
     expect(await prisma.place.count({ where: { ownerId: OWNER_B } })).toBe(0);
   });
@@ -285,7 +276,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
     const result = await analysis.analyzeCandidateBatchRecord({
       ownerId: OWNER_A,
-      record: { post_id: "dry-post", candidates: [candidate()] },
+      record: await freshRecord(OWNER_A, "dry-post", [candidate()]),
       resolver,
       commit: false,
     });
@@ -299,7 +290,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
   it("is idempotent when committed twice", async () => {
     await seedPost("idem-post", OWNER_A, "Voyages");
     const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
-    const record = { post_id: "idem-post", candidates: [candidate()] };
+    const record = await freshRecord(OWNER_A, "idem-post", [candidate()]);
 
     await analysis.analyzeCandidateBatchRecord({ ownerId: OWNER_A, record, resolver, commit: true });
     await analysis.analyzeCandidateBatchRecord({ ownerId: OWNER_A, record, resolver, commit: true });

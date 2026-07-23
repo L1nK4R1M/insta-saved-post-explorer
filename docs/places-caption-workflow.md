@@ -53,15 +53,30 @@ npm run places:export-captions -- --limit 100 --output .tmp/places/captions.json
 Flags: `--limit <1..1000>`, `--post-id <id>`, `--output <path>`, `--force`,
 `--owner <id>` (defaults to `APP_OWNER_ID`). Each line contains only text:
 `post_id`, `main_theme`, `caption`, `hashtags`, `internal_tags`,
-`author_username`, and `instagram_location` when already present. No media URL,
-R2 key, or secret is ever exported. Posts already analyzed for their current
-input hash are skipped unless `--force` is used.
+`author_username`, `instagram_location` when already present, plus the immutable
+analysis identity `input_hash` and `analysis_version`. No media URL, R2 key, or
+secret is ever exported. Posts already analyzed for their current input hash are
+skipped unless `--force` is used.
+
+### Input identity and staleness
+
+Each exported line is bound to an **immutable `input_hash`** — a SHA-256 of the
+post's analysis inputs (post id, canonical theme, caption, author, internal tags,
+structured location, verified media) under a specific `analysis_version`. Any
+change to those inputs after export makes the exported result **stale**: you must
+re-export and re-analyze. `analysis_version` is part of the reproducibility
+contract — the same version verifies the hash and creates the analysis job, and
+the value on the line is the single source of truth (there is no external
+override at import). The importer rejects a stale line with `PLACES_INPUT_STALE`
+**before** any Geoapify call, job, or write (see step 3).
 
 ## 5. Step 2 — Analyze locally with Claude Code or Codex
 
 Run the model **outside** the application. It reads the exported captions and
-returns candidate JSONL matching `docs/places-caption-candidate.schema.json`.
-Example:
+returns candidate JSONL matching `docs/places-caption-candidate.schema.json`. It
+must copy `post_id`, `input_hash`, and `analysis_version` from each exported line
+**unchanged** into its output, so a result generated from an older post state is
+rejected at import. Example:
 
 ```bash
 cat .tmp/places/captions.jsonl | claude -p \
@@ -91,7 +106,11 @@ npm run places:import-candidates -- --input .tmp/places/candidates.jsonl --commi
 Flags: `--input <path>` (required), `--commit`, `--continue-on-error`,
 `--limit <n>`, `--post-id <id>`, `--owner <id>`. Every line is validated with the
 strict Zod contract before resolution; coordinates, provider fields, unknown
-properties, and out-of-range values are rejected. The importer prints counts
+properties, out-of-range values, a malformed `input_hash`, and a missing
+`analysis_version` are rejected. The importer then recomputes the current input
+hash for each post (using the line's `analysis_version`) and rejects a stale line
+with `PLACES_INPUT_STALE` **before** any Geoapify call, job creation, or Prisma
+transaction — nothing is written for a stale line. The importer prints counts
 only — never a caption or candidate body.
 
 ## 7. Precision and scoring

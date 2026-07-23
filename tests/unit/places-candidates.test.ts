@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { placeCandidateSchema, placeCandidateBatchSchema } from "@/lib/places/candidates";
+import { placeCandidateSchema, placeCandidateBatchSchema, placeCandidateRecordSchema } from "@/lib/places/candidates";
 
 const validCandidate = {
   name: "Nobu Dubai",
@@ -62,5 +62,38 @@ describe("placeCandidateBatchSchema", () => {
   it("rejects more than five candidates", () => {
     const items = Array.from({ length: 6 }, () => validCandidate);
     expect(() => placeCandidateBatchSchema.parse(items)).toThrow();
+  });
+});
+
+describe("placeCandidateRecordSchema", () => {
+  const validRecord = {
+    post_id: "post-1",
+    input_hash: "a".repeat(64),
+    analysis_version: "places-v1",
+    candidates: [validCandidate],
+  };
+
+  it("accepts a record with a canonical hash and a version", () => {
+    expect(placeCandidateRecordSchema.parse(validRecord)).toBeDefined();
+  });
+
+  it("rejects a malformed input_hash", () => {
+    expect(() => placeCandidateRecordSchema.parse({ ...validRecord, input_hash: "xyz" })).toThrow();
+    expect(() => placeCandidateRecordSchema.parse({ ...validRecord, input_hash: "A".repeat(64) })).toThrow(); // uppercase
+    expect(() => placeCandidateRecordSchema.parse({ ...validRecord, input_hash: "a".repeat(63) })).toThrow();
+  });
+
+  it("rejects a missing analysis_version", () => {
+    const withoutVersion: Record<string, unknown> = { ...validRecord };
+    delete withoutVersion.analysis_version;
+    expect(() => placeCandidateRecordSchema.parse(withoutVersion)).toThrow();
+    expect(() => placeCandidateRecordSchema.parse({ ...validRecord, analysis_version: "" })).toThrow();
+  });
+
+  it("rejects a missing input_hash and unknown properties", () => {
+    const withoutHash: Record<string, unknown> = { ...validRecord };
+    delete withoutHash.input_hash;
+    expect(() => placeCandidateRecordSchema.parse(withoutHash)).toThrow();
+    expect(() => placeCandidateRecordSchema.parse({ ...validRecord, latitude: 25.14 })).toThrow();
   });
 });

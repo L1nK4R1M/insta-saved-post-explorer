@@ -2,16 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://insta-saved-post-explorer/docs/places-caption-candidate.schema.json",
   "title": "Places caption candidate record",
-  "description": "One JSONL line produced by external Claude Code / Codex analysis of an exported caption batch. Candidates are strictly textual: never include coordinates, a provider, a providerPlaceId, or a precision. Coordinates are added later by the server-side geographic resolver only.",
+  "description": "One JSONL line produced by external Claude Code / Codex analysis of an exported caption batch. Copy post_id, input_hash, and analysis_version verbatim from the exported line — they pin the result to the exact analysis input and version, and the importer rejects the line if the post changed since export. Candidates are strictly textual: never include coordinates, a provider, a providerPlaceId, or a precision. Coordinates are added later by the server-side geographic resolver only.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["post_id", "candidates"],
+  "required": ["post_id", "input_hash", "analysis_version", "candidates"],
   "properties": {
     "post_id": {
       "type": "string",
       "minLength": 1,
       "maxLength": 200,
       "description": "The exported post id this analysis belongs to."
+    },
+    "input_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Immutable SHA-256 (lowercase hex) of the analysis input, copied unchanged from the exported line. The importer recomputes it and rejects the record if it no longer matches the post's current state."
+    },
+    "analysis_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "Analysis pipeline version, copied unchanged from the exported line. It is the single source of truth used to recompute the hash and to create the analysis job."
     },
     "candidates": {
       "type": "array",

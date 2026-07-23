@@ -21,7 +21,10 @@ import type { PlaceResolver } from "@/server/places/resolvers/types";
 const MAX_EXPORT_LIMIT = 1_000;
 const MAX_HASHTAGS = 50;
 
-// One exported line: only the minimal text fields the model needs.
+// One exported line: the minimal text fields the model needs, plus the immutable
+// identity of the analysis input (`input_hash` + `analysis_version`). The model
+// must echo `post_id`, `input_hash`, and `analysis_version` back unchanged so a
+// result generated from an older post state can be rejected at import time.
 export type CaptionBatchRecord = {
   post_id: string;
   main_theme: PlacesEligibleTheme;
@@ -30,6 +33,8 @@ export type CaptionBatchRecord = {
   internal_tags: string[];
   author_username: string;
   instagram_location: string | null;
+  input_hash: string;
+  analysis_version: string;
 };
 
 export type ExportCaptionBatchInput = {
@@ -81,17 +86,20 @@ export async function exportCaptionBatch(input: ExportCaptionBatchInput): Promis
     const inputs = await loadAnalysisPostInputs(input.ownerId, post.id);
     if (!inputs) continue;
 
+    // The hash pins this line to the exact analysis input and version, so a
+    // result generated from this state can be rejected once the post changes.
+    const inputHash = computePlacesInputHash({
+      analysisVersion,
+      postId: inputs.id,
+      sourceTheme: theme,
+      caption: inputs.caption,
+      authorUsername: inputs.authorUsername,
+      internalTags: inputs.internalTags,
+      structuredLocation: inputs.structuredLocation,
+      verifiedMedia: inputs.verifiedMedia,
+    });
+
     if (!input.force) {
-      const inputHash = computePlacesInputHash({
-        analysisVersion,
-        postId: inputs.id,
-        sourceTheme: theme,
-        caption: inputs.caption,
-        authorUsername: inputs.authorUsername,
-        internalTags: inputs.internalTags,
-        structuredLocation: inputs.structuredLocation,
-        verifiedMedia: inputs.verifiedMedia,
-      });
       const done = await prisma.placeAnalysisJob.findFirst({
         where: { ownerId: input.ownerId, postId: inputs.id, inputHash, analysisVersion, status: "SUCCEEDED" },
         select: { id: true },
@@ -107,6 +115,8 @@ export async function exportCaptionBatch(input: ExportCaptionBatchInput): Promis
       internal_tags: inputs.internalTags,
       author_username: inputs.authorUsername,
       instagram_location: inputs.structuredLocation,
+      input_hash: inputHash,
+      analysis_version: analysisVersion,
     });
   }
 
@@ -125,7 +135,6 @@ export type ImportCandidateBatchInput = {
   limit?: number;
   postId?: string;
   continueOnError?: boolean;
-  analysisVersion?: string;
 };
 
 export type ImportReport = {
@@ -211,7 +220,6 @@ export async function importCandidateBatch(input: ImportCandidateBatchInput): Pr
         ownerId: input.ownerId,
         record,
         resolver: input.resolver,
-        analysisVersion: input.analysisVersion,
         commit,
       });
       report.postsProcessed += 1;
