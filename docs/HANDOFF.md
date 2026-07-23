@@ -3,7 +3,7 @@
 Last updated: 23 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `develop`  
-Reference commit (latest `develop`): `1b5fa1695bb61c3f5b86dbb6a763895d2c0b3dbd`
+Reference commit before this documentation branch: `6f1e1be92b5d98012154d72ee339a7232d7d400d`
 
 ## 1. Purpose
 
@@ -14,7 +14,7 @@ Authority order:
 1. `../AGENTS.md` for global rules and prohibitions;
 2. this file for the current active phase and handoff state;
 3. `CODEX_IMPLEMENTATION_ORDER.md` for phase order, per-phase scope, and dependencies;
-4. the implementation brief for the active phase;
+4. the implementation brief and reviewed design for the active phase;
 5. the code and existing repository conventions.
 
 If this handoff conflicts with an authoritative contract or with the code observed on the latest `develop`, stop and document the conflict before editing.
@@ -24,134 +24,164 @@ If this handoff conflicts with an authoritative contract or with the code observ
 | Phase | Outcome |
 | --- | --- |
 | 0 — API and Places audit | Documentation merged (PR #15). Architecture locked: one app, one PostgreSQL, one R2, one global worker, one global MCP; Places eligibility from `Post.mainTheme` (`Voyages`, `Restaurant`) only, no `Lieux` collection dependency. |
-| A — Library filter consistency | Merged into `develop` (PR #18, squash `69ea0da`). Shared predicates `libraryPostWhere()` and `relevanceFilter()` in `src/server/library.ts`; author, year, and collection now apply to every list, count, and random path. Two latent relevance-SQL type-binding defects fixed (`make_date` bigint parameter, 16-digit numeric cursor precision). 16 PostgreSQL regressions added in `tests/unit/library-filters-postgres.test.ts`, gated on `TEST_DATABASE_URL`. |
-| B — Places theme eligibility | Merged into `develop` (PR #19, squash `2323e0d`). `PLACES_ELIGIBLE_THEMES` + `isPlacesEligibleTheme()` in `src/lib/places/eligibility.ts`, reusing `foldForSearch()`; 8 unit tests in `tests/unit/places-eligibility.test.ts`. Contract summary in section 4. |
-| E2e suite re-green | Merged into `develop` (PR #21, squash `1b5fa16`, closes issue #20). Fixed a real CSS ribbon-overflow regression and realigned the library/toolbar e2e specs with the mid-July UI. **`develop` CI is now fully green** (`Browser tests` included) for the first time since 14 July 2026. Not a numbered phase. |
-| C — R2 media identity and worker isolation | Design merged (PR #23, `cb2bb26`, `CODEX_R2_WORKER_ISOLATION_DESIGN.md`, decisions D1–D4). Implementation merged (PR #24, squash `0870d69`): additive migration (`MediaIdentity` enum + identity columns on `post_media` + `owner_id` backfill/NOT NULL + index + restricted `ipe_worker_reader` role), verified R2 identity persisted in the sync path (`src/server/media-identity.ts`), idempotent `backfillMediaIdentity`, `headR2Object` helper, worker credential docs, 6 PostgreSQL tests. Contract summary in section 4bis. |
-| D — External API V1 | Merged into `develop` (PR #26, squash `9e57f93`). `requireExternalApiKey` (Bearer SHA-256, timing-safe, fail-closed) in `src/auth/api-key.ts`; stable `{error:{code,message}}` contract in `src/contracts/api/error.ts`; six thin `/api/v1` adapters reusing server services; `EXTERNAL_API_KEY_SHA256` preflight validation; `docs/external-api.md`; 21 unit tests. Historical `/api/*` routes unchanged. Deferred: distributed rate limiting (open decision, section 7). |
+| A — Library filter consistency | Merged into `develop` (PR #18, squash `69ea0da`). Shared predicates `libraryPostWhere()` and `relevanceFilter()` in `src/server/library.ts`; author, year, and collection now apply to every list, count, and random path. Two latent relevance-SQL type-binding defects fixed. 16 PostgreSQL regressions added. |
+| B — Places theme eligibility | Merged into `develop` (PR #19, squash `2323e0d`). `PLACES_ELIGIBLE_THEMES` + `isPlacesEligibleTheme()` in `src/lib/places/eligibility.ts`, reusing `foldForSearch()`; 8 unit tests. |
+| E2e suite re-green | Merged into `develop` (PR #21, squash `1b5fa16`, closes issue #20). Fixed the CSS ribbon-overflow regression and realigned the library/toolbar e2e specs. `develop` browser tests are green. |
+| C — R2 media identity and worker isolation | Design merged (PR #23). Implementation merged (PR #24, squash `0870d69`): authoritative media identity, restricted `ipe_worker_reader`, migration, backfill and PostgreSQL tests. |
+| D — External API V1 | Merged into `develop` (PR #26, squash `9e57f93`). Read-only Bearer SHA-256 authentication, stable errors, six thin `/api/v1` routes, preflight validation, documentation and tests. Historical `/api/*` routes unchanged. |
 
 ## 3. Active Phase
 
 ```text
 No implementation phase is active.
-Phases 0, A, B, C, D are merged. develop CI green as of the Phase D merge (9e57f93).
-Next executable phase: F — Places metadata-first domain (brief CODEX_PLACES_EXTENSION.md).
-  F depends on B and D (both merged); it is metadata-first (no deep video analysis,
-  which is Phase H). Blocking open decision before its resolution code: the
-  geographic resolution provider (section 7 — must not be guessed).
-Phase E (global worker) is also unblocked but depends on VPS decisions (section 7).
-Branch for the next work: claude/insta-saved-post-explorer-continue-wli2my
-(restart from the latest develop for each new unit of work).
+Phases 0, A, B, C, D are merged and develop CI is green.
+Next executable phase: F — Places metadata-first domain.
+
+Phase F has a proposed reviewed design and implementation plan:
+- docs/CODEX_PHASE_F_METADATA_FIRST_DESIGN.md
+- docs/superpowers/plans/2026-07-23-phase-f-metadata-first.md
+
+The former geographic-provider blocker is resolved by the proposed design:
+- Geoapify behind a replaceable PlaceResolver interface;
+- local caption-only JSONL workflow with Claude Code or Codex CLI;
+- no VPS, AI API key, or application-stored OAuth credential required for Phase F.
+
+Claude must start with F1 only: schema and domain contracts.
+Do not start F2 until F1 is reviewed and merged.
+Do not start F3 until F2 is reviewed and merged.
+
+Phase E is also unblocked but remains separate and depends on VPS decisions.
+Claude branch constraint: claude/insta-saved-post-explorer-continue-wli2my
+(restart from latest develop for every Phase F sub-PR).
 ```
 
-Branch divergence note: `CODEX_IMPLEMENTATION_ORDER.md` recommends per-phase branch names (`feat/places-theme-eligibility`, etc.). The Claude sessions were constrained to the branch `claude/insta-saved-post-explorer-continue-wli2my` (restarted from the merged `develop` for each phase). Codex had not started any of these phases, so no work was duplicated.
+Branch divergence note: `CODEX_IMPLEMENTATION_ORDER.md` recommends per-phase branch names. Claude sessions may be constrained to `claude/insta-saved-post-explorer-continue-wli2my`; if so, reset that branch from the latest merged `develop` before each F1/F2/F3 unit. Never continue from an unmerged or stale Phase F branch.
 
 ### 3.1 Session Handoff
 
 ```text
-Date et agent : 23 juillet 2026, Claude (Claude Code)
-Phase active : aucune (0, A, B, C, D mergées)
-Statut : develop stable, CI verte (dernier merge Phase D 9e57f93)
-Branche : claude/insta-saved-post-explorer-continue-wli2my (repartie de develop 9e57f93)
-Dernier commit develop : 9e57f93
+Date and planning agent: 23 July 2026, Codex/ChatGPT
+Implementation owner: Claude Code
+Review owner: Codex
 
-Travail réalisé par Claude durant la session :
-- Phase A (PR #18), Phase B (PR #19), remise au vert e2e (PR #21, closes #20) ;
-- Phase C design (PR #23) + implémentation (PR #24) : identité média R2 + rôle worker ;
-- Phase D (PR #26, squash 9e57f93) : API externe V1 en lecture — requireExternalApiKey
-  (Bearer SHA-256), contrat d'erreur stable, 6 routes /api/v1 adaptateurs fins,
-  preflight + docs/external-api.md, 21 tests. Routes historiques inchangées.
+Phase active: none until the Phase F design PR is merged
+Latest develop before planning: 6f1e1be
 
-Prochaine action exacte pour Codex :
-- il n'y a rien à merger ni corriger sur develop ;
-- Phase F (domaine Places metadata-first) est la prochaine phase : brief
-  CODEX_PLACES_EXTENSION.md. Elle dépend de B et D (mergées) ; c'est du metadata-first
-  (sans analyse vidéo profonde = Phase H). Décision bloquante AVANT le code de
-  résolution : le fournisseur de résolution géographique (section 7, à ne pas deviner) ;
-  prévoir aussi la pagination Places (curseur) et la sémantique des niveaux
-  EXACT/PROBABLE/APPROXIMATE/UNKNOWN. Recommandation : produire un design + faire
-  signer ces décisions (comme la Phase C) avant d'écrire la résolution ;
-- Phase E (worker global) reste débloquée (réutilise ipe_worker_reader), sous
-  réserve des décisions VPS non prises ;
-- tout futur consommateur Places doit importer isPlacesEligibleTheme() depuis
-  src/lib/places/eligibility.ts, jamais recopier les chaînes de thème.
+Planning work completed:
+- verified Phases A–D are merged and Phase F dependencies are satisfied;
+- selected Geoapify as Phase F resolver behind PlaceResolver;
+- defined a no-VPS caption-only workflow using exported JSONL and external Claude/Codex analysis;
+- split Phase F into F1 schema/contracts, F2 resolver/persistence, F3 read API/stats/review;
+- documented migration, owner isolation, idempotency, precision, cursor and auth boundaries;
+- created a task-level TDD implementation plan.
 
-Question produit ouverte (consignée dans la PR #21) :
-- le bouton « Découverte » est desktop-only ; son test e2e est skippé sur mobile.
-  À trancher : faut-il l'exposer au mobile ? (hors périmètre des phases en cours.)
+Exact next action for Claude after this documentation is merged:
+1. reset Claude branch from latest develop;
+2. read AGENTS.md, this handoff, CODEX_PLACES_EXTENSION.md,
+   CODEX_PHASE_F_METADATA_FIRST_DESIGN.md and the Phase F plan;
+3. execute only Sub-PR F1;
+4. write failing PostgreSQL tests before the Prisma migration;
+5. open F1 PR and stop.
 
-Blocages et risques :
-- rappel Phase C : ipe_worker_reader est NOLOGIN sans mot de passe ; un rôle de
-  connexion héritant du rôle et le credential R2 worker restent à provisionner
-  hors dépôt avant la Phase E (voir docs/deployment.md).
+Exact Codex responsibility:
+- do not edit Claude's active branch;
+- review each F1/F2/F3 PR against the design;
+- inspect migration safety, owner isolation, idempotency, UNKNOWN semantics,
+  Geoapify secret handling, external read-only API boundary and tests;
+- approve or request concrete changes;
+- update this handoff/status only after merge evidence exists.
 ```
+
+Open product question unrelated to Phase F: the `Découverte` button remains desktop-only and its mobile e2e test is skipped.
 
 ## 4. Phase B Contract Summary
 
 The merged contract lives in `src/lib/places/eligibility.ts`:
 
 - `PLACES_ELIGIBLE_THEMES = ["Voyages", "Restaurant"]` is the single canonical constant;
-- `isPlacesEligibleTheme(mainTheme)` folds the input with the shared `foldForSearch()` and compares against the folded canonical set;
-- `null`, empty, whitespace-only, neighboring (`Voyage`, `Restaurants`, `Cuisine`, ...) and compound themes are not eligible;
+- `isPlacesEligibleTheme(mainTheme)` uses the shared `foldForSearch()` normalization;
+- `null`, empty, neighboring and compound themes are not eligible;
 - no collection, tag, slug, or Instagram provenance is ever consulted;
-- switching a post to an eligible theme makes it a candidate for an idempotent metadata-first job; switching away blocks future automatic analyses but never silently deletes confirmed places or existing links.
+- leaving an eligible theme blocks future automatic analyses but never silently deletes confirmed Places data.
 
-Every future entry point (services, jobs, statistics, UI actions, worker handler, MCP tools) must reuse this predicate.
+Every future entry point must import this predicate.
 
 ## 4bis. Phase C Contract Summary
 
-The merged Phase C contract (design: `CODEX_R2_WORKER_ISOLATION_DESIGN.md`):
+- `PostMedia` carries authoritative R2 identity: `objectKey`, `mimeType`, `byteSize`, `versionTag`, `identityState`, `checkedAt`, and denormalized `ownerId`;
+- only `VERIFIED` media is analyzable by a future worker;
+- the restricted role `ipe_worker_reader` reads only approved identity columns;
+- the worker will resolve an object only as a verified `objectKey`, never as an arbitrary URL.
 
-- `PostMedia` now carries an authoritative R2 identity: `objectKey`, `mimeType`, `byteSize`, `versionTag` (opaque R2 ETag), `identityState` (`UNVERIFIED`/`REPAIRABLE`/`VERIFIED`), `checkedAt`, plus a denormalized `ownerId`;
-- the sync path persists the identity it verifies and promotes those rows to `VERIFIED` (`persistVerifiedMediaIdentity` in `src/server/media-identity.ts`); JSON imports and the seed stay `UNVERIFIED`;
-- `backfillMediaIdentity()` is the idempotent maintenance step: present → `VERIFIED`, absent-but-derivable → `REPAIRABLE`, keyless → `UNVERIFIED`; identity is never fabricated;
-- the restricted role `ipe_worker_reader` (NOLOGIN) has `SELECT` on the media identity columns only — never `url`/`source_path`/`thumbnail_url`, never another table, never writes. Phase E extends its grants to the future jobs table and provisions a login role out-of-band;
-- the worker resolves an object only as `objectKey` on a `VERIFIED` row; it never dereferences a URL.
+## 5. Phase F Design Summary
 
-## 5. CI and Environment State
+The proposed reviewed design is `CODEX_PHASE_F_METADATA_FIRST_DESIGN.md`.
 
-- **`develop` CI is fully green** as of `1b5fa16`: `Lint, types, unit tests and build` and `Browser tests` both pass. The `Browser tests` job had been red since 14 July 2026 (18 identical failures); this was diagnosed in issue #20 and fixed by PR #21 (real CSS ribbon-overflow regression + e2e spec realignment). Issue #20 is closed.
-- Vercel preview deployments now succeed: `AUTH_SECRET` was added to the Vercel Preview environment by the owner. (The variable had previously only existed in Production, which failed `deploy:check` on previews.)
-- Open product question (recorded in PR #21): the `Découverte` button is desktop-only; its e2e test is skipped on mobile viewports. Decide whether to expose discovery on mobile — no code change was made for it here.
+Key decisions that become signed off when that document is merged:
 
-## 6. Later Phases
+1. Geoapify is the Phase F geographic resolver, hidden behind `PlaceResolver`.
+2. Claude/Codex output textual candidates only; models never provide coordinates.
+3. Caption analysis is a local JSONL export/import workflow until the VPS exists.
+4. `UNKNOWN` creates no Place row.
+5. `EXACT`, `PROBABLE`, and `APPROXIMATE` have deterministic semantics and thresholds.
+6. `PostPlace` contains one canonical link per owner, post, and place; repeated mentions live in evidence.
+7. Places list APIs use opaque cursor pagination.
+8. The Phase D external API key remains read-only; Phase F mutations are service/local-script only.
+9. Phase F is delivered as F1, F2, and F3 reviewable sub-PRs.
+
+The map renderer remains a Phase G decision. Phase F must not add Mapbox or map UI dependencies.
+
+## 6. CI and Environment State
+
+- `develop` CI is green after the Phase D merge and subsequent handoff update.
+- Vercel preview deployments succeed after `AUTH_SECRET` was added to the Preview environment.
+- Phase F requires `GEOAPIFY_API_KEY` only when Places resolution is enabled. It is server-only and must never use a `NEXT_PUBLIC_` prefix.
+- Local Claude Code/Codex OAuth credentials stay outside Vercel, PostgreSQL, `.env.example`, logs, and repository files.
+
+## 7. Phase State
 
 | Phase | State | Reason |
 | --- | --- | --- |
-| C — R2 media identity and worker isolation | Merged | PR #24 (`0870d69`). Contract summary in section 4bis. |
-| D — External API V1 | Merged | PR #26 (`9e57f93`). Deferred: distributed rate limiting on Vercel (section 7). |
-| E — Global worker foundation | Unblocked | Phase C merged; reuses `ipe_worker_reader` + `identityState`. Depends on VPS decisions not yet taken (section 7). |
-| F — Places metadata-first domain | Next executable | Phases B and D merged; metadata-first (no deep video analysis). Brief `CODEX_PLACES_EXTENSION.md`. Blocking open decision before resolution code: geographic resolution provider (section 7). |
-| G — Places 2D UI | Blocked | Requires Phase F |
-| H — Deep video analysis | Blocked | Requires Phases C and E, stable Places domain |
-| I — 3D globe | Blocked | Requires Phase G and stable Places data |
-| J — MCP and Hermes | Blocked | Requires Phase D; Places tools also require Phase F |
+| C — R2 media identity and worker isolation | Merged | PR #24 (`0870d69`). |
+| D — External API V1 | Merged | PR #26 (`9e57f93`). Distributed rate limiting remains deferred. |
+| E — Global worker foundation | Ready, separate | Phase C merged; requires VPS decisions and credentials. Do not mix with F. |
+| F — Places metadata-first domain | Ready after design merge | Dependencies B and D merged. Execute F1 → review/merge → F2 → review/merge → F3. |
+| G — Places 2D UI | Blocked | Requires completed Phase F. |
+| H — Deep Places analysis | Blocked | Requires C, E, and stable Phase F. |
+| I — Places 3D globe | Blocked | Requires G and stable Places data. |
+| J — Unified MCP and Hermes | Blocked | Places tools require completed Phase F. |
 
 The presence of a detailed brief is not permission to execute a blocked phase.
 
-## 7. Decisions That Must Not Be Guessed
+## 8. Decisions That Must Not Be Guessed
 
-Still open (require an explicit decision at the relevant later phase):
+Still open for later phases:
 
 - distributed API rate limiting on Vercel;
-- map rendering provider;
-- geographic resolution provider;
-- AI providers, models, budgets, and thresholds;
-- VPS credentials, firewall, backups, and observability;
-- permissions and confirmation model for sensitive Places commands.
+- map rendering provider for Phase G/I;
+- server-side AI providers, models, budgets, and thresholds for Phase H;
+- VPS credentials, firewall, backups, and observability for Phase E;
+- final permission and confirmation model for sensitive Phase G/J commands.
 
-Signed off for Phase C (23 July 2026, owner) — see `CODEX_R2_WORKER_ISOLATION_DESIGN.md` section 8:
+Proposed and signed when the Phase F design PR merges:
 
-- canonical R2 media identity and historical repair policy → authoritative `objectKey` + `mimeType` + `byteSize` + opaque R2 ETag version tag + `identityState` (UNVERIFIED/REPAIRABLE/VERIFIED); legacy media stays flagged with lazy backfill, never fabricated;
-- restricted PostgreSQL worker role → restricted read-only role, owner isolation enforced by grant + query discipline + owner-scoped test (RLS deferred);
-- migration rollback or forward-recovery procedure → additive migration, fix-forward, Neon branch/PITR as the safety net.
+- Geoapify geographic resolution;
+- caption-only local workflow;
+- cursor pagination;
+- precision and UNKNOWN semantics;
+- one canonical PostPlace link;
+- no external writes through the Phase D API key;
+- F1/F2/F3 delivery split.
 
-## 8. Required Pull Request Report
+Signed off for Phase C: see `CODEX_R2_WORKER_ISOLATION_DESIGN.md` section 8.
 
-Every phase implementation pull request must include:
+## 9. Required Pull Request Report
+
+Every Phase F sub-PR must include:
 
 ```text
 Phase active
+Sub-phase active (F1, F2, or F3)
 Gate d’entrée vérifiée
 Fichiers modifiés
 Contrats ajoutés ou modifiés
@@ -162,3 +192,5 @@ Résultats
 Risques restants
 Prochaine gate
 ```
+
+Every Phase F PR must explicitly confirm that it did not start another phase and did not store captions, candidate JSONL, API keys, OAuth credentials, or production data in Git.
