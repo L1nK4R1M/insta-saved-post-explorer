@@ -202,11 +202,15 @@ async function persistBatch(
       const postMedia = persistedPosts.flatMap(({ id: postId, source }) =>
         source.media.map((media) => ({
           postId,
+          ownerId,
           type: media.type.toUpperCase() as "IMAGE" | "VIDEO",
           url: media.url,
           sourcePath: media.sourcePath,
           thumbnailUrl: media.thumbnailUrl,
           position: media.position,
+          // R2 identity stays UNVERIFIED here: generic imports carry no
+          // verified R2 evidence. The sync path promotes its media to VERIFIED
+          // after import; the identity backfill promotes eligible legacy media.
         })),
       );
       if (postMedia.length > 0) {

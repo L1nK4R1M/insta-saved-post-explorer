@@ -4,6 +4,7 @@ import { z } from "zod";
 import { importPosts } from "@/server/import-posts";
 import { enrichSyncedPost } from "@/lib/sync/enrich-post";
 import { prisma } from "@/server/db";
+import { persistVerifiedMediaIdentity, type VerifiedMediaIdentity } from "@/server/media-identity";
 import { publicMediaUrl, validateR2ObjectReference, verifyR2Object } from "@/server/r2";
 import { requireSyncToken } from "@/server/sync-auth";
 
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     const claims = await requireSyncToken(request);
     const post = postSchema.parse(await request.json());
     const postCode = new URL(post.post_url).pathname.split("/").filter(Boolean).at(-1) ?? "";
+    const verifiedMedia: VerifiedMediaIdentity[] = [];
     for (const [position, media] of post.media.entries()) {
       validateR2ObjectReference({
         objectKey: media.objectKey,
@@ -46,7 +48,14 @@ export async function POST(request: Request) {
         carousel: post.content_type === "carousel",
         kind: media.type,
       });
-      await verifyR2Object(media.objectKey, media.byteSize);
+      const verified = await verifyR2Object(media.objectKey, media.byteSize);
+      verifiedMedia.push({
+        position,
+        objectKey: media.objectKey,
+        mimeType: verified.contentType,
+        byteSize: media.byteSize,
+        versionTag: verified.etag,
+      });
       if (media.thumbnailObjectKey && media.thumbnailByteSize) {
         validateR2ObjectReference({
           objectKey: media.thumbnailObjectKey,
@@ -98,6 +107,20 @@ export async function POST(request: Request) {
       idempotencyKey: `${claims.sub}:${post.external_id}`.slice(0, 128),
       batchSize: 1,
     });
+    // Persist the authoritative R2 identity verified above so the worker can
+    // later read only these confirmed objects. The imported media default to
+    // UNVERIFIED; this promotes the sync-verified rows to VERIFIED.
+    const persisted = await prisma.post.findUnique({
+      where: { ownerId_postUrl: { ownerId: claims.ownerId, postUrl: canonicalPostUrl } },
+      select: { id: true },
+    });
+    if (persisted) {
+      await persistVerifiedMediaIdentity({
+        ownerId: claims.ownerId,
+        postId: persisted.id,
+        media: verifiedMedia,
+      });
+    }
     await prisma.syncJob.updateMany({
       where: { id: claims.sub, ownerId: claims.ownerId },
       data: {

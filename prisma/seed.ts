@@ -59,6 +59,7 @@ async function main() {
       await prisma.postMedia.createMany({
         data: source.media.map((media) => ({
           postId: post.id,
+          ownerId,
           type: media.type.toUpperCase() as "IMAGE" | "VIDEO",
           url: media.url,
           sourcePath: media.sourcePath,

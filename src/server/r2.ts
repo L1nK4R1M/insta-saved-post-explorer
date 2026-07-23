@@ -124,12 +124,47 @@ export async function r2ObjectExists(objectKey: string): Promise<boolean> {
     await r2Client().send(new HeadObjectCommand({ Bucket: bucket, Key: objectKey }));
     return true;
   } catch (error) {
-    const status = typeof error === "object" && error && "$metadata" in error
-      ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
-      : undefined;
-    if (status === 404) return false;
+    if (r2StatusCode(error) === 404) return false;
     throw error;
   }
+}
+
+export type R2ObjectIdentity = {
+  byteSize: number;
+  mimeType: string | null;
+  versionTag: string | null;
+};
+
+// Read the authoritative identity of a known R2 object. Returns null when the
+// object is absent (404). Used by the media-identity backfill for objects whose
+// key is derivable but whose stored size is unknown.
+export async function headR2Object(objectKey: string): Promise<R2ObjectIdentity | null> {
+  try {
+    const { bucket } = config();
+    const result = await r2Client().send(new HeadObjectCommand({ Bucket: bucket, Key: objectKey }));
+    if (typeof result.ContentLength !== "number") throw new Error("R2_OBJECT_SIZE_UNKNOWN");
+    return {
+      byteSize: result.ContentLength,
+      mimeType: result.ContentType ?? null,
+      versionTag: result.ETag ?? null,
+    };
+  } catch (error) {
+    if (r2StatusCode(error) === 404) return null;
+    throw error;
+  }
+}
+
+function r2StatusCode(error: unknown): number | undefined {
+  return typeof error === "object" && error && "$metadata" in error
+    ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+    : undefined;
+}
+
+// Derive the canonical R2 object key from a stored relative source path.
+// Mirrors objectTarget(): objectKey = `${prefix}/${sourcePath}`.
+export function deriveObjectKey(sourcePath: string): string {
+  const prefix = safePrefix(process.env.MEDIA_PATH_PREFIX ?? "originals");
+  return `${prefix}/${sourcePath}`;
 }
 
 export function objectKeyFromPublicMediaUrl(value: string): string {
