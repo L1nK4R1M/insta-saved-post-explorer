@@ -76,16 +76,7 @@ export async function queryLibraryPosts(
 
   const cursor = query.cursor ? decodeLibraryCursor(query.cursor, query.sort) : null;
   const effectiveSort = query.sort === "relevance" ? "newest" : query.sort;
-  const baseWhere: Prisma.PostWhereInput = {
-    ownerId,
-    ...(query.theme ? { mainTheme: query.theme } : {}),
-    ...(query.contentType ? { contentType: query.contentType.toUpperCase() as "IMAGE" | "CAROUSEL" | "REEL" } : {}),
-    ...(query.author ? { authorSortKey: foldForSearch(query.author) } : {}),
-    ...(query.year ? { publishedAt: { gte: new Date(Date.UTC(query.year, 0, 1)), lt: new Date(Date.UTC(query.year + 1, 0, 1)) } } : {}),
-    ...(query.collection ? collectionWhere(ownerId, query.collection) : {}),
-    ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
-    ...tagWhere(ownerId, query.tags, query.tagMode),
-  };
+  const baseWhere = libraryPostWhere(ownerId, query);
   if (effectiveSort === "newest" || effectiveSort === "oldest") {
     return queryPostsByEffectiveSavedDate(ownerId, query, baseWhere, cursor, effectiveSort);
   }
@@ -178,13 +169,7 @@ export async function getRandomLibraryPost(
     return getRandomRelevantPost(ownerId, query);
   }
 
-  const where: Prisma.PostWhereInput = {
-    ownerId,
-    ...(query.theme ? { mainTheme: query.theme } : {}),
-    ...(query.contentType ? { contentType: query.contentType.toUpperCase() as "IMAGE" | "CAROUSEL" | "REEL" } : {}),
-    ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
-    ...tagWhere(ownerId, query.tags, query.tagMode),
-  };
+  const where = libraryPostWhere(ownerId, query);
   const total = await prisma.post.count({ where });
   if (total === 0) return null;
   const row = await prisma.post.findFirst({
@@ -197,21 +182,14 @@ export async function getRandomLibraryPost(
 }
 
 async function getRandomRelevantPost(ownerId: string, query: LibraryQuery): Promise<LibraryPost | null> {
-  const search = foldForSearch(query.search);
-  const slugs = [...new Set(query.tags.map(tagSlug).filter(Boolean))];
-  const tagCondition = relevanceTagCondition(ownerId, slugs, query.tagMode);
-  const contentType = query.contentType?.toUpperCase() ?? null;
-  const total = await countRelevantPosts(ownerId, query, search, tagCondition, contentType);
+  const { condition } = relevanceFilter(ownerId, query);
+  const total = await countRelevantPosts(condition);
   if (total === 0) return null;
   const offset = Math.floor(Math.random() * total);
   const ids = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT p."id"
     FROM "posts" p
-    WHERE p."owner_id" = ${ownerId}
-      AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
-      AND (${contentType}::text IS NULL OR p."content_type"::text = ${contentType})
-      AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
-      ${tagCondition}
+    WHERE ${condition}
     ORDER BY p."id" ASC
     OFFSET ${offset}
     LIMIT 1
@@ -223,19 +201,19 @@ async function queryRelevantPosts(
   ownerId: string,
   query: LibraryQuery,
 ): Promise<LibraryPostPage> {
-  const search = foldForSearch(query.search);
-  const slugs = [...new Set(query.tags.map(tagSlug).filter(Boolean))];
   const cursor = query.cursor ? decodeLibraryCursor(query.cursor, "relevance") : null;
   const cursorRank = cursor?.value === null || cursor?.value === undefined ? null : Number(cursor.value);
   if (cursor && (cursorRank === null || !Number.isFinite(cursorRank))) {
     throw cursorValidationError();
   }
 
-  const tagCondition = relevanceTagCondition(ownerId, slugs, query.tagMode);
-  const contentType = query.contentType?.toUpperCase() ?? null;
+  const { search, condition } = relevanceFilter(ownerId, query);
+  // Bind the cursor rank as text: Prisma serializes JS floats as 16-digit
+  // numerics, which loses precision and breaks the tie-breaking equality.
+  const cursorRankParam = cursorRank === null ? null : String(cursorRank);
   const cursorCondition =
-    cursor && cursorRank !== null
-      ? Prisma.sql`AND (rank < ${cursorRank} OR (rank = ${cursorRank} AND id > ${cursor.id}))`
+    cursor && cursorRankParam !== null
+      ? Prisma.sql`AND (rank < ${cursorRankParam}::double precision OR (rank = ${cursorRankParam}::double precision AND id > ${cursor.id}))`
       : Prisma.empty;
   const ranked = await prisma.$queryRaw<Array<{ id: string; rank: number }>>(Prisma.sql`
     WITH ranked AS (
@@ -246,14 +224,7 @@ async function queryRelevantPosts(
           plainto_tsquery('simple', ${search})
         )::double precision AS rank
       FROM "posts" p
-      WHERE p."owner_id" = ${ownerId}
-        AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
-        AND (${contentType}::text IS NULL OR p."content_type"::text = ${contentType})
-        AND (${query.author ? foldForSearch(query.author) : null}::text IS NULL OR p."author_sort_key" = ${query.author ? foldForSearch(query.author) : null})
-        AND (${query.year}::integer IS NULL OR (p."published_at" >= make_date(${query.year ?? 2000}, 1, 1) AND p."published_at" < make_date(${query.year ?? 2000} + 1, 1, 1)))
-        AND (${query.collection}::text IS NULL OR EXISTS (SELECT 1 FROM "collection_posts" cp JOIN "collections" c ON c."id" = cp."collection_id" WHERE cp."post_id" = p."id" AND c."owner_id" = ${ownerId} AND c."slug" = ${query.collection} AND c."is_public" = true) OR (${query.collection} = 'favoris' AND EXISTS (SELECT 1 FROM "post_tags" fpt JOIN "tags" ft ON ft."id" = fpt."tag_id" WHERE fpt."post_id" = p."id" AND ft."owner_id" = ${ownerId} AND ft."slug" = 'favoris')))
-        AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
-        ${tagCondition}
+      WHERE ${condition}
     )
     SELECT id, rank
     FROM ranked
@@ -285,29 +256,41 @@ async function queryRelevantPosts(
       : null;
 
   const [totalFiltered, totalLibrary] = await Promise.all([
-    countRelevantPosts(ownerId, query, search, tagCondition, contentType),
+    countRelevantPosts(condition),
     prisma.post.count({ where: { ownerId } }),
   ]);
   return { items, nextCursor, total: totalFiltered, totalFiltered, totalLibrary };
 }
 
-async function countRelevantPosts(
-  ownerId: string,
-  query: LibraryQuery,
-  search: string,
-  tagCondition: Prisma.Sql,
-  contentType: string | null,
-): Promise<number> {
+async function countRelevantPosts(condition: Prisma.Sql): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
     SELECT COUNT(*)::bigint AS total
     FROM "posts" p
-    WHERE p."owner_id" = ${ownerId}
-      AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
-      AND (${contentType}::text IS NULL OR p."content_type"::text = ${contentType})
-      AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
-      ${tagCondition}
+    WHERE ${condition}
   `);
   return Number(rows[0]?.total ?? 0);
+}
+
+// Single source for the PostgreSQL predicates shared by the relevance list,
+// count and random paths so they can never disagree on the active filters.
+function relevanceFilter(
+  ownerId: string,
+  query: LibraryQuery,
+): { search: string; condition: Prisma.Sql } {
+  const search = foldForSearch(query.search);
+  const slugs = [...new Set(query.tags.map(tagSlug).filter(Boolean))];
+  const tagCondition = relevanceTagCondition(ownerId, slugs, query.tagMode);
+  const contentType = query.contentType?.toUpperCase() ?? null;
+  const authorSortKey = query.author ? foldForSearch(query.author) : null;
+  const condition = Prisma.sql`p."owner_id" = ${ownerId}
+      AND (${query.theme}::text IS NULL OR p."main_theme" = ${query.theme})
+      AND (${contentType}::text IS NULL OR p."content_type"::text = ${contentType})
+      AND (${authorSortKey}::text IS NULL OR p."author_sort_key" = ${authorSortKey})
+      AND (${query.year}::integer IS NULL OR (p."published_at" >= make_date((${query.year ?? 2000})::integer, 1, 1) AND p."published_at" < make_date((${query.year ?? 2000})::integer + 1, 1, 1)))
+      AND (${query.collection}::text IS NULL OR EXISTS (SELECT 1 FROM "collection_posts" cp JOIN "collections" c ON c."id" = cp."collection_id" WHERE cp."post_id" = p."id" AND c."owner_id" = ${ownerId} AND c."slug" = ${query.collection} AND c."is_public" = true) OR (${query.collection} = 'favoris' AND EXISTS (SELECT 1 FROM "post_tags" fpt JOIN "tags" ft ON ft."id" = fpt."tag_id" WHERE fpt."post_id" = p."id" AND ft."owner_id" = ${ownerId} AND ft."slug" = 'favoris')))
+      AND to_tsvector('simple', p."search_text") @@ plainto_tsquery('simple', ${search})
+      ${tagCondition}`;
+  return { search, condition };
 }
 
 function relevanceTagCondition(
@@ -416,6 +399,21 @@ export async function getLibraryPost(
     include: postInclude,
   });
   return row ? toLibraryPost(row, false) : null;
+}
+
+// Single source for the Prisma predicates shared by the normal list, count
+// and random paths so they can never disagree on the active filters.
+function libraryPostWhere(ownerId: string, query: LibraryQuery): Prisma.PostWhereInput {
+  return {
+    ownerId,
+    ...(query.theme ? { mainTheme: query.theme } : {}),
+    ...(query.contentType ? { contentType: query.contentType.toUpperCase() as "IMAGE" | "CAROUSEL" | "REEL" } : {}),
+    ...(query.author ? { authorSortKey: foldForSearch(query.author) } : {}),
+    ...(query.year ? { publishedAt: { gte: new Date(Date.UTC(query.year, 0, 1)), lt: new Date(Date.UTC(query.year + 1, 0, 1)) } } : {}),
+    ...(query.collection ? collectionWhere(ownerId, query.collection) : {}),
+    ...(query.search ? { searchText: { contains: foldForSearch(query.search) } } : {}),
+    ...tagWhere(ownerId, query.tags, query.tagMode),
+  };
 }
 
 function tagWhere(

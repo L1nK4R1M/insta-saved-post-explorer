@@ -1,9 +1,9 @@
 # Operational Handoff
 
-Last updated: 22 July 2026  
+Last updated: 23 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `develop`  
-Reference commit before this documentation change: `5b4bb146954e1d3a6a475533e3e032d9b90102a4`
+Reference commit before this change: `9891dfdcefc143a8b67fb2bd3043e5dd45f08378`
 
 ## 1. Purpose
 
@@ -40,13 +40,82 @@ The last architecture pull request was documentation-only. No API V1, Places dom
 
 ```text
 Phase A — Stabilisation de la bibliothèque existante
-Recommended branch: fix/library-filter-consistency
-Implementation PR base: develop
+Status: AWAITING_REVIEW
+Branch: claude/insta-saved-post-explorer-continue-wli2my
+Pull request: #18 (base develop)
 ```
 
-Phase A is the only implementation phase currently ready to start.
+Phase A is implemented and awaiting review. Do not start Phase B, C, D, E, F, G, H, I, or J before PR #18 is reviewed and merged, and never in the same branch or pull request.
 
-Do not start Phase B, C, D, E, F, G, H, I, or J in the same branch or pull request.
+Branch divergence note: this handoff previously recommended `fix/library-filter-consistency`. The Claude session that implemented Phase A was constrained to the branch `claude/insta-saved-post-explorer-continue-wli2my`; Codex had not started the phase (no branch, no PR), so no work was duplicated.
+
+### 3.1 Session Handoff
+
+```text
+Date et agent : 23 juillet 2026, Claude (Claude Code)
+Phase active : A — Library filter consistency
+Statut : AWAITING_REVIEW
+Branche : claude/insta-saved-post-explorer-continue-wli2my
+Pull request : #18
+Dernier commit poussé : voir la branche (fix + test + docs)
+
+Travail reçu de Codex :
+- develop à 9891dfd, documentation phase 0 uniquement ; aucune implémentation Phase A.
+
+Travail réalisé par Claude :
+- extraction de libraryPostWhere() : prédicats Prisma partagés entre liste normale,
+  comptage et random normal ;
+- extraction de relevanceFilter() : condition SQL unique partagée entre liste
+  pertinence, countRelevantPosts et random pertinence (auteur, année, collection,
+  thème, type, tags, texte, ownerId partout) ;
+- correctif du défaut latent make_date : Prisma lie les entiers JS en bigint,
+  make_date(bigint, int, int) n'existe pas — toute requête de pertinence échouait
+  à la préparation sur PostgreSQL ; cast ::integer explicite ajouté ;
+- correctif du curseur de pertinence : Prisma sérialise les flottants JS en numeric
+  à 16 chiffres, cassant l'égalité de tie-breaking sur rangs égaux ; le rang du
+  curseur est désormais lié en texte casté ::double precision ;
+- nouvelle suite tests/unit/library-filters-postgres.test.ts (16 régressions
+  PostgreSQL réelles, gated sur TEST_DATABASE_URL, skip sans base).
+
+Fichiers modifiés :
+- src/server/library.ts
+- tests/unit/library-filters-postgres.test.ts (nouveau)
+- docs/HANDOFF.md, docs/IMPLEMENTATION_STATUS.md
+
+Tests exécutés :
+- npm ci : OK
+- npm run db:generate : OK
+- npm run db:deploy (PostgreSQL 16 local) : OK, 7 migrations
+- npm run lint : OK, 0 warning
+- npm run typecheck : OK
+- TEST_DATABASE_URL=<pg16> npm run test : OK, 24 fichiers / 129 tests
+- npm run test sans base : OK, 113 passés + 16 skippés (baseline intacte)
+- TEST_DATABASE_URL=<pg16> npx vitest run tests/unit/library-filters-postgres.test.ts : 16/16
+- npm run build : OK, 22 pages
+
+Échecs ou validations restantes :
+- aucun échec ; Playwright non exécuté (aucun changement de route ni de
+  comportement navigateur, conformément à la section 8 du handoff).
+
+Travail restant :
+- revue humaine et merge de la PR #18 ;
+- après merge, passer Phase A à COMPLETE dans IMPLEMENTATION_STATUS.md.
+
+Prochaine action exacte pour Codex :
+- relire la PR #18 (src/server/library.ts : relevanceFilter, libraryPostWhere ;
+  tests/unit/library-filters-postgres.test.ts) et la merger si conforme ;
+- ne démarrer la Phase B (isPlacesEligibleTheme, branche
+  feat/places-theme-eligibility) qu'après ce merge ;
+- pour exécuter la suite PostgreSQL : exporter TEST_DATABASE_URL vers une base
+  migrée (npm run db:deploy) puis
+  `TEST_DATABASE_URL=... npx vitest run tests/unit/library-filters-postgres.test.ts`.
+
+Blocages et risques :
+- le prédicat année du SQL de pertinence (make_date sur timestamptz) suit le fuseau
+  du serveur PostgreSQL alors que le chemin Prisma utilise des bornes UTC ;
+  comportement préexistant conservé, sans incidence si la base est en UTC (Neon
+  par défaut) ; à trancher explicitement si un jour la base n'est plus en UTC.
+```
 
 ## 4. Phase A Problem Statement
 

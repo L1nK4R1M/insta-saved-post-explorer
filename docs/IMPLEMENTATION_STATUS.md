@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 22 July 2026
+Last updated: 23 July 2026
 
 This file is a compact state ledger. Detailed scope, dependencies, and exit gates remain authoritative in `CODEX_IMPLEMENTATION_ORDER.md`.
 
@@ -16,7 +16,7 @@ Status values:
 | Phase | Status | Dependencies | Branch / PR | Required or recorded evidence |
 | --- | --- | --- | --- | --- |
 | 0 — API and Places audit | COMPLETE | None | PR #15, merged into `develop` | Architecture, gaps, phase order, and Places eligibility documented. Documentation-only change. |
-| A — Library filter consistency | READY | Phase 0 | Recommended: `fix/library-filter-consistency` | PostgreSQL regressions for list, count, normal random, and relevance random; lint; typecheck; tests; build. |
+| A — Library filter consistency | AWAITING_REVIEW | Phase 0 | `claude/insta-saved-post-explorer-continue-wli2my` / PR #18 | Shared predicates (`libraryPostWhere`, `relevanceFilter`) in `src/server/library.ts`; 16 PostgreSQL regressions in `tests/unit/library-filters-postgres.test.ts` (16/16 green against PostgreSQL 16); lint, typecheck, 129 tests, build all green. Two latent relevance-SQL type-binding defects fixed (make_date bigint, numeric cursor precision). |
 | B — Places theme eligibility | BLOCKED | Phase A reviewed and merged | None | Shared `isPlacesEligibleTheme()` using common normalization; exact positive and negative cases; no collection query. |
 | C — R2 media identity and worker isolation | NOT_STARTED | Separate reviewed design | None | Canonical R2 identity; restricted worker access; `ownerId` isolation; migration recovery plan. |
 | D — External API V1 | BLOCKED | Phase A and prerequisites in implementation order | None | Authenticated read-only `/api/v1`; stable errors; reused server services; route regressions; deployment preflight. |
@@ -30,9 +30,10 @@ Status values:
 ## Current Execution Pointer
 
 ```text
-Next implementation phase: A — Library filter consistency
-Next implementation branch: fix/library-filter-consistency
-Required stop: review after the Phase A exit gate
+Current state: Phase A implemented, AWAITING_REVIEW (PR #18)
+Required stop: human review and merge of PR #18
+Next implementation phase after merge: B — Places theme eligibility
+Next implementation branch after merge: feat/places-theme-eligibility
 ```
 
 Do not change a phase to `COMPLETE` without adding its merged pull request and concrete validation evidence.
