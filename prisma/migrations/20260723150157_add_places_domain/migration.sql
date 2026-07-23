@@ -165,3 +165,33 @@ ALTER TABLE "place_evidence"
 CREATE UNIQUE INDEX "post_places_one_primary_per_post"
   ON "post_places" ("owner_id", "post_id")
   WHERE "is_primary" = TRUE;
+
+-- Owner- and post-consistent integrity (review fix, design section 4).
+-- The single-column foreign keys above keep the designed ON DELETE behavior
+-- (CASCADE / SET NULL). The composite keys below additionally bind owner_id to
+-- every parent and bind analysis_job_id to the same owner and post, so the
+-- database rejects a child row that references another owner's post/place/job
+-- or a job created for a different post. Application filtering alone cannot
+-- guarantee this.
+--
+-- Composite identity keys the composite foreign keys reference.
+CREATE UNIQUE INDEX "posts_owner_id_id_key" ON "posts"("owner_id", "id");
+CREATE UNIQUE INDEX "places_owner_id_id_key" ON "places"("owner_id", "id");
+CREATE UNIQUE INDEX "place_jobs_owner_post_id_key" ON "place_analysis_jobs"("owner_id", "post_id", "id");
+
+-- Composite guards use ON DELETE NO ACTION (checked at end of statement) so the
+-- SET NULL / CASCADE actions of the single-column foreign keys apply first; with
+-- MATCH SIMPLE a nullable member (place_id, analysis_job_id) skips the check when
+-- it is NULL, which is exactly the intended behavior.
+ALTER TABLE "post_places"
+  ADD CONSTRAINT "post_places_owner_post_fkey" FOREIGN KEY ("owner_id", "post_id") REFERENCES "posts"("owner_id", "id") ON DELETE NO ACTION ON UPDATE NO ACTION,
+  ADD CONSTRAINT "post_places_owner_place_fkey" FOREIGN KEY ("owner_id", "place_id") REFERENCES "places"("owner_id", "id") ON DELETE NO ACTION ON UPDATE NO ACTION,
+  ADD CONSTRAINT "post_places_owner_post_job_fkey" FOREIGN KEY ("owner_id", "post_id", "analysis_job_id") REFERENCES "place_analysis_jobs"("owner_id", "post_id", "id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+ALTER TABLE "place_evidence"
+  ADD CONSTRAINT "place_evidence_owner_post_fkey" FOREIGN KEY ("owner_id", "post_id") REFERENCES "posts"("owner_id", "id") ON DELETE NO ACTION ON UPDATE NO ACTION,
+  ADD CONSTRAINT "place_evidence_owner_place_fkey" FOREIGN KEY ("owner_id", "place_id") REFERENCES "places"("owner_id", "id") ON DELETE NO ACTION ON UPDATE NO ACTION,
+  ADD CONSTRAINT "place_evidence_owner_post_job_fkey" FOREIGN KEY ("owner_id", "post_id", "analysis_job_id") REFERENCES "place_analysis_jobs"("owner_id", "post_id", "id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+ALTER TABLE "place_analysis_jobs"
+  ADD CONSTRAINT "place_analysis_jobs_owner_post_fkey" FOREIGN KEY ("owner_id", "post_id") REFERENCES "posts"("owner_id", "id") ON DELETE NO ACTION ON UPDATE NO ACTION;

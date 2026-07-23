@@ -117,6 +117,9 @@ model Post {
   placeJobs       PlaceAnalysisJob[]
 
   @@unique([ownerId, postUrl], map: "posts_owner_id_post_url_key")
+  // Composite identity key referenced by owner-consistent composite foreign
+  // keys on the Places child tables (owner_id is bound to the post owner).
+  @@unique([ownerId, id], map: "posts_owner_id_id_key")
   @@index([ownerId, savedAt, id], map: "posts_owner_saved_at_id_idx")
   @@index([ownerId, publishedAt, id], map: "posts_owner_published_at_id_idx")
   @@index([ownerId, authorSortKey, id], map: "posts_owner_author_id_idx")
@@ -273,6 +276,9 @@ model Place {
   evidence                  PlaceEvidence[]
 
   @@unique([ownerId, provider, providerPlaceId], map: "places_owner_provider_id_key")
+  // Composite identity key referenced by owner-consistent composite foreign
+  // keys on PostPlace and PlaceEvidence (owner_id is bound to the place owner).
+  @@unique([ownerId, id], map: "places_owner_id_id_key")
   @@index([ownerId, updatedAt, id], map: "places_owner_updated_id_idx")
   @@index([ownerId, countryCode], map: "places_owner_country_idx")
   @@index([ownerId, continentCode], map: "places_owner_continent_idx")
@@ -352,6 +358,9 @@ model PlaceAnalysisJob {
   evidence        PlaceEvidence[]
 
   @@unique([ownerId, postId, inputHash, analysisVersion], map: "place_jobs_idempotency_key")
+  // Composite identity key referenced by the owner/post-consistent composite
+  // foreign keys that bind analysis_job_id to the same owner and post.
+  @@unique([ownerId, postId, id], map: "place_jobs_owner_post_id_key")
   @@index([ownerId, status, priority, createdAt], map: "place_jobs_owner_status_priority_idx")
   @@index([ownerId, postId, createdAt], map: "place_jobs_owner_post_created_idx")
   @@map("place_analysis_jobs")

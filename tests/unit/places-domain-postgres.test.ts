@@ -120,6 +120,111 @@ describeWithDatabase("Places domain on PostgreSQL", () => {
     // The canonical place is independent of any single post and survives.
     expect(await prisma.place.count({ where: { id: placeId } })).toBe(1);
   });
+
+  // Composite foreign keys must bind owner_id to every parent and bind
+  // analysis_job_id to the same owner and post, so a row scoped to one owner
+  // can never reference another owner's (or another post's) data.
+  describe("owner- and post-consistent foreign keys", () => {
+    it("rejects a PostPlace whose post belongs to another owner", async () => {
+      const postB = await seedPost(OWNER_B);
+      const placeA = await prisma.place.create({ data: placeData(OWNER_A) });
+      await expect(
+        prisma.postPlace.create({
+          data: { ownerId: OWNER_A, postId: postB, placeId: placeA.id, precision: "EXACT", confidence: 0.9 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects a PostPlace whose place belongs to another owner", async () => {
+      const postA = await seedPost(OWNER_A);
+      const placeB = await prisma.place.create({ data: placeData(OWNER_B) });
+      await expect(
+        prisma.postPlace.create({
+          data: { ownerId: OWNER_A, postId: postA, placeId: placeB.id, precision: "EXACT", confidence: 0.9 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects a PostPlace referencing a job owned by someone else", async () => {
+      const postA = await seedPost(OWNER_A);
+      const placeA = await prisma.place.create({ data: placeData(OWNER_A) });
+      const postB = await seedPost(OWNER_B);
+      const jobB = await seedJobFor(OWNER_B, postB);
+      await expect(
+        prisma.postPlace.create({
+          data: { ownerId: OWNER_A, postId: postA, placeId: placeA.id, analysisJobId: jobB, precision: "EXACT", confidence: 0.9 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects a PostPlace referencing a job of a different post", async () => {
+      const postX = await seedPost(OWNER_A);
+      const postY = await seedPost(OWNER_A);
+      const placeA = await prisma.place.create({ data: placeData(OWNER_A) });
+      const jobY = await seedJobFor(OWNER_A, postY);
+      await expect(
+        prisma.postPlace.create({
+          data: { ownerId: OWNER_A, postId: postX, placeId: placeA.id, analysisJobId: jobY, precision: "EXACT", confidence: 0.9 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects a PlaceEvidence whose post belongs to another owner", async () => {
+      const postA = await seedPost(OWNER_A);
+      const postB = await seedPost(OWNER_B);
+      const jobA = await seedJobFor(OWNER_A, postA);
+      await expect(
+        prisma.placeEvidence.create({
+          data: { ownerId: OWNER_A, postId: postB, analysisJobId: jobA, evidenceType: "CAPTION", confidence: 0.7 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects a PlaceEvidence whose place belongs to another owner", async () => {
+      const postA = await seedPost(OWNER_A);
+      const placeB = await prisma.place.create({ data: placeData(OWNER_B) });
+      const jobA = await seedJobFor(OWNER_A, postA);
+      await expect(
+        prisma.placeEvidence.create({
+          data: { ownerId: OWNER_A, postId: postA, placeId: placeB.id, analysisJobId: jobA, evidenceType: "CAPTION", confidence: 0.7 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects a PlaceEvidence referencing a job of a different post", async () => {
+      const postX = await seedPost(OWNER_A);
+      const postY = await seedPost(OWNER_A);
+      const jobY = await seedJobFor(OWNER_A, postY);
+      await expect(
+        prisma.placeEvidence.create({
+          data: { ownerId: OWNER_A, postId: postX, analysisJobId: jobY, evidenceType: "CAPTION", confidence: 0.7 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects a PlaceAnalysisJob whose post belongs to another owner", async () => {
+      const postB = await seedPost(OWNER_B);
+      await expect(
+        prisma.placeAnalysisJob.create({
+          data: { ownerId: OWNER_A, postId: postB, sourceTheme: "Voyages", analysisVersion: "places-v1", inputHash: "cross-owner" },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("still accepts a fully consistent owner/post/place/job graph", async () => {
+      const { postId, placeId, jobId } = await seedFullGraph(OWNER_A);
+      await expect(
+        prisma.postPlace.create({
+          data: { ownerId: OWNER_A, postId, placeId, analysisJobId: jobId, precision: "EXACT", confidence: 0.9 },
+        }),
+      ).resolves.toBeDefined();
+      await expect(
+        prisma.placeEvidence.create({
+          data: { ownerId: OWNER_A, postId, placeId, analysisJobId: jobId, evidenceType: "CAPTION", confidence: 0.7 },
+        }),
+      ).resolves.toBeDefined();
+    });
+  });
 });
 
 function placeData(ownerId: string, providerPlaceId = "geo-1") {
@@ -163,13 +268,21 @@ async function seedPostAndPlace(ownerId: string): Promise<{ postId: string; plac
   return { postId, placeId: place.id };
 }
 
-async function seedFullGraph(ownerId: string): Promise<{ postId: string; placeId: string; jobId: string }> {
-  const { postId, placeId } = await seedPostAndPlace(ownerId);
+let jobCounter = 0;
+
+async function seedJobFor(ownerId: string, postId: string): Promise<string> {
+  jobCounter += 1;
   const job = await prisma.placeAnalysisJob.create({
-    data: { ownerId, postId, sourceTheme: "Voyages", analysisVersion: "places-v1", inputHash: "hash-1" },
+    data: { ownerId, postId, sourceTheme: "Voyages", analysisVersion: "places-v1", inputHash: `hash-${jobCounter}` },
     select: { id: true },
   });
-  return { postId, placeId, jobId: job.id };
+  return job.id;
+}
+
+async function seedFullGraph(ownerId: string): Promise<{ postId: string; placeId: string; jobId: string }> {
+  const { postId, placeId } = await seedPostAndPlace(ownerId);
+  const jobId = await seedJobFor(ownerId, postId);
+  return { postId, placeId, jobId };
 }
 
 async function resetDatabase(): Promise<void> {
