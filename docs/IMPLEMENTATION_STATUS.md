@@ -17,7 +17,8 @@ Status values:
 | --- | --- | --- | --- | --- |
 | 0 — API and Places audit | COMPLETE | None | PR #15, merged into `develop` | Architecture, gaps, phase order, and Places eligibility documented. Documentation-only change. |
 | A — Library filter consistency | COMPLETE | Phase 0 | PR #18, squash-merged into `develop` (`69ea0da`) | Shared predicates (`libraryPostWhere`, `relevanceFilter`) in `src/server/library.ts`; 16 PostgreSQL regressions in `tests/unit/library-filters-postgres.test.ts` (16/16 green against PostgreSQL 16); lint, typecheck, 129 tests, build all green. Two latent relevance-SQL type-binding defects fixed (make_date bigint, numeric cursor precision). Pre-existing `Browser tests` CI failure documented in PR #18 (red on `develop` since 14 July, identical 18-test list). |
-| B — Places theme eligibility | AWAITING_REVIEW | Phase A merged | `claude/insta-saved-post-explorer-continue-wli2my` / PR #19 | `PLACES_ELIGIBLE_THEMES` + `isPlacesEligibleTheme()` in `src/lib/places/eligibility.ts` reusing `foldForSearch()`; 8 unit tests in `tests/unit/places-eligibility.test.ts` covering exact positive and negative cases; no collection query; no index added; lint, typecheck, 137 tests, build all green. |
+| B — Places theme eligibility | COMPLETE | Phase A merged | PR #19, squash-merged into `develop` (`2323e0d`) | `PLACES_ELIGIBLE_THEMES` + `isPlacesEligibleTheme()` in `src/lib/places/eligibility.ts` reusing `foldForSearch()`; 8 unit tests in `tests/unit/places-eligibility.test.ts` covering exact positive and negative cases; no collection query; no index added; lint, typecheck, 137 tests, build all green. |
+| E2e suite re-green (not a numbered phase) | COMPLETE | — | PR #21, squash-merged into `develop` (`1b5fa16`), closes issue #20 | Real CSS ribbon-overflow regression fixed in `globals.css` + library/toolbar e2e specs realigned with the mid-July UI. `develop` `Browser tests` CI green again (first time since 14 July 2026). Full Playwright suite: 65 passed / 13 skipped / 0 failed. |
 | C — R2 media identity and worker isolation | NOT_STARTED | Separate reviewed design | None | Canonical R2 identity; restricted worker access; `ownerId` isolation; migration recovery plan. |
 | D — External API V1 | BLOCKED | Phase A and prerequisites in implementation order | None | Authenticated read-only `/api/v1`; stable errors; reused server services; route regressions; deployment preflight. |
 | E — Global worker foundation | BLOCKED | Phase C | None | Claim, lease, heartbeat, retry, cleanup, healthcheck, restricted DB and R2 access, no public port. |
@@ -30,12 +31,14 @@ Status values:
 ## Current Execution Pointer
 
 ```text
-Current state: Phases A and B COMPLETE (PRs #18 and #19 merged).
-E2e re-green chantier implemented, AWAITING_REVIEW (PR #21, closes issue #20):
-  CSS ribbon-overflow fix + e2e spec realignment, 65/65 runnable tests green locally.
-Required stop: human review and merge of PR #21
-Next implementation phase after merge: C — R2 media identity and worker isolation
-  (requires its own design and migration review)
+Current state: Phases 0, A, B COMPLETE and merged (PRs #15, #18, #19).
+E2e re-green chantier COMPLETE and merged (PR #21, closes issue #20).
+develop CI fully green as of 1b5fa16 (Browser tests included).
+No implementation phase is active.
+Next executable phase: C — R2 media identity and worker isolation.
+Required stop before any Phase C code: produce/validate the R2 media identity
+  and worker-isolation design plus the migration/rollback plan (owner decisions,
+  do not guess — see HANDOFF section 7).
 ```
 
 Do not change a phase to `COMPLETE` without adding its merged pull request and concrete validation evidence.
