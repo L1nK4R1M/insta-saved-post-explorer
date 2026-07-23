@@ -25,6 +25,16 @@ enum MediaType {
   VIDEO
 }
 
+// Authoritative R2 identity state of a media object.
+// UNVERIFIED: no derivable R2 identity (legacy/import media) — not analyzable.
+// REPAIRABLE: object key is derivable but its presence is not confirmed in R2.
+// VERIFIED: key, MIME, and size confirmed present in R2 — analyzable by the worker.
+enum MediaIdentity {
+  UNVERIFIED
+  REPAIRABLE
+  VERIFIED
+}
+
 enum SyncStatus {
   PENDING
   RUNNING
@@ -95,17 +105,25 @@ model CollectionPost {
 }
 
 model PostMedia {
-  id           String    @id @default(cuid())
-  postId       String    @map("post_id")
-  type         MediaType
-  url          String?
-  sourcePath   String?   @map("source_path")
-  thumbnailUrl String?   @map("thumbnail_url")
-  position     Int
-  post         Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  id            String        @id @default(cuid())
+  postId        String        @map("post_id")
+  ownerId       String        @map("owner_id")
+  type          MediaType
+  url           String?
+  sourcePath    String?       @map("source_path")
+  thumbnailUrl  String?       @map("thumbnail_url")
+  position      Int
+  objectKey     String?       @map("object_key")
+  mimeType      String?       @map("mime_type")
+  byteSize      Int?          @map("byte_size")
+  versionTag    String?       @map("version_tag")
+  identityState MediaIdentity @default(UNVERIFIED) @map("identity_state")
+  checkedAt     DateTime?     @map("checked_at") @db.Timestamptz(3)
+  post          Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([postId, position], map: "post_media_post_id_position_key")
   @@index([postId, position], map: "post_media_post_id_position_idx")
+  @@index([ownerId, identityState], map: "post_media_owner_identity_idx")
   @@map("post_media")
 }
 

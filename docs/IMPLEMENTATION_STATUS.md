@@ -19,7 +19,7 @@ Status values:
 | A — Library filter consistency | COMPLETE | Phase 0 | PR #18, squash-merged into `develop` (`69ea0da`) | Shared predicates (`libraryPostWhere`, `relevanceFilter`) in `src/server/library.ts`; 16 PostgreSQL regressions in `tests/unit/library-filters-postgres.test.ts` (16/16 green against PostgreSQL 16); lint, typecheck, 129 tests, build all green. Two latent relevance-SQL type-binding defects fixed (make_date bigint, numeric cursor precision). Pre-existing `Browser tests` CI failure documented in PR #18 (red on `develop` since 14 July, identical 18-test list). |
 | B — Places theme eligibility | COMPLETE | Phase A merged | PR #19, squash-merged into `develop` (`2323e0d`) | `PLACES_ELIGIBLE_THEMES` + `isPlacesEligibleTheme()` in `src/lib/places/eligibility.ts` reusing `foldForSearch()`; 8 unit tests in `tests/unit/places-eligibility.test.ts` covering exact positive and negative cases; no collection query; no index added; lint, typecheck, 137 tests, build all green. |
 | E2e suite re-green (not a numbered phase) | COMPLETE | — | PR #21, squash-merged into `develop` (`1b5fa16`), closes issue #20 | Real CSS ribbon-overflow regression fixed in `globals.css` + library/toolbar e2e specs realigned with the mid-July UI. `develop` `Browser tests` CI green again (first time since 14 July 2026). Full Playwright suite: 65 passed / 13 skipped / 0 failed. |
-| C — R2 media identity and worker isolation | READY | Separate reviewed design (satisfied) | `CODEX_R2_WORKER_ISOLATION_DESIGN.md` (design), implementation branch TBD | Reviewed design merged with owner decisions D1–D4 signed off. Implementation must add: additive migration (identity columns + `MediaIdentity` enum + index + restricted role), R2 identity persisted in the sync path, `ownerId` denormalization, idempotent identity backfill, worker R2 credential docs, owner-isolation and role-permission tests. |
+| C — R2 media identity and worker isolation | AWAITING_REVIEW | Reviewed design (PR #23) | `claude/insta-saved-post-explorer-continue-wli2my` / PR #24 | Additive migration `20260723120000_add_media_identity_and_worker_role` (`MediaIdentity` enum + identity columns on `post_media` + `owner_id` backfill/NOT NULL + index + restricted `ipe_worker_reader` role); verified R2 identity persisted in the sync path (`src/server/media-identity.ts`); idempotent `backfillMediaIdentity`; `headR2Object` helper; worker credential docs; 6 PostgreSQL tests in `tests/unit/media-identity-postgres.test.ts`. lint, typecheck, 143 tests (with PG), build all green; migrate deploy + seed verified on a fresh DB. |
 | D — External API V1 | BLOCKED | Phase A and prerequisites in implementation order | None | Authenticated read-only `/api/v1`; stable errors; reused server services; route regressions; deployment preflight. |
 | E — Global worker foundation | BLOCKED | Phase C | None | Claim, lease, heartbeat, retry, cleanup, healthcheck, restricted DB and R2 access, no public port. |
 | F — Places metadata-first domain | BLOCKED | Phases B, D, and relevant worker/data gates | None | Place models, verified resolution, human review, idempotent jobs, unique statistics, no collection dependency. |
@@ -33,12 +33,11 @@ Status values:
 ```text
 Current state: Phases 0, A, B COMPLETE and merged (PRs #15, #18, #19).
 E2e re-green chantier COMPLETE and merged (PR #21, closes issue #20).
-develop CI fully green as of 1b5fa16 (Browser tests included).
-Phase C design reviewed and signed off (CODEX_R2_WORKER_ISOLATION_DESIGN.md,
-  decisions D1–D4) → Phase C is READY.
-No implementation phase is active (no Phase C code written yet).
-Next executable phase: C — implement per section 10 of the design, in a
-  dedicated PR that stops at the exit gate. Do not bundle E/F/H.
+Phase C design merged (PR #23); Phase C implementation AWAITING_REVIEW (PR #24).
+develop CI fully green as of 1b5fa16.
+Required stop: human review and merge of PR #24.
+Next executable phase after merge: D (External API V1) or E (global worker
+  foundation, which reuses the ipe_worker_reader role from Phase C).
 ```
 
 Do not change a phase to `COMPLETE` without adding its merged pull request and concrete validation evidence.

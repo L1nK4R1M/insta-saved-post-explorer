@@ -31,15 +31,15 @@ If this handoff conflicts with an authoritative contract or with the code observ
 ## 3. Active Phase
 
 ```text
-No implementation phase is active.
-Phases 0, A, B are merged. Phase C — R2 media identity and worker isolation —
-now has a reviewed design (CODEX_R2_WORKER_ISOLATION_DESIGN.md) with owner
-decisions D1–D4 signed off (section 7), so its entry gate is satisfied: it is
-READY to implement in a dedicated PR that stops for review at the exit gate.
-No Phase C implementation code has been written yet.
-Branch for the next work: claude/insta-saved-post-explorer-continue-wli2my
-(restart from the latest develop for each new unit of work).
+Phase C — R2 media identity and worker isolation
+Status: AWAITING_REVIEW
+Branch: claude/insta-saved-post-explorer-continue-wli2my
+Pull request: #24 (base develop)
 ```
+
+Phase C is implemented and awaiting review. Its design (with owner decisions
+D1–D4) is `CODEX_R2_WORKER_ISOLATION_DESIGN.md`. Do not start Phase D, E, F, G,
+H, I, or J before PR #24 is reviewed and merged.
 
 Branch divergence note: `CODEX_IMPLEMENTATION_ORDER.md` recommends per-phase branch names (`feat/places-theme-eligibility`, etc.). The Claude sessions were constrained to the branch `claude/insta-saved-post-explorer-continue-wli2my` (restarted from the merged `develop` for each phase). Codex had not started any of these phases, so no work was duplicated.
 
@@ -47,43 +47,62 @@ Branch divergence note: `CODEX_IMPLEMENTATION_ORDER.md` recommends per-phase bra
 
 ```text
 Date et agent : 23 juillet 2026, Claude (Claude Code)
-Phase active : aucune (0, A, B mergées ; e2e remise au vert mergée)
-Statut : develop stable, CI entièrement verte
+Phase active : C — R2 media identity and worker isolation
+Statut : AWAITING_REVIEW
 Branche : claude/insta-saved-post-explorer-continue-wli2my (repartie de develop 1b5fa16)
+Pull request : #24
 Dernier commit develop : 1b5fa16
 
-Travail réalisé par Claude durant la session :
-- Phase A mergée (PR #18) : prédicats de filtres partagés + 16 régressions PostgreSQL ;
-- Phase B mergée (PR #19) : isPlacesEligibleTheme() + 8 tests ;
-- diagnostic de la CI e2e rouge depuis le 14 juillet (issue #20) ;
-- remise au vert e2e mergée (PR #21, closes #20) : un vrai bug CSS de débordement
-  de ruban corrigé + réalignement des specs ; CI develop désormais verte.
+Travail reçu de Codex :
+- develop à 1b5fa16 ; design Phase C validé (CODEX_R2_WORKER_ISOLATION_DESIGN.md,
+  décisions D1–D4) mergé en PR #23. Aucune implémentation Phase C préalable.
 
-Vérifications finales :
-- develop@1b5fa16 : « Lint, types, unit tests and build » vert, « Browser tests »
-  vert, preview Vercel verte (AUTH_SECRET ajouté en env Preview par le propriétaire) ;
-- Playwright complet en local (env CI répliqué) : 65 passed / 13 skipped / 0 failed.
+Travail réalisé par Claude (implémentation Phase C) :
+- migration additive 20260723120000_add_media_identity_and_worker_role :
+  enum MediaIdentity (UNVERIFIED/REPAIRABLE/VERIFIED), colonnes d'identité sur
+  post_media (owner_id, object_key, mime_type, byte_size, version_tag,
+  identity_state, checked_at), backfill owner_id depuis posts puis NOT NULL,
+  index (owner_id, identity_state), rôle restreint ipe_worker_reader NOLOGIN
+  avec GRANT SELECT sur les seules colonnes d'identité ;
+- persistance de l'identité R2 vérifiée dans le chemin sync
+  (src/server/media-identity.ts + branchement dans /api/sync/posts) : les objets
+  vérifiés passent VERIFIED ; l'import JSON reste UNVERIFIED avec owner_id ;
+- backfillMediaIdentity() idempotent (D3) + helper headR2Object() dans r2.ts ;
+- env/docs : R2_WORKER_* et WORKER_DATABASE_URL dans .env.example,
+  provisionnement du rôle documenté dans docs/deployment.md ;
+- tests PostgreSQL tests/unit/media-identity-postgres.test.ts (6) : isolation
+  propriétaire, persistance sync, transitions VERIFIED/REPAIRABLE/UNVERIFIED,
+  import UNVERIFIED, permissions du rôle restreint (SET LOCAL ROLE).
+
+Écart mineur assumé vs design : le NOT NULL de owner_id est appliqué dans la même
+migration additive (après backfill), pas en migration de suivi séparée — la table
+est petite et le backfill précède la contrainte, donc l'objectif de sécurité du
+two-step est conservé. Documenté dans la PR.
+
+Vérifications finales (local, PostgreSQL 16) :
+- npm run lint : OK (0 warning) · npm run typecheck : OK · npm run build : OK ;
+- TEST_DATABASE_URL=<pg16> npm run test : 26 fichiers / 143 tests ;
+- npm run test sans base : 121 passés + 22 skippés ;
+- migrate deploy sur base vierge : OK (colonnes + rôle présents) ;
+- db:seed sur base vierge : 18 médias, owner_id renseigné, identity_state UNVERIFIED.
 
 Prochaine action exacte pour Codex :
-- le design Phase C est validé (CODEX_R2_WORKER_ISOLATION_DESIGN.md, décisions
-  D1–D4 signées) ; la Phase C peut démarrer en PR dédiée qui s'arrête à la gate
-  de sortie. Implémenter dans l'ordre de la section 10 du design : migration
-  additive (colonnes d'identité + enum MediaIdentity + index + rôle restreint),
-  persistance de l'identité R2 vérifiée dans le chemin sync, dénormalisation
-  ownerId (NOT NULL en deux temps), backfill d'identité idempotent, env/docs des
-  credentials R2 worker, tests de la section 9. Ne pas démarrer E/F/H dans la
-  même PR ;
-- tout futur consommateur Places (service, job, statistique, action UI, worker, MCP)
-  doit importer isPlacesEligibleTheme() depuis src/lib/places/eligibility.ts, jamais
-  recopier les chaînes de thème.
+- relire la PR #24 (migration, src/server/media-identity.ts, r2.ts, route sync,
+  import-posts, seed, tests) et la merger si conforme ;
+- ne démarrer la Phase D (API externe V1) ou la Phase E (worker global) qu'après
+  ce merge ; la Phase E réutilisera le rôle ipe_worker_reader (étendre ses GRANT
+  à la future table de jobs) et l'état identity_state ;
+- tout futur consommateur Places doit importer isPlacesEligibleTheme() depuis
+  src/lib/places/eligibility.ts, jamais recopier les chaînes de thème.
 
 Question produit ouverte (consignée dans la PR #21) :
 - le bouton « Découverte » est desktop-only ; son test e2e est skippé sur mobile.
   À trancher : faut-il l'exposer au mobile ? (hors périmètre des phases en cours.)
 
 Blocages et risques :
-- aucun blocage courant. Rappel : la Phase C dépend de décisions d'architecture
-  non prises (section 7).
+- le rôle ipe_worker_reader est créé NOLOGIN sans mot de passe ; un rôle de
+  connexion héritant du rôle et le credential R2 worker doivent être provisionnés
+  hors dépôt avant la Phase E (voir docs/deployment.md). Rien de bloquant pour la revue.
 ```
 
 ## 4. Phase B Contract Summary
@@ -108,7 +127,7 @@ Every future entry point (services, jobs, statistics, UI actions, worker handler
 
 | Phase | State | Reason |
 | --- | --- | --- |
-| C — R2 media identity and worker isolation | Ready | Reviewed design merged (`CODEX_R2_WORKER_ISOLATION_DESIGN.md`), decisions D1–D4 signed off (section 7). Implementation is a separate PR that stops at the exit gate. |
+| C — R2 media identity and worker isolation | Awaiting review | Implemented in PR #24 (migration + identity persistence + restricted role + backfill + tests). Design: `CODEX_R2_WORKER_ISOLATION_DESIGN.md`. |
 | D — External API V1 | Blocked | Requires Phase A (merged) and the prerequisites defined by the implementation order |
 | E — Global worker foundation | Blocked | Requires Phase C |
 | F — Places metadata-first domain | Blocked | Requires Phases B and D and relevant worker/data gates |
