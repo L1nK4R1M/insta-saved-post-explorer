@@ -18,7 +18,9 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "places:export-captions": "tsx --conditions=react-server scripts/places/export-caption-batch.ts",
+    "places:import-candidates": "tsx --conditions=react-server scripts/places/import-candidate-batch.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1085.0",

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://insta-saved-post-explorer/docs/places-caption-candidate.schema.json",
+  "title": "Places caption candidate record",
+  "description": "One JSONL line produced by external Claude Code / Codex analysis of an exported caption batch. Candidates are strictly textual: never include coordinates, a provider, a providerPlaceId, or a precision. Coordinates are added later by the server-side geographic resolver only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["post_id", "candidates"],
+  "properties": {
+    "post_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The exported post id this analysis belongs to."
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "$ref": "#/$defs/candidate" }
+    }
+  },
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "city", "region", "country", "category", "confidence", "evidence"],
+      "properties": {
+        "name": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+        "city": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+        "region": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+        "country": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "enum": ["restaurant", "lodging", "landmark", "city", "region", "other"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "excerpt"],
+            "properties": {
+              "type": { "type": "string", "enum": ["CAPTION", "HASHTAG", "AUTHOR_TEXT", "INSTAGRAM_LOCATION"] },
+              "excerpt": { "type": "string", "minLength": 1, "maxLength": 500 }
+            }
+          }
+        }
+      }
+    }
+  }
+}
