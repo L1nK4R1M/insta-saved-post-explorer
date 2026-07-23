@@ -33,7 +33,10 @@ export async function loadAnalysisPostInputs(
       caption: true,
       authorUsername: true,
       metadata: true,
-      postTags: { select: { tag: { select: { name: true } } } },
+      // Scope internal tags to the same owner: PostTag binds only post_id and
+      // tag_id, so a cross-owner link must not leak another owner's tag name
+      // into internalTags and the idempotency hash.
+      postTags: { where: { tag: { ownerId } }, select: { tag: { select: { name: true } } } },
       media: {
         // Scope the denormalized media owner explicitly (defense in depth): a
         // media row's owner_id must match the requested owner, so a mismatched

@@ -69,6 +69,29 @@ describeWithDatabase("Places analysis repository on PostgreSQL", () => {
     expect(keys).toEqual(["owner-a/object-key"]);
     expect(keys).not.toContain("owner-b/object-key");
   });
+
+  it("excludes an internal tag whose owner does not match the post owner", async () => {
+    const postId = await seedPost(OWNER_A);
+    const tagA = await prisma.tag.create({
+      data: { ownerId: OWNER_A, name: "owner-a-tag", slug: "owner-a-tag" },
+      select: { id: true },
+    });
+    const tagB = await prisma.tag.create({
+      data: { ownerId: OWNER_B, name: "owner-b-tag", slug: "owner-b-tag" },
+      select: { id: true },
+    });
+    // Legitimate same-owner link.
+    await prisma.postTag.create({ data: { postId, tagId: tagA.id } });
+    // Deliberately cross-owner link: PostTag binds only post_id and tag_id, so
+    // this malformed row is insertable and proves the query must scope the tag
+    // owner explicitly.
+    await prisma.postTag.create({ data: { postId, tagId: tagB.id } });
+
+    const inputs = await repository.loadAnalysisPostInputs(OWNER_A, postId);
+    expect(inputs).not.toBeNull();
+    expect(inputs!.internalTags).toEqual(["owner-a-tag"]);
+    expect(inputs!.internalTags).not.toContain("owner-b-tag");
+  });
 });
 
 let postCounter = 0;
@@ -93,5 +116,7 @@ async function seedPost(ownerId: string): Promise<string> {
 }
 
 async function resetDatabase(): Promise<void> {
-  await prisma.post.deleteMany({ where: { ownerId: { in: [OWNER_A, OWNER_B] } } });
+  const owners = { ownerId: { in: [OWNER_A, OWNER_B] } };
+  await prisma.post.deleteMany({ where: owners });
+  await prisma.tag.deleteMany({ where: owners });
 }
