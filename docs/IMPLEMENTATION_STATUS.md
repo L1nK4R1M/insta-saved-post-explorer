@@ -19,8 +19,8 @@ Status values:
 | A — Library filter consistency | COMPLETE | Phase 0 | PR #18, squash-merged into `develop` (`69ea0da`) | Shared predicates (`libraryPostWhere`, `relevanceFilter`) in `src/server/library.ts`; 16 PostgreSQL regressions in `tests/unit/library-filters-postgres.test.ts` (16/16 green against PostgreSQL 16); lint, typecheck, 129 tests, build all green. Two latent relevance-SQL type-binding defects fixed (make_date bigint, numeric cursor precision). Pre-existing `Browser tests` CI failure documented in PR #18 (red on `develop` since 14 July, identical 18-test list). |
 | B — Places theme eligibility | COMPLETE | Phase A merged | PR #19, squash-merged into `develop` (`2323e0d`) | `PLACES_ELIGIBLE_THEMES` + `isPlacesEligibleTheme()` in `src/lib/places/eligibility.ts` reusing `foldForSearch()`; 8 unit tests in `tests/unit/places-eligibility.test.ts` covering exact positive and negative cases; no collection query; no index added; lint, typecheck, 137 tests, build all green. |
 | E2e suite re-green (not a numbered phase) | COMPLETE | — | PR #21, squash-merged into `develop` (`1b5fa16`), closes issue #20 | Real CSS ribbon-overflow regression fixed in `globals.css` + library/toolbar e2e specs realigned with the mid-July UI. `develop` `Browser tests` CI green again (first time since 14 July 2026). Full Playwright suite: 65 passed / 13 skipped / 0 failed. |
-| C — R2 media identity and worker isolation | AWAITING_REVIEW | Reviewed design (PR #23) | `claude/insta-saved-post-explorer-continue-wli2my` / PR #24 | Additive migration `20260723120000_add_media_identity_and_worker_role` (`MediaIdentity` enum + identity columns on `post_media` + `owner_id` backfill/NOT NULL + index + restricted `ipe_worker_reader` role); verified R2 identity persisted in the sync path (`src/server/media-identity.ts`); idempotent `backfillMediaIdentity`; `headR2Object` helper; worker credential docs; 6 PostgreSQL tests in `tests/unit/media-identity-postgres.test.ts`. lint, typecheck, 143 tests (with PG), build all green; migrate deploy + seed verified on a fresh DB. |
-| D — External API V1 | BLOCKED | Phase A and prerequisites in implementation order | None | Authenticated read-only `/api/v1`; stable errors; reused server services; route regressions; deployment preflight. |
+| C — R2 media identity and worker isolation | COMPLETE | Reviewed design (PR #23) | PR #24, squash-merged into `develop` (`0870d69`) | Additive migration `20260723120000_add_media_identity_and_worker_role` (`MediaIdentity` enum + identity columns on `post_media` + `owner_id` backfill/NOT NULL + index + restricted `ipe_worker_reader` role); verified R2 identity persisted in the sync path (`src/server/media-identity.ts`); idempotent `backfillMediaIdentity`; `headR2Object` helper; worker credential docs; 6 PostgreSQL tests in `tests/unit/media-identity-postgres.test.ts`. lint, typecheck, 143 tests (with PG), build green in CI; migrate deploy + seed verified on a fresh DB. |
+| D — External API V1 | READY | Phase A merged | None | Authenticated read-only `/api/v1`; stable errors; reused server services; route regressions; deployment preflight. Open decision: distributed rate limiting on Vercel. |
 | E — Global worker foundation | BLOCKED | Phase C | None | Claim, lease, heartbeat, retry, cleanup, healthcheck, restricted DB and R2 access, no public port. |
 | F — Places metadata-first domain | BLOCKED | Phases B, D, and relevant worker/data gates | None | Place models, verified resolution, human review, idempotent jobs, unique statistics, no collection dependency. |
 | G — Places 2D UI and contextual navigation | BLOCKED | Phase F | None | `/places`, map, filters, clusters, review, statistics, post deep links, desktop and mobile navigation. |
@@ -31,13 +31,13 @@ Status values:
 ## Current Execution Pointer
 
 ```text
-Current state: Phases 0, A, B COMPLETE and merged (PRs #15, #18, #19).
-E2e re-green chantier COMPLETE and merged (PR #21, closes issue #20).
-Phase C design merged (PR #23); Phase C implementation AWAITING_REVIEW (PR #24).
-develop CI fully green as of 1b5fa16.
-Required stop: human review and merge of PR #24.
-Next executable phase after merge: D (External API V1) or E (global worker
-  foundation, which reuses the ipe_worker_reader role from Phase C).
+Current state: Phases 0, A, B, C COMPLETE and merged (PRs #15, #18, #19, #24;
+  Phase C design PR #23). E2e re-green merged (PR #21, closes issue #20).
+develop CI green as of the Phase C merge (0870d69).
+No implementation phase is active.
+Next executable phase: D — External API V1 (brief CODEX_API_READY_ARCHITECTURE.md).
+  Phase E (global worker) is also unblocked (reuses ipe_worker_reader) but depends
+  on VPS decisions not yet taken.
 ```
 
 Do not change a phase to `COMPLETE` without adding its merged pull request and concrete validation evidence.
