@@ -35,7 +35,10 @@ export async function loadAnalysisPostInputs(
       metadata: true,
       postTags: { select: { tag: { select: { name: true } } } },
       media: {
-        where: { identityState: MediaIdentity.VERIFIED, objectKey: { not: null } },
+        // Scope the denormalized media owner explicitly (defense in depth): a
+        // media row's owner_id must match the requested owner, so a mismatched
+        // row can never inject another owner's R2 identity into the hash.
+        where: { ownerId, identityState: MediaIdentity.VERIFIED, objectKey: { not: null } },
         select: { objectKey: true, versionTag: true },
         orderBy: { position: "asc" },
       },
