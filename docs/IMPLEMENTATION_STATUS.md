@@ -22,11 +22,11 @@ Status values:
 | C — R2 media identity and worker isolation | COMPLETE | Reviewed design | PR #24, squash `0870d69` | Additive migration, owner backfill, restricted role and PostgreSQL tests. Migration recorded on Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | Phase A | PR #26, squash `9e57f93` | Read-only Bearer API, stable errors, six thin routes and tests. |
 | F design and plan | COMPLETE | Phases B and D | PR #28, squash `fd9754e` | Reviewed metadata-first design, Geoapify abstraction and F1/F2/F3 plan. |
-| F1 — Places schema and domain contracts | COMPLETE | F design | PR #29, squash `8bf8523` | 4 Places tables, SQL invariants, strict text candidates, opaque cursor, owner-scoped repository, idempotent jobs, 191-test CI proof. Migration `20260723150157_add_places_domain` recorded on Neon `develop`. |
-| F2 — Geoapify and caption resolution | READY | F1 merged | Start from latest `develop` | Implement resolver, deterministic scoring, local JSONL ingestion and atomic persistence. No UI, video analysis, VPS worker or MCP. |
-| F3 — Read API, statistics and review | BLOCKED | F2 merged | None | Read-only `/api/v1/places*`, cursor queries, distinct statistics and review/merge services. |
-| F — Places metadata-first domain | IN_PROGRESS | Phases B and D | F1 complete; F2 next | Complete only after F2 and F3 merge with PostgreSQL, API and final e2e evidence. |
-| E — Global worker foundation | READY | Phase C | None | Separate VPS phase. Do not mix with F2. |
+| F1 — Places schema and domain contracts | COMPLETE | F design | PR #29, squash `8bf8523` | 4 Places tables, SQL invariants, strict text candidates, opaque cursor, owner-scoped repository and idempotent jobs. Migration recorded on Neon `develop`. |
+| F2 — Geoapify and caption resolution | COMPLETE | F1 merged | PR #30, squash `7cc05e2` | Server-only resolver, deterministic scoring, JSONL workflow, stale-input guard, atomic persistence, 278-test CI proof. No migration. |
+| F3 — Read API, statistics and review | READY | F2 merged | Start from latest `develop` | Implement read-only `/api/v1/places*`, opaque cursor queries, distinct statistics and internal review/merge services. |
+| F — Places metadata-first domain | IN_PROGRESS | Phases B and D | F1 and F2 complete; F3 next | Complete only after F3 merges with API, PostgreSQL and final e2e evidence. |
+| E — Global worker foundation | READY | Phase C | None | Separate VPS phase. Do not mix with F3. |
 | G — Places 2D UI and contextual navigation | BLOCKED | Complete Phase F | None | `/places`, map, filters, clusters, review UI, statistics and post deep links. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
 | I — Places 3D globe | BLOCKED | Phase G | None | Shared 2D/3D data source, synchronized selection and accessibility. |
@@ -37,28 +37,31 @@ Status values:
 ```text
 Current state
 - F1 is merged and COMPLETE.
-- F2 is the only allowed next Places implementation.
-- No F2 implementation branch is active yet.
-- F3, G, H, I and J remain blocked by their stated dependencies.
+- F2 is merged and COMPLETE.
+- F3 is the only allowed next Places implementation.
+- No F3 implementation branch is active yet.
+- G, H, I and J remain blocked by their stated dependencies.
 
 Reference develop implementation commit
-8bf8523850688965f993d3e6a805e2c605a13669
+7cc05e2b7d1f66754d86c0aa6ea8fbb4135fa658
 
-Environment proof
-- Vercel Production tracks main.
-- Vercel Preview tracks develop.
-- Production API is healthy and reports totalLibrary: 3417.
-- Neon main has Phase C recorded.
-- Neon develop has Phase C and F1 recorded.
-- develop Preview deployment for 8bf8523 is READY.
+Recorded proof
+- PR #30 merged after independent review.
+- Reviewed F2 head: 655d0e9db2cba2b838258919222aae4fcc67bb4c.
+- Merge commit: 7cc05e2b7d1f66754d86c0aa6ea8fbb4135fa658.
+- CI run 30053205910 completed successfully.
+- Final suite: 39 files, 278 passed, 0 failed.
+- F2 introduced no migration; Neon develop remains on Phase C + F1 schema.
+- Vercel Production tracks main and Preview tracks develop.
 ```
 
 ## Next agent action
 
 1. Reset the constrained Claude branch from the latest `develop`.
-2. Execute only F2 according to the reviewed design and task plan.
-3. Use test-driven development and owner-scoped PostgreSQL tests.
-4. Open a PR against `develop` and stop for Codex review.
-5. Do not start F3 or any UI/worker/MCP phase.
+2. Execute only F3 according to the reviewed design and task plan.
+3. Add read-only Places API routes, cursor queries, distinct statistics and internal review/merge services.
+4. Reuse Phase D authentication and keep the external API read-only.
+5. Open a PR against `develop` and stop for Codex review.
+6. Do not start Phase G or any UI/worker/video/MCP phase.
 
 Do not change a phase or sub-phase to `COMPLETE` without a merged pull request and concrete validation evidence.
