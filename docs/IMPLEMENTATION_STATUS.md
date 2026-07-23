@@ -30,11 +30,12 @@ Status values:
 ## Current Execution Pointer
 
 ```text
-Current state: Phase A COMPLETE (PR #18 merged); Phase B implemented, AWAITING_REVIEW (PR #19)
-Required stop: human review and merge of PR #19
+Current state: Phases A and B COMPLETE (PRs #18 and #19 merged).
+E2e re-green chantier implemented, AWAITING_REVIEW (PR #21, closes issue #20):
+  CSS ribbon-overflow fix + e2e spec realignment, 65/65 runnable tests green locally.
+Required stop: human review and merge of PR #21
 Next implementation phase after merge: C — R2 media identity and worker isolation
-  (requires its own design and migration review), or the separate e2e-suite
-  repair chantier (Browser tests red on develop since 14 July, see HANDOFF §5)
+  (requires its own design and migration review)
 ```
 
 Do not change a phase to `COMPLETE` without adding its merged pull request and concrete validation evidence.
