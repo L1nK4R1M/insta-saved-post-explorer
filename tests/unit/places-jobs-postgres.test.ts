@@ -42,6 +42,18 @@ describeWithDatabase("Places metadata jobs on PostgreSQL", () => {
     expect(await prisma.placeAnalysisJob.count({ where: { ownerId: OWNER_A } })).toBe(1);
   });
 
+  it("is idempotent under concurrency and never surfaces a P2002", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        jobs.createMetadataAnalysisJob({ ownerId: OWNER_A, postId: "travel-post" }),
+      ),
+    );
+    expect(new Set(results.map((job) => job.id)).size).toBe(1);
+    expect(
+      await prisma.placeAnalysisJob.count({ where: { ownerId: OWNER_A, postId: "travel-post" } }),
+    ).toBe(1);
+  });
+
   it("canonicalizes a folded eligible theme to its canonical form", async () => {
     const job = await jobs.createMetadataAnalysisJob({ ownerId: OWNER_A, postId: "resto-post" });
     expect(job.sourceTheme).toBe("Restaurant");

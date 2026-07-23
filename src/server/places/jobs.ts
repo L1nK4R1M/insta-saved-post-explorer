@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { PlaceAnalysisJob } from "@prisma/client";
+import { Prisma, type PlaceAnalysisJob } from "@prisma/client";
 
 import { canonicalPlacesTheme } from "@/lib/places/eligibility";
 import { prisma } from "@/server/db";
@@ -51,24 +51,30 @@ export async function createMetadataAnalysisJob(
     verifiedMedia: post.verifiedMedia,
   });
 
-  return prisma.placeAnalysisJob.upsert({
-    where: {
-      ownerId_postId_inputHash_analysisVersion: {
-        ownerId: input.ownerId,
-        postId: post.id,
-        inputHash,
-        analysisVersion,
-      },
-    },
-    // An existing job is returned untouched: creation is idempotent.
-    update: {},
-    create: {
-      ownerId: input.ownerId,
-      postId: post.id,
-      sourceTheme,
-      analysisVersion,
-      inputHash,
-      depth: "METADATA_ONLY",
-    },
-  });
+  const identity = {
+    ownerId: input.ownerId,
+    postId: post.id,
+    inputHash,
+    analysisVersion,
+  };
+
+  // Concurrency-safe idempotency. Prisma's upsert with an empty `update` cannot
+  // use the database-native path, so two concurrent first calls can both read
+  // "missing" and one then fails with P2002. Instead we attempt the insert and,
+  // only when the idempotency unique constraint conflicts, re-read the existing
+  // row. A P2002 from any other constraint (or a conflict with no matching row)
+  // is rethrown untouched.
+  try {
+    return await prisma.placeAnalysisJob.create({
+      data: { ...identity, sourceTheme, depth: "METADATA_ONLY" },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existing = await prisma.placeAnalysisJob.findUnique({
+        where: { ownerId_postId_inputHash_analysisVersion: identity },
+      });
+      if (existing) return existing;
+    }
+    throw error;
+  }
 }
