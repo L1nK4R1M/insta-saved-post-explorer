@@ -57,6 +57,15 @@ if (!Number.isInteger(importLimit) || importLimit < 1024 || importLimit > 1_000_
   errors.push("IMPORT_MAX_BYTES must be an integer between 1024 and 1000000.");
 }
 
+const externalApiKeyHash = process.env.EXTERNAL_API_KEY_SHA256?.trim();
+if (externalApiKeyHash) {
+  if (!/^[0-9a-f]{64}$/i.test(externalApiKeyHash)) {
+    errors.push("EXTERNAL_API_KEY_SHA256 must be a 64-character hex SHA-256 hash.");
+  }
+} else {
+  warnings.push("EXTERNAL_API_KEY_SHA256 is not set; the external /api/v1 will fail closed (503).");
+}
+
 const publicUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
 if (publicUrl) {
   try {
