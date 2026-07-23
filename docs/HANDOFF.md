@@ -114,7 +114,7 @@ Every future entry point (services, jobs, statistics, UI actions, worker handler
 
 ## 5. Known Pre-existing Failures
 
-- The `Browser tests` CI job (Playwright) has been failing on `develop` since 14 July 2026 (last green: `fd143a9`). 18 library e2e tests expect the local fallback dataset while CI provisions a seeded PostgreSQL through `db:seed`. Evidence: identical 18-test failure list on develop@`9891dfd` (run 29963717694) and on PR #18 (run 29990827647). Restoring this suite is its own separate change; do not fold it into a phase implementation.
+- The `Browser tests` CI job (Playwright) has been failing on `develop` since 14 July 2026 (last green: `fd143a9`). Full diagnosis, failure-to-cause map, local reproduction commands, and re-green plan: **issue #20**. Summary: accumulated UI-to-test desynchronization from the mid-July toolbar reworks (obsolete selectors, DOM-duplicated controls breaking strict mode, one possible real 10px horizontal overflow at 1280px to investigate first). Not a CI infrastructure problem: the seeded database is correct. Restoring this suite is its own separate change (one coherent PR); do not fold it into a phase implementation.
 - Vercel preview deployments fail during `deploy:check` with `AUTH_SECRET is required`: the variable exists only in the Production environment of the Vercel project. Owner action required in Vercel settings; nothing to change in the repository.
 
 ## 6. Blocked Later Phases
