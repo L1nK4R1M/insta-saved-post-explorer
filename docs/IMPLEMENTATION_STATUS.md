@@ -1,57 +1,64 @@
 # Implementation Status
 
-Last updated: 23 July 2026
+Last updated: 24 July 2026
 
-This file is a compact state ledger. Detailed scope, dependencies, and exit gates remain authoritative in `CODEX_IMPLEMENTATION_ORDER.md`.
+This file is the compact state ledger. Detailed scope, dependencies and exit gates remain authoritative in `CODEX_IMPLEMENTATION_ORDER.md` and `HANDOFF.md`.
 
 Status values:
 
 - `COMPLETE`: merged and supported by recorded proof;
-- `READY`: entry gate is satisfied and the phase may start in a dedicated branch;
-- `IN_PROGRESS`: active branch or pull request exists;
-- `AWAITING_REVIEW`: implementation proof exists but the phase is not merged;
+- `READY`: entry gate is satisfied and work may start in a dedicated branch;
+- `IN_PROGRESS`: the broader phase has completed sub-phases but is not finished;
+- `AWAITING_REVIEW`: implementation proof exists but the work is not merged;
 - `BLOCKED`: a required predecessor or decision is incomplete;
-- `NOT_STARTED`: no implementation has begun, but the phase is not the next executable phase.
+- `NOT_STARTED`: no work has begun and it is not the next executable phase.
 
 | Phase | Status | Dependencies | Branch / PR | Required or recorded evidence |
 | --- | --- | --- | --- | --- |
-| 0 — API and Places audit | COMPLETE | None | PR #15, merged into `develop` | Architecture, gaps, phase order, and Places eligibility documented. |
-| A — Library filter consistency | COMPLETE | Phase 0 | PR #18, squash `69ea0da` | Shared Prisma/SQL predicates and 16 PostgreSQL regressions; lint, typecheck, tests and build green. |
-| B — Places theme eligibility | COMPLETE | Phase A | PR #19, squash `2323e0d` | `PLACES_ELIGIBLE_THEMES`, `isPlacesEligibleTheme()`, 8 tests, no collection dependency. |
-| E2e suite re-green | COMPLETE | — | PR #21, squash `1b5fa16` | Browser suite restored to green; 65 passed, 13 skipped, 0 failed at merge. |
-| C — R2 media identity and worker isolation | COMPLETE | Reviewed design PR #23 | PR #24, squash `0870d69` | Additive migration, authoritative R2 identity, restricted role, backfill and PostgreSQL tests. |
-| D — External API V1 | COMPLETE | Phase A | PR #26, squash `9e57f93` | Read-only Bearer API, stable errors, six thin routes and 21 tests. |
-| E — Global worker foundation | READY | Phase C | None | Separate VPS phase. Do not mix with F. Requires VPS credential and deployment decisions. |
-| F1 — Places schema and domain contracts | READY after design merge | Phases B and D; Phase F design | `docs/phase-f-claude-codex-handoff` documentation PR | Implement enums/models/migration, candidate/resolver/cursor contracts, idempotent metadata job creation and PostgreSQL tests. |
-| F2 — Geoapify and caption resolution | BLOCKED | F1 merged | None | Geoapify resolver, deterministic scoring, local JSONL workflow, atomic persistence. |
-| F3 — Read API, statistics, review | BLOCKED | F2 merged | None | Read-only `/api/v1/places*`, cursor queries, distinct statistics, review/merge services and final proof. |
-| F — Places metadata-first domain | READY after design merge | Phases B and D | Design: `CODEX_PHASE_F_METADATA_FIRST_DESIGN.md`; plan: `docs/superpowers/plans/2026-07-23-phase-f-metadata-first.md` | Complete only after F1, F2, and F3 are merged with PostgreSQL, API and final e2e evidence. |
-| G — Places 2D UI and contextual navigation | BLOCKED | Phase F | None | `/places`, map, filters, clusters, review UI, statistics, post deep links. |
-| H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation, cleanup and measured pilot. |
-| I — Places 3D globe | BLOCKED | Phase G | None | Shared data source with 2D map, synchronized selection, fly-to and accessibility. |
-| J — Unified MCP and Hermes | BLOCKED | Phase D; Phase F for Places tools | None | One MCP server, shared API client, no DB/R2 access, confirmations for sensitive commands. |
+| 0 — API and Places audit | COMPLETE | None | PR #15 | Architecture, gaps, phase order and Places eligibility documented. |
+| A — Library filter consistency | COMPLETE | Phase 0 | PR #18, squash `69ea0da` | Shared Prisma/SQL predicates and PostgreSQL regressions; CI green. |
+| B — Places theme eligibility | COMPLETE | Phase A | PR #19, squash `2323e0d` | Canonical eligibility predicate and 8 tests; no collection dependency. |
+| E2e suite re-green | COMPLETE | — | PR #21, squash `1b5fa16` | Browser suite restored to green. |
+| C — R2 media identity and worker isolation | COMPLETE | Reviewed design | PR #24, squash `0870d69` | Additive migration, owner backfill, restricted role and PostgreSQL tests. Migration recorded on Neon `main` and `develop`. |
+| D — External API V1 | COMPLETE | Phase A | PR #26, squash `9e57f93` | Read-only Bearer API, stable errors, six thin routes and tests. |
+| F design and plan | COMPLETE | Phases B and D | PR #28, squash `fd9754e` | Reviewed metadata-first design, Geoapify abstraction and F1/F2/F3 plan. |
+| F1 — Places schema and domain contracts | COMPLETE | F design | PR #29, squash `8bf8523` | 4 Places tables, SQL invariants, strict text candidates, opaque cursor, owner-scoped repository, idempotent jobs, 191-test CI proof. Migration `20260723150157_add_places_domain` recorded on Neon `develop`. |
+| F2 — Geoapify and caption resolution | READY | F1 merged | Start from latest `develop` | Implement resolver, deterministic scoring, local JSONL ingestion and atomic persistence. No UI, video analysis, VPS worker or MCP. |
+| F3 — Read API, statistics and review | BLOCKED | F2 merged | None | Read-only `/api/v1/places*`, cursor queries, distinct statistics and review/merge services. |
+| F — Places metadata-first domain | IN_PROGRESS | Phases B and D | F1 complete; F2 next | Complete only after F2 and F3 merge with PostgreSQL, API and final e2e evidence. |
+| E — Global worker foundation | READY | Phase C | None | Separate VPS phase. Do not mix with F2. |
+| G — Places 2D UI and contextual navigation | BLOCKED | Complete Phase F | None | `/places`, map, filters, clusters, review UI, statistics and post deep links. |
+| H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
+| I — Places 3D globe | BLOCKED | Phase G | None | Shared 2D/3D data source, synchronized selection and accessibility. |
+| J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
 
-## Current Execution Pointer
+## Current execution pointer
 
 ```text
-Current state: Phases 0, A, B, C, D COMPLETE and merged. develop CI green.
-Phase F dependencies are satisfied.
+Current state
+- F1 is merged and COMPLETE.
+- F2 is the only allowed next Places implementation.
+- No F2 implementation branch is active yet.
+- F3, G, H, I and J remain blocked by their stated dependencies.
 
-A documentation PR now proposes the reviewed Phase F design and task-level plan:
-- Geoapify behind PlaceResolver;
-- model output limited to textual candidates, never coordinates;
-- local caption-only JSONL workflow without VPS or app-stored OAuth credentials;
-- deterministic EXACT/PROBABLE/APPROXIMATE/UNKNOWN semantics;
-- opaque cursor pagination;
-- read-only external API boundary;
-- sequential delivery as F1, F2, F3.
+Reference develop implementation commit
+8bf8523850688965f993d3e6a805e2c605a13669
 
-After that documentation PR merges, the only allowed next implementation is:
-F1 — Places schema and domain contracts.
-
-Claude owns implementation.
-Codex owns independent review and verification.
-Do not start F2 before F1 merges. Do not start F3 before F2 merges.
+Environment proof
+- Vercel Production tracks main.
+- Vercel Preview tracks develop.
+- Production API is healthy and reports totalLibrary: 3417.
+- Neon main has Phase C recorded.
+- Neon develop has Phase C and F1 recorded.
+- develop Preview deployment for 8bf8523 is READY.
 ```
 
-Do not change a phase or sub-phase to `COMPLETE` without adding its merged pull request and concrete validation evidence.
+## Next agent action
+
+1. Reset the constrained Claude branch from the latest `develop`.
+2. Execute only F2 according to the reviewed design and task plan.
+3. Use test-driven development and owner-scoped PostgreSQL tests.
+4. Open a PR against `develop` and stop for Codex review.
+5. Do not start F3 or any UI/worker/MCP phase.
+
+Do not change a phase or sub-phase to `COMPLETE` without a merged pull request and concrete validation evidence.
