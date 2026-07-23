@@ -107,6 +107,46 @@ défaut. Suivre alors la procédure de bootstrap décrite dans
 concerné. Après le premier merge sur `main`, toutes les migrations passent par
 le workflow protégé.
 
+## Worker restreint et identité média R2 (Phase C)
+
+La migration `20260723120000_add_media_identity_and_worker_role` ajoute l'identité
+R2 autoritaire sur `post_media` (`object_key`, `mime_type`, `byte_size`,
+`version_tag`, `identity_state`, `checked_at`, plus `owner_id` dénormalisé) et
+crée un rôle PostgreSQL restreint pour le futur worker global (Phase E). Ces
+éléments ne changent rien au runtime Vercel.
+
+Le rôle `ipe_worker_reader` est créé **NOLOGIN** par la migration, avec un
+`GRANT SELECT` limité aux seules colonnes d'identité de `post_media`
+(jamais `url`, `source_path` ni `thumbnail_url`, jamais une autre table, jamais
+d'écriture). Aucun mot de passe n'est stocké dans une migration.
+
+Provisionnement à faire hors dépôt, sur le VPS / dans les environnements GitHub,
+avant de déployer le worker :
+
+- créer un rôle de connexion pour le worker qui hérite du rôle restreint, par
+  exemple :
+
+  ```sql
+  CREATE ROLE worker_login LOGIN PASSWORD '<secret hors dépôt>';
+  GRANT ipe_worker_reader TO worker_login;
+  ```
+
+- renseigner `WORKER_DATABASE_URL` avec le DSN de ce rôle de connexion
+  (jamais celui de l'application) ;
+- fournir au worker un credential R2 **lecture seule** distinct du credential
+  d'upload web, sur le même `R2_BUCKET_NAME`, via `R2_WORKER_ACCESS_KEY_ID` et
+  `R2_WORKER_SECRET_ACCESS_KEY`.
+
+Ces variables sont **worker-side uniquement** : elles ne sont pas requises par
+Vercel et ne sont donc pas validées par `scripts/vercel-preflight.mjs`. Le worker
+ne lit jamais une URL arbitraire : il ne résout qu'un `object_key` porté par une
+ligne `post_media` à l'état `VERIFIED`.
+
+L'état `identity_state` est backfillable de façon idempotente
+(`backfillMediaIdentity`) : un média dont la clé est dérivable et l'objet présent
+passe à `VERIFIED`, un objet absent passe à `REPAIRABLE`, un média sans
+`source_path` reste `UNVERIFIED` — signalé, jamais inventé.
+
 ## Import et limite de 4,5 Mo
 
 Vercel impose 4,5 Mo maximum au corps d'une requête **et** d'une réponse de
