@@ -9,7 +9,8 @@ test.describe("bibliotheque Mosaïque", () => {
   test("charge les 18 publications du fallback local", async ({ page }) => {
     await expect(page.locator(".brand-logo")).toBeVisible();
     await expect(page.locator(".brand-name")).toContainText("Insta Post Explorer");
-    await expect(page.getByText("18 résultats", { exact: true })).toBeVisible();
+    // Two results counters exist (ribbon and mobile sticky toolbar); assert the visible one.
+    await expect(page.locator(".results-count:visible")).toHaveText(/^18\b/);
     await expect(page.getByRole("button", { name: "Ouvrir la publication de esncom.fr" })).toBeVisible();
     await expect(page.locator("[data-post-id]")).toHaveCount(18);
   });
@@ -24,9 +25,12 @@ test.describe("bibliotheque Mosaïque", () => {
   });
 
   test("demande une découverte au serveur avec les filtres actifs", async ({ page }) => {
+    const discovery = page.getByRole("button", { name: "Découverte", exact: true });
+    // Discovery is currently only exposed on desktop (header-tab desktop-only).
+    test.skip(!(await discovery.isVisible()), "La découverte n'est exposée que sur desktop");
     await page.getByRole("button", { name: "Sucré", exact: true }).click();
     const requestPromise = page.waitForRequest((request) => request.url().includes("/api/posts?") && request.url().includes("random=1"));
-    await page.getByRole("button", { name: "Découverte", exact: true }).click();
+    await discovery.click();
     const request = await requestPromise;
     expect(new URL(request.url()).searchParams.get("theme")).toBe("Sucré");
   });
@@ -36,7 +40,7 @@ test.describe("bibliotheque Mosaïque", () => {
 
     await search.fill("patisserie");
 
-    await expect(page.getByText("2 résultats", { exact: true })).toBeVisible();
+    await expect(page.locator(".results-count:visible")).toHaveText(/^2\b/);
     await expect(page.getByRole("button", { name: "Ouvrir la publication de damienpichon_" })).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("patisserie");
   });
@@ -46,9 +50,9 @@ test.describe("bibliotheque Mosaïque", () => {
     await filters.getByRole("button", { name: /Dessert protéiné/ }).click();
     await filters.getByRole("button", { name: "Chocolat 1", exact: true }).click();
 
-    await expect(page.getByText("1 résultats", { exact: true })).toBeVisible();
+    await expect(page.locator(".results-count:visible")).toHaveText(/^1\b/);
     await filters.getByRole("button", { name: "OU", exact: true }).click();
-    await expect(page.getByText("11 résultats", { exact: true })).toBeVisible();
+    await expect(page.locator(".results-count:visible")).toHaveText(/^11\b/);
     await expect.poll(() => new URL(page.url()).searchParams.get("tagMode")).toBe("or");
   });
 
@@ -73,19 +77,24 @@ test.describe("bibliotheque Mosaïque", () => {
   });
 
   test("combine un filtre de type avec les thèmes principaux", async ({ page }) => {
-    const carousel = page.getByRole("button", { name: "Carrousel", exact: true });
+    // Content-type chips live in the filter panel (desktop) or drawer (mobile).
+    let filters = await openFilters(page);
+    const carousel = filters.getByRole("button", { name: "Carrousel", exact: true });
     await carousel.click();
     await expect(carousel).toHaveAttribute("aria-pressed", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("carousel");
+    await closeFilters(page);
 
     const sweet = page.getByRole("button", { name: "Sucré", exact: true });
     await sweet.click();
     await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("Sucré");
     await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("carousel");
 
-    await page.getByRole("button", { name: "Vidéo", exact: true }).click();
+    filters = await openFilters(page);
+    await filters.getByRole("button", { name: "Vidéo", exact: true }).click();
     await expect.poll(() => new URL(page.url()).searchParams.get("type")).toBe("reel");
-    await expect(carousel).toHaveAttribute("aria-pressed", "false");
+    await expect(filters.getByRole("button", { name: "Carrousel", exact: true })).toHaveAttribute("aria-pressed", "false");
+    await closeFilters(page);
   });
 
   test("ouvre le detail et navigue au bouton et au clavier", async ({ page }) => {
@@ -114,7 +123,8 @@ test.describe("bibliotheque Mosaïque", () => {
 
   test("ne propose plus le tri par commentaires", async ({ page }) => {
     await page.goto("/");
-    const sort = page.getByLabel("Trier les résultats");
+    // Two sort selects exist (ribbon and mobile sticky toolbar); scope to the ribbon.
+    const sort = page.getByRole("region", { name: "Filtres et tri" }).getByLabel("Trier les résultats");
     await expect(sort.locator("option[value='comments']")).toHaveCount(0);
     await expect(sort.locator("option[value='likes']")).toHaveText("Plus likés");
   });
@@ -122,7 +132,17 @@ test.describe("bibliotheque Mosaïque", () => {
   test("affiche les statistiques globales depuis l'endpoint dédié", async ({ page }) => {
     await page.route("**/api/stats", (route) => route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ posts: 3379, photos: 1200, carousels: 900, videos: 1270, otherPosts: 9, media: 6946, imageMedia: 5600, videoMedia: 1346, tags: 420, mainThemes: 7 }),
+      body: JSON.stringify({
+        posts: 3379, photos: 1200, carousels: 900, videos: 1270, otherPosts: 9,
+        media: 6946, imageMedia: 5600, videoMedia: 1346, tags: 420, mainThemes: 7,
+        authors: 210, favorites: 64, totalLikes: 120000, totalComments: 8100,
+        averages: { likesPerRatedPost: 210, commentsPerRatedPost: 14, mediaPerPost: 2, tagsPerPost: 3 },
+        distributions: {
+          themes: [{ name: "Sucré", count: 1200 }],
+          years: [{ year: 2026, count: 900 }],
+          topAuthors: [{ username: "esncom.fr", postCount: 44 }],
+        },
+      }),
     }));
 
     await page.getByRole("button", { name: "Afficher les statistiques de la bibliothèque" }).click();
@@ -260,18 +280,28 @@ test.describe("bibliotheque Mosaïque", () => {
 
   test("structure la toolbar et la grille sans débordement à 360 px", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 760 });
-    await expect(page.getByRole("button", { name: /^Filtres/ })).toBeVisible();
-    for (const label of ["Auteur", "Année", "Collection", "Trier par"]) {
-      await expect(page.locator(".compact-control-label", { hasText: label })).toBeVisible();
-    }
+    const trigger = page.getByRole("button", { name: /Ouvrir les filtres/ });
+    await expect(trigger).toBeVisible();
+
+    // Author, year, and collection now live in the drawer at mobile widths.
+    await trigger.click();
+    const drawer = page.getByRole("dialog", { name: "Filtres avancés" });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("combobox", { name: "Filtrer par auteur dans le drawer" })).toBeVisible();
+    await expect(drawer.getByLabel("Filtrer par année dans le drawer")).toBeVisible();
+    await expect(drawer.getByLabel("Filtrer par collection dans le drawer")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
+
     const controls = await page.locator(".header-actions button:visible, .view-switch button:visible, .mobile-filter-trigger:visible").evaluateAll((items) =>
       items.map((item) => ({ width: item.getBoundingClientRect().width, height: item.getBoundingClientRect().height })),
     );
     expect(controls.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
-    const firstTwoCards = await page.locator("[data-post-id]").evaluateAll((cards) => cards.slice(0, 2).map((card) => { const rect = card.getBoundingClientRect(); return { width: rect.width, top: rect.top, bottom: rect.bottom }; }));
-    expect(firstTwoCards[0].width).toBeGreaterThan(300);
-    expect(firstTwoCards[1].top).toBeGreaterThan(firstTwoCards[0].bottom);
+    // The mobile grid is two columns: every card stays inside the viewport.
+    const cards = await page.locator("[data-post-id]").evaluateAll((items) => items.slice(0, 4).map((card) => { const rect = card.getBoundingClientRect(); return { width: rect.width, left: rect.left, right: rect.right }; }));
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.every((card) => card.width > 140 && card.left >= 0 && card.right <= 361)).toBe(true);
   });
 });
 
@@ -279,10 +309,26 @@ async function openFilters(page: Page) {
   const desktopPanel = page.locator(".desktop-filter-panel");
   if (await desktopPanel.isVisible()) return desktopPanel;
 
-  await page.getByRole("button", { name: /^Filtres/ }).click();
+  // Desktop toggles the side panel; mobile opens the Radix drawer.
+  const desktopToggle = page.getByRole("button", { name: "Filtres avancés" });
+  if (await desktopToggle.isVisible()) {
+    await desktopToggle.click();
+    await expect(desktopPanel).toBeVisible();
+    return desktopPanel;
+  }
+
+  await page.getByRole("button", { name: /Ouvrir les filtres/ }).click();
   const drawer = page.getByRole("dialog", { name: "Filtres avancés" });
   await expect(drawer).toBeVisible();
   return drawer;
+}
+
+async function closeFilters(page: Page) {
+  const drawer = page.getByRole("dialog", { name: "Filtres avancés" });
+  if (await drawer.isVisible()) {
+    await drawer.getByRole("button", { name: "Fermer les filtres" }).click();
+    await expect(drawer).toBeHidden();
+  }
 }
 
 async function selectTheme(page: Page, theme: "Clair" | "Sombre" | "Système") {

@@ -110,7 +110,9 @@ test("préserve la structure du ruban desktop à 1280px", async ({ page }) => {
   await openLibrary(page);
 
   await expect(page.getByRole("button", { name: "Filtres avancés" })).toBeVisible();
-  await expect(page.locator(".mobile-filter-trigger")).toBeHidden();
+  // Two mobile triggers exist in the DOM (ribbon and sticky toolbar); both must stay hidden on desktop.
+  await expect(page.locator(".control-ribbon .mobile-filter-trigger")).toBeHidden();
+  await expect(page.locator(".mobile-sticky-toolbar .mobile-filter-trigger")).toBeHidden();
   await expect(page.locator(".ribbon-end .author-control")).toBeVisible();
   await expect(page.locator(".ribbon-end .year-control")).toBeVisible();
   await expect(page.locator(".ribbon-end .collection-control")).toBeVisible();
