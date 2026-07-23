@@ -48,6 +48,26 @@ export const placeCandidateSchema = z
 
 export const placeCandidateBatchSchema = z.array(placeCandidateSchema).max(MAX_CANDIDATES_PER_POST);
 
+// A canonical lowercase SHA-256 hex digest (the exact shape produced by
+// computePlacesInputHash).
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+// One JSONL line of the caption-analysis result: the post it belongs to, the
+// immutable identity of the exported analysis input (`input_hash` +
+// `analysis_version`), and its bounded, text-only candidates. The model must
+// echo `post_id`, `input_hash`, and `analysis_version` from the exported line
+// unchanged. `.strict()` rejects any coordinate, provider, providerPlaceId,
+// precision, or other unknown field at the record level too.
+export const placeCandidateRecordSchema = z
+  .object({
+    post_id: z.string().trim().min(1).max(200),
+    input_hash: z.string().trim().regex(SHA256_HEX),
+    analysis_version: z.string().trim().min(1).max(120),
+    candidates: placeCandidateBatchSchema,
+  })
+  .strict();
+
 export type PlaceCandidate = z.infer<typeof placeCandidateSchema>;
 export type PlaceCandidateEvidence = z.infer<typeof candidateEvidenceSchema>;
 export type PlaceCandidateCategory = (typeof PLACE_CANDIDATE_CATEGORIES)[number];
+export type PlaceCandidateRecord = z.infer<typeof placeCandidateRecordSchema>;

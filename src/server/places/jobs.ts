@@ -11,9 +11,11 @@ import { loadAnalysisPostInputs } from "@/server/places/repository";
 // new idempotent job; the same content and version returns the existing job.
 export const PLACES_ANALYSIS_VERSION = process.env.PLACES_ANALYSIS_VERSION?.trim() || "places-v1";
 
+export type PlacesJobErrorCode = "POST_NOT_FOUND" | "POST_NOT_PLACES_ELIGIBLE" | "PLACES_INPUT_STALE";
+
 export class PlacesJobError extends Error {
-  readonly code: "POST_NOT_FOUND" | "POST_NOT_PLACES_ELIGIBLE";
-  constructor(code: "POST_NOT_FOUND" | "POST_NOT_PLACES_ELIGIBLE") {
+  readonly code: PlacesJobErrorCode;
+  constructor(code: PlacesJobErrorCode) {
     super(code);
     this.code = code;
     this.name = "PlacesJobError";
