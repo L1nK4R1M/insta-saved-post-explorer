@@ -48,6 +48,17 @@ export const placeCandidateSchema = z
 
 export const placeCandidateBatchSchema = z.array(placeCandidateSchema).max(MAX_CANDIDATES_PER_POST);
 
+// One JSONL line of the caption-analysis result: the post it belongs to and its
+// bounded, text-only candidates. `.strict()` rejects any coordinate, provider,
+// providerPlaceId, precision, or other unknown field at the record level too.
+export const placeCandidateRecordSchema = z
+  .object({
+    post_id: z.string().trim().min(1).max(200),
+    candidates: placeCandidateBatchSchema,
+  })
+  .strict();
+
 export type PlaceCandidate = z.infer<typeof placeCandidateSchema>;
 export type PlaceCandidateEvidence = z.infer<typeof candidateEvidenceSchema>;
 export type PlaceCandidateCategory = (typeof PLACE_CANDIDATE_CATEGORIES)[number];
+export type PlaceCandidateRecord = z.infer<typeof placeCandidateRecordSchema>;

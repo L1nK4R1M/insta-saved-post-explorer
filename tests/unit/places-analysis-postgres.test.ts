@@ -1,0 +1,339 @@
+// @vitest-environment node
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PrismaClient } from "@prisma/client";
+
+vi.mock("server-only", () => ({}));
+
+import type { PlaceCandidate } from "@/lib/places/candidates";
+import type { PlaceResolutionInput, PlaceResolver, ResolvedPlaceCandidate } from "@/server/places/resolvers/types";
+
+const databaseUrl = process.env.TEST_DATABASE_URL?.trim() ?? "";
+const describeWithDatabase = databaseUrl ? describe : describe.skip;
+const OWNER_A = "owner-analysis-a";
+const OWNER_B = "owner-analysis-b";
+
+let prisma: PrismaClient;
+let analysis: typeof import("@/server/places/analysis");
+let jobs: typeof import("@/server/places/jobs");
+const previousDatabaseUrl = process.env.DATABASE_URL;
+
+// In-memory resolver: no network, no real Geoapify. Returns a scripted list per
+// candidate name, or throws to simulate a provider failure.
+class FakeResolver implements PlaceResolver {
+  constructor(
+    private readonly byName: Record<string, ResolvedPlaceCandidate[]>,
+    private readonly failure?: Error,
+  ) {}
+  async resolve(input: PlaceResolutionInput): Promise<ResolvedPlaceCandidate[]> {
+    if (this.failure) throw this.failure;
+    return this.byName[input.candidate.name ?? ""] ?? [];
+  }
+}
+
+function resolved(overrides: Partial<ResolvedPlaceCandidate> = {}): ResolvedPlaceCandidate {
+  return {
+    provider: "geoapify",
+    providerPlaceId: "geo-nobu",
+    displayName: "Nobu Dubai",
+    category: "catering.restaurant",
+    address: "Atlantis, Dubai",
+    city: "Dubai",
+    region: null,
+    country: "United Arab Emirates",
+    countryCode: "AE",
+    latitude: 25.13,
+    longitude: 55.11,
+    providerResultType: "amenity",
+    providerRank: 0.95,
+    attribution: "Powered by Geoapify",
+    ...overrides,
+  };
+}
+
+function candidate(overrides: Partial<PlaceCandidate> = {}): PlaceCandidate {
+  return {
+    name: "Nobu Dubai",
+    city: "Dubai",
+    region: null,
+    country: "United Arab Emirates",
+    category: "restaurant",
+    confidence: 0.95,
+    evidence: [{ type: "CAPTION", excerpt: "Dinner at Nobu Dubai" }],
+    ...overrides,
+  };
+}
+
+describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () => {
+  beforeAll(async () => {
+    process.env.DATABASE_URL = databaseUrl;
+    ({ prisma } = await import("@/server/db"));
+    analysis = await import("@/server/places/analysis");
+    jobs = await import("@/server/places/jobs");
+    await resetDatabase();
+  });
+
+  afterAll(async () => {
+    await resetDatabase();
+    await prisma.$disconnect();
+    process.env.DATABASE_URL = previousDatabaseUrl;
+  });
+
+  beforeEach(resetDatabase);
+
+  it("persists a resolved EXACT place with one primary link and evidence", async () => {
+    await seedPost("nobu-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
+
+    const result = await analysis.analyzeCandidateBatchRecord({
+      ownerId: OWNER_A,
+      record: { post_id: "nobu-post", candidates: [candidate()] },
+      resolver,
+      commit: true,
+    });
+
+    expect(result.status).toBe("SUCCEEDED");
+    const place = await prisma.place.findFirstOrThrow({ where: { ownerId: OWNER_A } });
+    expect(place.precision).toBe("EXACT");
+    expect(place.approximationRadiusMeters).toBeNull();
+    expect(place.continentCode).toBe("AS");
+    const link = await prisma.postPlace.findFirstOrThrow({ where: { ownerId: OWNER_A } });
+    expect(link.isPrimary).toBe(true);
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, evidenceType: "PROVIDER_MATCH" } })).toBe(1);
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, evidenceType: "CAPTION" } })).toBe(1);
+    const job = await prisma.placeAnalysisJob.findFirstOrThrow({ where: { ownerId: OWNER_A } });
+    expect(job.status).toBe("SUCCEEDED");
+  });
+
+  it("persists an APPROXIMATE city with a mandatory radius", async () => {
+    await seedPost("kyoto-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({
+      Kyoto: [resolved({ providerPlaceId: "geo-kyoto", displayName: "Kyoto", city: "Kyoto", country: "Japan", countryCode: "JP", providerResultType: "city" })],
+    });
+
+    await analysis.analyzeCandidateBatchRecord({
+      ownerId: OWNER_A,
+      record: { post_id: "kyoto-post", candidates: [candidate({ name: "Kyoto", city: "Kyoto", country: "Japan", confidence: 0.7 })] },
+      resolver,
+      commit: true,
+    });
+
+    const place = await prisma.place.findFirstOrThrow({ where: { ownerId: OWNER_A } });
+    expect(place.precision).toBe("APPROXIMATE");
+    expect(place.approximationRadiusMeters).toBe(25_000);
+    expect(place.continentCode).toBe("AS");
+  });
+
+  it("records an UNKNOWN candidate as evidence only and creates no place", async () => {
+    await seedPost("country-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({
+      Japan: [resolved({ providerPlaceId: "geo-jp", displayName: "Japan", city: null, country: "Japan", countryCode: "JP", providerResultType: "country" })],
+    });
+
+    const result = await analysis.analyzeCandidateBatchRecord({
+      ownerId: OWNER_A,
+      record: { post_id: "country-post", candidates: [candidate({ name: "Japan", city: null, country: "Japan", evidence: [{ type: "CAPTION", excerpt: "Somewhere in Japan" }] })] },
+      resolver,
+      commit: true,
+    });
+
+    expect(result.status).toBe("NEEDS_REVIEW");
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(0);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A } })).toBe(0);
+    const evidence = await prisma.placeEvidence.findFirstOrThrow({ where: { ownerId: OWNER_A, evidenceType: "CAPTION" } });
+    expect(evidence.placeId).toBeNull();
+    const job = await prisma.placeAnalysisJob.findFirstOrThrow({ where: { ownerId: OWNER_A } });
+    expect(job.status).toBe("NEEDS_REVIEW");
+  });
+
+  it("links multiple distinct places with exactly one primary", async () => {
+    await seedPost("multi-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({
+      "Nobu Dubai": [resolved()],
+      "Louvre Abu Dhabi": [resolved({ providerPlaceId: "geo-louvre", displayName: "Louvre Abu Dhabi", city: "Abu Dhabi", country: "United Arab Emirates", countryCode: "AE", providerResultType: "amenity" })],
+    });
+
+    await analysis.analyzeCandidateBatchRecord({
+      ownerId: OWNER_A,
+      record: {
+        post_id: "multi-post",
+        candidates: [
+          candidate({ confidence: 0.95 }),
+          candidate({ name: "Louvre Abu Dhabi", city: "Abu Dhabi", confidence: 0.8 }),
+        ],
+      },
+      resolver,
+      commit: true,
+    });
+
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(2);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A } })).toBe(2);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A, isPrimary: true } })).toBe(1);
+  });
+
+  it("deduplicates the same place mentioned twice in one post", async () => {
+    await seedPost("dup-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
+
+    await analysis.analyzeCandidateBatchRecord({
+      ownerId: OWNER_A,
+      record: {
+        post_id: "dup-post",
+        candidates: [
+          candidate({ evidence: [{ type: "CAPTION", excerpt: "Nobu again" }] }),
+          candidate({ evidence: [{ type: "HASHTAG", excerpt: "#nobu" }] }),
+        ],
+      },
+      resolver,
+      commit: true,
+    });
+
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(1);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A } })).toBe(1);
+  });
+
+  it("cancels non-terminal jobs when the post left an eligible theme", async () => {
+    await seedPost("stale-post", OWNER_A, "Voyages");
+    const job = await jobs.createMetadataAnalysisJob({ ownerId: OWNER_A, postId: "stale-post" });
+    await prisma.post.update({ where: { id: "stale-post" }, data: { mainTheme: "Cuisine" } });
+    const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
+
+    await expect(
+      analysis.analyzeCandidateBatchRecord({
+        ownerId: OWNER_A,
+        record: { post_id: "stale-post", candidates: [candidate()] },
+        resolver,
+        commit: true,
+      }),
+    ).rejects.toMatchObject({ code: "POST_NOT_PLACES_ELIGIBLE" });
+
+    const refreshed = await prisma.placeAnalysisJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(refreshed.status).toBe("CANCELLED");
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(0);
+  });
+
+  it("never overwrites a user-confirmed link", async () => {
+    await seedPost("confirmed-post", OWNER_A, "Voyages");
+    const place = await prisma.place.create({
+      data: {
+        ownerId: OWNER_A,
+        displayName: "Nobu Dubai",
+        normalizedName: "nobu dubai",
+        provider: "geoapify",
+        providerPlaceId: "geo-nobu",
+        latitude: 25.13,
+        longitude: 55.11,
+        precision: "EXACT",
+        confidence: 1,
+      },
+    });
+    await prisma.postPlace.create({
+      data: { ownerId: OWNER_A, postId: "confirmed-post", placeId: place.id, isPrimary: true, isUserConfirmed: true, precision: "EXACT", confidence: 1 },
+    });
+
+    const resolver = new FakeResolver({ "Nobu Dubai": [resolved({ providerRank: 0.5 })] });
+    await analysis.analyzeCandidateBatchRecord({
+      ownerId: OWNER_A,
+      record: { post_id: "confirmed-post", candidates: [candidate({ confidence: 0.6 })] },
+      resolver,
+      commit: true,
+    });
+
+    const link = await prisma.postPlace.findFirstOrThrow({ where: { ownerId: OWNER_A } });
+    expect(link.isUserConfirmed).toBe(true);
+    expect(link.confidence).toBe(1);
+    expect(link.isPrimary).toBe(true);
+  });
+
+  it("rolls back and marks the job FAILED on a provider failure", async () => {
+    await seedPost("fail-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({}, Object.assign(new Error("GEOAPIFY_UNAVAILABLE"), { code: "GEOAPIFY_UNAVAILABLE" }));
+
+    await expect(
+      analysis.analyzeCandidateBatchRecord({
+        ownerId: OWNER_A,
+        record: { post_id: "fail-post", candidates: [candidate()] },
+        resolver,
+        commit: true,
+      }),
+    ).rejects.toThrow();
+
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(0);
+    const job = await prisma.placeAnalysisJob.findFirstOrThrow({ where: { ownerId: OWNER_A } });
+    expect(job.status).toBe("FAILED");
+    expect(job.errorCode).toBe("GEOAPIFY_UNAVAILABLE");
+  });
+
+  it("isolates analysis by owner", async () => {
+    await seedPost("owned-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
+
+    await expect(
+      analysis.analyzeCandidateBatchRecord({
+        ownerId: OWNER_B,
+        record: { post_id: "owned-post", candidates: [candidate()] },
+        resolver,
+        commit: true,
+      }),
+    ).rejects.toMatchObject({ code: "POST_NOT_FOUND" });
+    expect(await prisma.place.count({ where: { ownerId: OWNER_B } })).toBe(0);
+  });
+
+  it("writes nothing in dry-run mode", async () => {
+    await seedPost("dry-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
+
+    const result = await analysis.analyzeCandidateBatchRecord({
+      ownerId: OWNER_A,
+      record: { post_id: "dry-post", candidates: [candidate()] },
+      resolver,
+      commit: false,
+    });
+
+    expect(result.status).toBe("SKIPPED_DRY_RUN");
+    expect(result.placesPersisted).toBe(1);
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(0);
+    expect(await prisma.placeAnalysisJob.count({ where: { ownerId: OWNER_A } })).toBe(0);
+  });
+
+  it("is idempotent when committed twice", async () => {
+    await seedPost("idem-post", OWNER_A, "Voyages");
+    const resolver = new FakeResolver({ "Nobu Dubai": [resolved()] });
+    const record = { post_id: "idem-post", candidates: [candidate()] };
+
+    await analysis.analyzeCandidateBatchRecord({ ownerId: OWNER_A, record, resolver, commit: true });
+    await analysis.analyzeCandidateBatchRecord({ ownerId: OWNER_A, record, resolver, commit: true });
+
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(1);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A } })).toBe(1);
+    expect(await prisma.placeAnalysisJob.count({ where: { ownerId: OWNER_A } })).toBe(1);
+    // Evidence is rebuilt, not duplicated: one CAPTION + one PROVIDER_MATCH.
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A } })).toBe(2);
+  });
+});
+
+let postCounter = 0;
+
+async function seedPost(id: string, ownerId: string, mainTheme: string): Promise<void> {
+  postCounter += 1;
+  await prisma.post.create({
+    data: {
+      id,
+      ownerId,
+      postUrl: `https://instagram.com/p/PA${postCounter}`,
+      thumbnailUrl: "https://example.com/t.jpg",
+      authorUsername: "alice",
+      authorSortKey: "alice",
+      caption: "A trip",
+      searchText: "alice trip",
+      contentType: "IMAGE",
+      mainTheme,
+    },
+  });
+}
+
+async function resetDatabase(): Promise<void> {
+  const owners = { ownerId: { in: [OWNER_A, OWNER_B] } };
+  await prisma.post.deleteMany({ where: owners });
+  await prisma.place.deleteMany({ where: owners });
+}
