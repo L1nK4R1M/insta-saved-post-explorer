@@ -32,10 +32,11 @@ If this handoff conflicts with an authoritative contract or with the code observ
 
 ```text
 No implementation phase is active.
-Phases 0, A, B are merged. The next executable phase is C — R2 media identity
-and worker isolation — which is NOT started and requires its own design and
-migration review before any code (see sections 6 and 7). Do not begin it
-without an explicit owner decision.
+Phases 0, A, B are merged. Phase C — R2 media identity and worker isolation —
+now has a reviewed design (CODEX_R2_WORKER_ISOLATION_DESIGN.md) with owner
+decisions D1–D4 signed off (section 7), so its entry gate is satisfied: it is
+READY to implement in a dedicated PR that stops for review at the exit gate.
+No Phase C implementation code has been written yet.
 Branch for the next work: claude/insta-saved-post-explorer-continue-wli2my
 (restart from the latest develop for each new unit of work).
 ```
@@ -64,10 +65,14 @@ Vérifications finales :
 - Playwright complet en local (env CI répliqué) : 65 passed / 13 skipped / 0 failed.
 
 Prochaine action exacte pour Codex :
-- il n'y a rien à merger ni à corriger sur develop ;
-- avant tout code de la Phase C, produire (ou faire valider) le design d'identité
-  média R2 et d'isolation worker + le plan de migration/rollback — décisions listées
-  en section 7, à ne pas deviner ;
+- le design Phase C est validé (CODEX_R2_WORKER_ISOLATION_DESIGN.md, décisions
+  D1–D4 signées) ; la Phase C peut démarrer en PR dédiée qui s'arrête à la gate
+  de sortie. Implémenter dans l'ordre de la section 10 du design : migration
+  additive (colonnes d'identité + enum MediaIdentity + index + rôle restreint),
+  persistance de l'identité R2 vérifiée dans le chemin sync, dénormalisation
+  ownerId (NOT NULL en deux temps), backfill d'identité idempotent, env/docs des
+  credentials R2 worker, tests de la section 9. Ne pas démarrer E/F/H dans la
+  même PR ;
 - tout futur consommateur Places (service, job, statistique, action UI, worker, MCP)
   doit importer isPlacesEligibleTheme() depuis src/lib/places/eligibility.ts, jamais
   recopier les chaînes de thème.
@@ -103,7 +108,7 @@ Every future entry point (services, jobs, statistics, UI actions, worker handler
 
 | Phase | State | Reason |
 | --- | --- | --- |
-| C — R2 media identity and worker isolation | Not started (next executable) | Requires its own design and migration review; decisions in section 7 must be made first |
+| C — R2 media identity and worker isolation | Ready | Reviewed design merged (`CODEX_R2_WORKER_ISOLATION_DESIGN.md`), decisions D1–D4 signed off (section 7). Implementation is a separate PR that stops at the exit gate. |
 | D — External API V1 | Blocked | Requires Phase A (merged) and the prerequisites defined by the implementation order |
 | E — Global worker foundation | Blocked | Requires Phase C |
 | F — Places metadata-first domain | Blocked | Requires Phases B and D and relevant worker/data gates |
@@ -116,17 +121,20 @@ The presence of a detailed brief is not permission to execute a blocked phase.
 
 ## 7. Decisions That Must Not Be Guessed
 
-These choices require an explicit decision at the relevant later phase:
+Still open (require an explicit decision at the relevant later phase):
 
 - distributed API rate limiting on Vercel;
 - map rendering provider;
 - geographic resolution provider;
-- canonical R2 media identity and historical repair policy;
-- restricted PostgreSQL worker role;
-- migration rollback or forward-recovery procedure;
 - AI providers, models, budgets, and thresholds;
 - VPS credentials, firewall, backups, and observability;
 - permissions and confirmation model for sensitive Places commands.
+
+Signed off for Phase C (23 July 2026, owner) — see `CODEX_R2_WORKER_ISOLATION_DESIGN.md` section 8:
+
+- canonical R2 media identity and historical repair policy → authoritative `objectKey` + `mimeType` + `byteSize` + opaque R2 ETag version tag + `identityState` (UNVERIFIED/REPAIRABLE/VERIFIED); legacy media stays flagged with lazy backfill, never fabricated;
+- restricted PostgreSQL worker role → restricted read-only role, owner isolation enforced by grant + query discipline + owner-scoped test (RLS deferred);
+- migration rollback or forward-recovery procedure → additive migration, fix-forward, Neon branch/PITR as the safety net.
 
 ## 8. Required Pull Request Report
 
