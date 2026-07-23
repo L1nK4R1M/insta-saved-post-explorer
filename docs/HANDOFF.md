@@ -32,17 +32,15 @@ If this handoff conflicts with an authoritative contract or with the code observ
 ## 3. Active Phase
 
 ```text
-No implementation phase is active.
-Phases 0, A, B, C are merged. develop CI green as of the Phase C merge (0870d69).
-Next executable phase: D — External API V1 (brief: CODEX_API_READY_ARCHITECTURE.md).
-Phase E (global worker) is also unblocked and reuses the ipe_worker_reader role
-from Phase C, but depends on VPS decisions not yet taken (section 7).
-Branch for the next work: claude/insta-saved-post-explorer-continue-wli2my
-(restart from the latest develop for each new unit of work).
+Phase D — External API V1
+Status: AWAITING_REVIEW
+Branch: claude/insta-saved-post-explorer-continue-wli2my
+Pull request: #26 (base develop)
 ```
 
-Do not start a later phase in a way that bundles it with another; each phase is
-one dedicated PR that stops for review at its exit gate.
+Phase D is implemented and awaiting review (brief `CODEX_API_READY_ARCHITECTURE.md`).
+Do not start Phase E, F, G, H, I, or J before PR #26 is reviewed and merged.
+Each phase is one dedicated PR that stops for review at its exit gate.
 
 Branch divergence note: `CODEX_IMPLEMENTATION_ORDER.md` recommends per-phase branch names (`feat/places-theme-eligibility`, etc.). The Claude sessions were constrained to the branch `claude/insta-saved-post-explorer-continue-wli2my` (restarted from the merged `develop` for each phase). Codex had not started any of these phases, so no work was duplicated.
 
@@ -50,30 +48,41 @@ Branch divergence note: `CODEX_IMPLEMENTATION_ORDER.md` recommends per-phase bra
 
 ```text
 Date et agent : 23 juillet 2026, Claude (Claude Code)
-Phase active : aucune (0, A, B, C mergées)
-Statut : develop stable, CI verte (dernier merge Phase C 0870d69)
+Phase active : D — External API V1
+Statut : AWAITING_REVIEW
 Branche : claude/insta-saved-post-explorer-continue-wli2my (repartie de develop 0870d69)
+Pull request : #26
 Dernier commit develop : 0870d69
 
-Travail réalisé par Claude durant la session :
-- Phase A mergée (PR #18) ; Phase B mergée (PR #19) ;
-- diagnostic + remise au vert e2e mergée (PR #21, closes issue #20) ;
-- design Phase C mergé (PR #23, décisions D1–D4) ;
-- implémentation Phase C mergée (PR #24, squash 0870d69) : migration additive
-  (enum MediaIdentity, colonnes d'identité sur post_media, backfill owner_id +
-  NOT NULL, index, rôle restreint ipe_worker_reader NOLOGIN), persistance de
-  l'identité R2 vérifiée dans le chemin sync, backfillMediaIdentity() idempotent,
-  headR2Object(), env/docs credentials worker, 6 tests PostgreSQL.
+Travail reçu de Codex :
+- develop à 0870d69 (Phases 0, A, B, C mergées). Aucune implémentation Phase D préalable.
+
+Travail réalisé par Claude (implémentation Phase D) :
+- src/auth/api-key.ts : requireExternalApiKey() — Bearer, hash SHA-256,
+  timingSafeEqual vs EXTERNAL_API_KEY_SHA256, fail-closed si hash absent/malformé,
+  jamais de log du token ;
+- src/contracts/api/error.ts : contrat d'erreur V1 stable {error:{code,message}}
+  + headers sécurité (private no-store, Vary Authorization) + adaptateur ;
+- src/app/api/v1/{posts, posts/[id], tags, collections, authors, stats}/route.ts :
+  adaptateurs fins réutilisant les services serveur existants, auth d'abord ;
+- routes historiques /api/* inchangées ;
+- .env.example EXTERNAL_API_KEY_SHA256, validation dans scripts/vercel-preflight.mjs
+  (erreur si présent mais non 64-hex, warning si absent), docs/external-api.md ;
+- tests unitaires : api-key (8), api-v1-posts + detail (7), api-v1-errors (6).
+
+Vérifications finales (local, PostgreSQL 16) :
+- npm run lint : OK · npm run typecheck : OK · npm run build : OK (6 routes /api/v1) ;
+- TEST_DATABASE_URL=<pg16> npm run test : 29 fichiers / 164 tests ;
+- npm run test sans base : 142 passés + 22 skippés ;
+- deploy:check (preflight) : ready avec clé valide ; warning propre sans clé.
 
 Prochaine action exacte pour Codex :
-- il n'y a rien à merger ni corriger sur develop ;
-- Phase D (API externe V1) est la prochaine phase autonome : suivre
-  CODEX_API_READY_ARCHITECTURE.md, brancher /api/v1 comme adaptateurs fins sur les
-  services serveur existants, auth Bearer SHA-256 (EXTERNAL_API_KEY_SHA256),
-  erreurs stables, tests, sans casser les routes historiques. Décision ouverte à
-  trancher avant exposition : rate-limiting distribué sur Vercel (section 7) ;
-- Phase E (worker global) est aussi débloquée et réutilise ipe_worker_reader +
-  identity_state, mais dépend de décisions VPS non prises (section 7) ;
+- relire la PR #26 (src/auth/api-key.ts, src/contracts/api/error.ts, src/app/api/v1/*,
+  preflight, docs/external-api.md, tests) et la merger si conforme ;
+- avant exposition externe réelle : trancher le rate-limiting distribué sur Vercel
+  (section 7) — la V1 ne l'implémente pas (le brief l'autorise en différé) ;
+- Phase E (worker global) reste débloquée (réutilise ipe_worker_reader), sous
+  réserve des décisions VPS non prises ;
 - tout futur consommateur Places doit importer isPlacesEligibleTheme() depuis
   src/lib/places/eligibility.ts, jamais recopier les chaînes de thème.
 
@@ -120,7 +129,7 @@ The merged Phase C contract (design: `CODEX_R2_WORKER_ISOLATION_DESIGN.md`):
 | Phase | State | Reason |
 | --- | --- | --- |
 | C — R2 media identity and worker isolation | Merged | PR #24 (`0870d69`). Contract summary in section 4bis. |
-| D — External API V1 | Next executable | Phase A merged; brief `CODEX_API_READY_ARCHITECTURE.md`. Open decision: distributed rate limiting on Vercel (section 7). |
+| D — External API V1 | Awaiting review | Implemented in PR #26: `requireExternalApiKey` (Bearer SHA-256), stable V1 error contract, six `/api/v1` thin route adapters, preflight + docs, tests. Open decision before real external exposure: distributed rate limiting on Vercel (section 7). |
 | E — Global worker foundation | Unblocked | Phase C merged; reuses `ipe_worker_reader` + `identityState`. Depends on VPS decisions not yet taken (section 7). |
 | F — Places metadata-first domain | Blocked | Requires Phases B and D and relevant worker/data gates |
 | G — Places 2D UI | Blocked | Requires Phase F |
