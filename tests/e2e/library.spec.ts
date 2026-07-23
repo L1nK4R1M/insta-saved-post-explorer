@@ -124,7 +124,7 @@ test.describe("bibliotheque Mosaïque", () => {
   test("ne propose plus le tri par commentaires", async ({ page }) => {
     await page.goto("/");
     // Two sort selects exist (ribbon and mobile sticky toolbar); scope to the ribbon.
-    const sort = page.getByRole("region", { name: "Filtres et tri" }).getByLabel("Trier les résultats");
+    const sort = page.getByRole("region", { name: "Filtres et tri", exact: true }).getByLabel("Trier les résultats");
     await expect(sort.locator("option[value='comments']")).toHaveCount(0);
     await expect(sort.locator("option[value='likes']")).toHaveText("Plus likés");
   });
