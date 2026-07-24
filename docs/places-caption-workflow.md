@@ -151,6 +151,56 @@ textual evidence is retained with a null place for later review.
 - a post that left an eligible theme cancels its still-pending jobs;
 - provider failures mark the job `FAILED` with a bounded, secret-free code.
 
+### Resolver resilience (large batches)
+
+The Geoapify resolver retries **transient** failures so a batch of thousands of
+posts runs unattended without failing a post on a single hiccup:
+
+- retried: request timeouts, network errors, and HTTP `408`, `429`, `500`, `502`,
+  `503`, `504`;
+- not retried: deterministic `4xx` (`400/401/403/404`) and a malformed body;
+- backoff: capped exponential with full jitter; a `Retry-After` header (seconds or
+  HTTP date) takes precedence, also capped;
+- tunable via `PLACES_RESOLVER_MAX_ATTEMPTS` (1–6; `1` disables retries),
+  `PLACES_RESOLVER_RETRY_BASE_MS`, `PLACES_RESOLVER_RETRY_MAX_MS`, and
+  `PLACES_RESOLVER_TIMEOUT_MS`;
+- errors stay structured (`GEOAPIFY_TIMEOUT`, `GEOAPIFY_UNAVAILABLE`,
+  `GEOAPIFY_HTTP_ERROR`, `GEOAPIFY_INVALID_RESPONSE`) and never contain the key,
+  URL, or caption.
+
+When every attempt is exhausted the job is marked `FAILED` with a bounded code and
+no partial writes; because imports are idempotent, re-running the batch retries
+only the still-failed posts.
+
+### Idempotent job creation without P2002 noise
+
+`createMetadataAnalysisJob` uses an `INSERT ... ON CONFLICT DO NOTHING`
+(`createMany` with `skipDuplicates`) then reads the row back. A duplicate
+idempotency key is absorbed at the database level, so re-exporting or re-importing
+the same input no longer prints an "expected" `P2002` to the logs. A fresh job id
+can only conflict on the idempotency key, so an unexpected conflict is still
+surfaced (`PLACES_JOB_CONFLICT`) rather than masked.
+
+### Report counters
+
+The importer prints counts only. `postsProcessed/Succeeded/NeedingReview/Failed`
+count posts; `placesPersisted/linksPersisted/evidencePersisted` are per-post
+upsert counts **summed over the batch** — a canonical place shared by two posts
+adds to `placesPersisted` once per post, so these are write counts, not distinct
+new-row counts. `errors` carries only a line number and a stable code, never a
+caption.
+
+### Deliberately deferred (not needed for robustness)
+
+- **Parallel resolution / rate limiting.** Import stays sequential: the canonical
+  place and link upserts use find-then-write and are not concurrency-safe, so
+  naive parallelism would create races. Sequential processing plus the retry
+  policy above (which already honors `429`/`Retry-After`) is robust without a
+  rate limiter. Revisit only alongside the global VPS worker (Phase E).
+- **Provider response cache.** Not added: candidate queries vary per post and a
+  cache adds state for a marginal per-run gain. A future in-run dedup of identical
+  candidate queries can be added if a real workload shows repeated lookups.
+
 ## 9. Enabling Places and Geoapify attribution
 
 Places analysis is gated by `PLACES_ENABLED` (server-only, never `NEXT_PUBLIC_`).

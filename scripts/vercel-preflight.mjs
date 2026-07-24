@@ -144,6 +144,20 @@ if (placesEnabled) {
   if (!Number.isInteger(resolverMaxResults) || resolverMaxResults < 1 || resolverMaxResults > 5) {
     errors.push("PLACES_RESOLVER_MAX_RESULTS must be an integer between 1 and 5.");
   }
+  const resolverMaxAttempts = Number(process.env.PLACES_RESOLVER_MAX_ATTEMPTS ?? "3");
+  if (!Number.isInteger(resolverMaxAttempts) || resolverMaxAttempts < 1 || resolverMaxAttempts > 6) {
+    errors.push("PLACES_RESOLVER_MAX_ATTEMPTS must be an integer between 1 and 6.");
+  }
+  const resolverRetryBase = Number(process.env.PLACES_RESOLVER_RETRY_BASE_MS ?? "250");
+  if (!Number.isInteger(resolverRetryBase) || resolverRetryBase < 0 || resolverRetryBase > 60000) {
+    errors.push("PLACES_RESOLVER_RETRY_BASE_MS must be an integer between 0 and 60000.");
+  }
+  const resolverRetryMax = Number(process.env.PLACES_RESOLVER_RETRY_MAX_MS ?? "8000");
+  if (!Number.isInteger(resolverRetryMax) || resolverRetryMax < 0 || resolverRetryMax > 60000) {
+    errors.push("PLACES_RESOLVER_RETRY_MAX_MS must be an integer between 0 and 60000.");
+  } else if (Number.isInteger(resolverRetryBase) && resolverRetryMax < resolverRetryBase) {
+    errors.push("PLACES_RESOLVER_RETRY_MAX_MS must be greater than or equal to PLACES_RESOLVER_RETRY_BASE_MS.");
+  }
 } else if (process.env.GEOAPIFY_API_KEY?.trim()) {
   warnings.push("GEOAPIFY_API_KEY is set but PLACES_ENABLED is not 1; Places analysis stays disabled.");
 } else {

@@ -57,6 +57,7 @@ function validGeoapifyBody() {
   };
 }
 
+// The legacy suite exercises a single retry (two attempts) with no real waiting.
 function resolver(fetchImpl: typeof fetch) {
   return new GeoapifyPlaceResolver({
     apiKey: SECRET_KEY,
@@ -64,7 +65,9 @@ function resolver(fetchImpl: typeof fetch) {
     fetchImpl,
     timeoutMs: 50,
     maxResults: 5,
-    retryDelayMs: 0,
+    maxAttempts: 2,
+    baseRetryDelayMs: 0,
+    sleepImpl: async () => {},
   });
 }
 
@@ -176,6 +179,148 @@ describe("GeoapifyPlaceResolver", () => {
       throw new Error("expected the resolver to throw");
     } catch (error) {
       expect(error).toBeInstanceOf(GeoapifyResolverError);
+      const serialized = `${(error as Error).message} ${(error as Error).stack ?? ""}`;
+      expect(serialized).not.toContain(SECRET_KEY);
+      expect(serialized).not.toContain("Dinner at Nobu");
+    }
+  });
+});
+
+function abortError(): Error {
+  const error = new Error("aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+// A resolver that never really waits; captured `sleeps` are the requested delays.
+function retryingResolver(fetchImpl: typeof fetch, overrides: Record<string, unknown> = {}) {
+  const sleeps: number[] = [];
+  const resolverInstance = new GeoapifyPlaceResolver({
+    apiKey: SECRET_KEY,
+    baseUrl: "https://api.geoapify.com",
+    fetchImpl,
+    timeoutMs: 50,
+    maxResults: 5,
+    maxAttempts: 3,
+    baseRetryDelayMs: 100,
+    maxRetryDelayMs: 1_000,
+    jitter: () => 1, // deterministic: use the full exponential delay
+    sleepImpl: async (ms: number) => {
+      sleeps.push(ms);
+    },
+    ...overrides,
+  });
+  return { resolver: resolverInstance, sleeps };
+}
+
+describe("GeoapifyPlaceResolver retry policy", () => {
+  it("retries a timeout and then succeeds", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(abortError()) // attempt 1: timeout
+      .mockResolvedValueOnce(jsonResponse(validGeoapifyBody())); // attempt 2: success
+    const { resolver: r } = retryingResolver(fetchMock as unknown as typeof fetch);
+    const results = await r.resolve(resolutionInput());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(results).toHaveLength(1);
+  });
+
+  it("retries a network error and then succeeds", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("ECONNRESET")) // attempt 1: network failure
+      .mockResolvedValueOnce(jsonResponse(validGeoapifyBody()));
+    const { resolver: r } = retryingResolver(fetchMock as unknown as typeof fetch);
+    const results = await r.resolve(resolutionInput());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(results).toHaveLength(1);
+  });
+
+  it.each([408, 500, 502, 503, 504])("retries a %d and then succeeds", async (status) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: "transient" }, status))
+      .mockResolvedValueOnce(jsonResponse(validGeoapifyBody()));
+    const { resolver: r } = retryingResolver(fetchMock);
+    const results = await r.resolve(resolutionInput());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(results).toHaveLength(1);
+  });
+
+  it("honors a Retry-After header instead of the computed backoff", async () => {
+    const retryAfter = new Response(JSON.stringify({ error: "rate limited" }), {
+      status: 429,
+      headers: { "content-type": "application/json", "retry-after": "2" },
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(retryAfter).mockResolvedValueOnce(jsonResponse(validGeoapifyBody()));
+    const { resolver: r, sleeps } = retryingResolver(fetchMock, { maxRetryDelayMs: 5_000 });
+    await r.resolve(resolutionInput());
+    expect(sleeps).toEqual([2_000]); // 2 seconds, not the 100ms exponential base
+  });
+
+  it("caps Retry-After at the configured maximum", async () => {
+    const retryAfter = new Response(JSON.stringify({ error: "rate limited" }), {
+      status: 503,
+      headers: { "content-type": "application/json", "retry-after": "3600" },
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(retryAfter).mockResolvedValueOnce(jsonResponse(validGeoapifyBody()));
+    const { resolver: r, sleeps } = retryingResolver(fetchMock, { maxRetryDelayMs: 1_000 });
+    await r.resolve(resolutionInput());
+    expect(sleeps).toEqual([1_000]);
+  });
+
+  it("grows the backoff exponentially and caps it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: "unavailable" }, 503));
+    const { resolver: r, sleeps } = retryingResolver(fetchMock, {
+      maxAttempts: 5,
+      baseRetryDelayMs: 300,
+      maxRetryDelayMs: 1_000,
+    });
+    await expect(r.resolve(resolutionInput())).rejects.toMatchObject({ code: "GEOAPIFY_UNAVAILABLE", status: 503 });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(sleeps).toEqual([300, 600, 1_000, 1_000]); // 300, 600, capped at 1000
+  });
+
+  it("applies jitter as a factor of the exponential delay", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: "unavailable" }, 503));
+    const { resolver: r, sleeps } = retryingResolver(fetchMock, {
+      maxAttempts: 2,
+      baseRetryDelayMs: 200,
+      jitter: () => 0.5,
+    });
+    await expect(r.resolve(resolutionInput())).rejects.toMatchObject({ code: "GEOAPIFY_UNAVAILABLE" });
+    expect(sleeps).toEqual([100]); // round(200 * 0.5)
+  });
+
+  it("exhausts attempts on a persistent timeout and throws GEOAPIFY_TIMEOUT", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(abortError());
+    const { resolver: r } = retryingResolver(fetchMock as unknown as typeof fetch);
+    await expect(r.resolve(resolutionInput())).rejects.toMatchObject({ code: "GEOAPIFY_TIMEOUT" });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry when maxAttempts is 1", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: "unavailable" }, 503));
+    const { resolver: r, sleeps } = retryingResolver(fetchMock, { maxAttempts: 1 });
+    await expect(r.resolve(resolutionInput())).rejects.toMatchObject({ code: "GEOAPIFY_UNAVAILABLE", status: 503 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sleeps).toEqual([]);
+  });
+
+  it("does not retry a deterministic 404", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: "not found" }, 404));
+    const { resolver: r } = retryingResolver(fetchMock);
+    await expect(r.resolve(resolutionInput())).rejects.toMatchObject({ code: "GEOAPIFY_HTTP_ERROR", status: 404 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never leaks the key or caption after exhausted retries", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: "unavailable" }, 503));
+    const { resolver: r } = retryingResolver(fetchMock);
+    try {
+      await r.resolve(resolutionInput());
+      throw new Error("expected the resolver to throw");
+    } catch (error) {
       const serialized = `${(error as Error).message} ${(error as Error).stack ?? ""}`;
       expect(serialized).not.toContain(SECRET_KEY);
       expect(serialized).not.toContain("Dinner at Nobu");

@@ -49,6 +49,10 @@ export function getConfiguredPlaceResolver(): PlaceResolver {
     baseUrl,
     timeoutMs: parseBoundedInt(process.env.PLACES_RESOLVER_TIMEOUT_MS, 8_000, 1_000, 30_000),
     maxResults: parseBoundedInt(process.env.PLACES_RESOLVER_MAX_RESULTS, 5, 1, 5),
+    // Robustness knobs for large batches: total attempts and the backoff window.
+    maxAttempts: parseBoundedInt(process.env.PLACES_RESOLVER_MAX_ATTEMPTS, 3, 1, 6),
+    baseRetryDelayMs: parseBoundedInt(process.env.PLACES_RESOLVER_RETRY_BASE_MS, 250, 0, 60_000),
+    maxRetryDelayMs: parseBoundedInt(process.env.PLACES_RESOLVER_RETRY_MAX_MS, 8_000, 0, 60_000),
   });
 }
 

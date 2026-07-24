@@ -52,6 +52,30 @@ describe("vercel-preflight Places checks", () => {
     expect(output).toContain("PLACES_RESOLVER_MAX_RESULTS");
   });
 
+  it("rejects out-of-range resolver retry bounds", () => {
+    const { status, output } = runPreflight({
+      PLACES_ENABLED: "1",
+      GEOAPIFY_API_KEY: "a-valid-key",
+      PLACES_RESOLVER_MAX_ATTEMPTS: "9",
+      PLACES_RESOLVER_RETRY_BASE_MS: "5000",
+      PLACES_RESOLVER_RETRY_MAX_MS: "1000",
+    });
+    expect(status).toBe(1);
+    expect(output).toContain("PLACES_RESOLVER_MAX_ATTEMPTS");
+    expect(output).toContain("PLACES_RESOLVER_RETRY_MAX_MS");
+  });
+
+  it("accepts valid resolver retry bounds", () => {
+    const { status } = runPreflight({
+      PLACES_ENABLED: "1",
+      GEOAPIFY_API_KEY: "a-valid-key",
+      PLACES_RESOLVER_MAX_ATTEMPTS: "4",
+      PLACES_RESOLVER_RETRY_BASE_MS: "250",
+      PLACES_RESOLVER_RETRY_MAX_MS: "8000",
+    });
+    expect(status).toBe(0);
+  });
+
   it("never prints the Geoapify key even on failure", () => {
     const { status, output } = runPreflight({
       PLACES_ENABLED: "1",
