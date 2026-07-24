@@ -117,6 +117,39 @@ if (process.env.R2_ENDPOINT) {
   warnings.push("R2 upload is not configured; extension refresh will remain unavailable.");
 }
 
+// Places (Phase F) geographic resolver. Only validated when explicitly enabled;
+// the key and base URL values are never printed — messages carry variable names
+// only. When disabled, missing configuration is not an error.
+const placesEnabled = process.env.PLACES_ENABLED?.trim() === "1";
+if (placesEnabled) {
+  if (!process.env.GEOAPIFY_API_KEY?.trim()) {
+    errors.push("PLACES_ENABLED=1 requires a non-empty GEOAPIFY_API_KEY.");
+  }
+  const resolverProvider = process.env.PLACES_RESOLVER_PROVIDER?.trim() || "geoapify";
+  if (resolverProvider !== "geoapify") {
+    errors.push("PLACES_RESOLVER_PROVIDER must be geoapify.");
+  }
+  const geoapifyBaseUrl = process.env.GEOAPIFY_API_BASE_URL?.trim() || "https://api.geoapify.com";
+  try {
+    const parsed = new URL(geoapifyBaseUrl);
+    if (parsed.protocol !== "https:") errors.push("GEOAPIFY_API_BASE_URL must use HTTPS.");
+  } catch {
+    errors.push("GEOAPIFY_API_BASE_URL is not a valid URL.");
+  }
+  const resolverTimeout = Number(process.env.PLACES_RESOLVER_TIMEOUT_MS ?? "8000");
+  if (!Number.isInteger(resolverTimeout) || resolverTimeout < 1000 || resolverTimeout > 30000) {
+    errors.push("PLACES_RESOLVER_TIMEOUT_MS must be an integer between 1000 and 30000.");
+  }
+  const resolverMaxResults = Number(process.env.PLACES_RESOLVER_MAX_RESULTS ?? "5");
+  if (!Number.isInteger(resolverMaxResults) || resolverMaxResults < 1 || resolverMaxResults > 5) {
+    errors.push("PLACES_RESOLVER_MAX_RESULTS must be an integer between 1 and 5.");
+  }
+} else if (process.env.GEOAPIFY_API_KEY?.trim()) {
+  warnings.push("GEOAPIFY_API_KEY is set but PLACES_ENABLED is not 1; Places analysis stays disabled.");
+} else {
+  warnings.push("Places analysis is disabled (PLACES_ENABLED is not 1); Geoapify is not required.");
+}
+
 if (process.env.DATABASE_DIRECT_URL) {
   warnings.push("DATABASE_DIRECT_URL is not required by the Vercel runtime; keep it in GitHub Environments only.");
 }
