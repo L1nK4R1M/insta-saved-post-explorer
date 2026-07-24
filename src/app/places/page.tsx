@@ -2,10 +2,28 @@ import type { Metadata } from "next";
 
 import { getConfiguredOwnerId } from "@/auth/config";
 import { getSession } from "@/auth/session";
+import type { PlacesStatsDto } from "@/contracts/api/places";
 import { PlacesExplorer } from "@/features/places/components/places-explorer";
 import { parsePlacesUrlState } from "@/features/places/query-state";
+import { databaseConfigured } from "@/server/db";
 import { loadPlacesMapView } from "@/server/places/map-view";
 import { getPlacesStats } from "@/server/places/stats";
+
+const EMPTY_PLACES_STATS: PlacesStatsDto = {
+  totals: {
+    eligiblePosts: 0,
+    identifiedPlaces: 0,
+    countries: 0,
+    continents: 0,
+    postsWithPlaces: 0,
+    needsReview: 0,
+  },
+  byTheme: [],
+  byCountry: [],
+  byContinent: [],
+  byPrecision: [],
+  byReviewStatus: [],
+};
 
 export const metadata: Metadata = {
   title: "Places · Insta Post Explorer",
@@ -36,10 +54,11 @@ export default async function PlacesPage({ searchParams }: PageProps) {
   const ownerId = getConfiguredOwnerId();
   const session = await getSession().catch(() => null);
 
-  const [view, stats] = await Promise.all([
-    loadPlacesMapView(ownerId),
-    getPlacesStats({}, ownerId),
-  ]);
+  // Without a configured database the page still renders: an empty map, empty
+  // statistics and working controls, instead of crashing.
+  const [view, stats] = databaseConfigured
+    ? await Promise.all([loadPlacesMapView(ownerId), getPlacesStats({}, ownerId)])
+    : [{ items: [], truncated: false }, EMPTY_PLACES_STATS];
 
   // Map tiles are a public, client-side resource: the key is a NEXT_PUBLIC_ tile
   // URL, never the server-only geocoding key. Attribution is mandatory.

@@ -1,6 +1,10 @@
 # Phase G — Places 2D UI and contextual navigation — entry brief
 
-Status: **READY** (not started). Last updated: 24 July 2026.
+Status: **IMPLEMENTED — awaiting review** on `claude/phase-g-places-2d-ui`. Last updated: 24 July 2026.
+
+> The open decisions in §6 and §7 were resolved by the owner and applied; the
+> implementation is documented in `places-ui.md`. This brief is kept as the entry
+> record of the phase.
 
 This is an **entry brief**, not a new specification. A complete, authoritative Phase G
 contract already exists and must not be rewritten. This document only: records the
@@ -92,17 +96,21 @@ Out of scope for Phase G (do not implement here):
 
 ## 7. Open product decisions (must not be guessed — owner decides)
 
-Per the mission constraints, the next session must **not** choose these without
-authorisation; list and resolve them with the owner first:
+All resolved by the owner before implementation:
 
-- map/rendering library;
-- tile provider;
-- final visual style / `/places` page design;
-- exact cluster behaviour (thresholds, expansion);
-- map caching strategy;
-- viewport query limits;
-- display thresholds (when to cluster vs. show individual pins);
-- confirmation model for sensitive review actions (also relevant to Phase J).
+- **map/rendering library** → Leaflet (+ `leaflet.markercluster`), behind the swappable `PlacesMap`;
+- **tile provider** → Geoapify raster tiles, attribution mandatory, public `NEXT_PUBLIC_` tile key only;
+- **viewport/query limits** → none: under ~1000 canonical places, the full set is loaded client-side (no bbox, no map pagination);
+- **cluster behaviour / display thresholds** → Leaflet marker clustering with default radius;
+- **final design** → Apple-Plans-inspired minimal chrome (validated on mockups): filters behind one button, statistics limited to theme and country;
+- **brunch** → folded into the café group for now (no Geoapify category), to be revisited;
+- **multi-select filters** → enabled, via an additive read-only API extension.
+
+Remaining for a later iteration (not blocking):
+
+- a dedicated source for brunch (internal tags) instead of the café mapping;
+- map tile caching strategy, if a real workload shows it is needed;
+- confirmation model for sensitive review actions in Phase J (MCP/Hermes).
 
 ## 8. Next action
 
