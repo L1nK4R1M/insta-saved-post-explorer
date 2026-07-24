@@ -3,7 +3,7 @@
 Last updated: 24 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `develop`  
-Reference implementation commit: `15356e9333dfe84ec1c7a36a14fd1153f82f8c52`
+Reference implementation commit: `216b97527bc091d6ffe24925ab3463f7d1f0f1c6`
 
 ## 1. Purpose and authority
 
@@ -33,6 +33,7 @@ Stop and document any conflict between this handoff, an authoritative contract, 
 | F1 — Places schema and domain contracts | Merged in PR #29, squash `8bf8523`. Places schema, SQL invariants, candidate contracts, opaque cursor, owner-scoped inputs and idempotent metadata jobs. |
 | F2 — Geoapify and caption resolution | Merged in PR #30, squash `7cc05e2`. Server-only Geoapify resolver, deterministic scoring, caption JSONL export/import, stale-input protection and atomic owner-scoped persistence. |
 | F3 — Read API, statistics and review | Merged in PR #31, squash `15356e9`. Seven read-only Places routes, owner-scoped cursor queries, distinct statistics, internal review/merge services, durable human decisions, complete audit proofs and conditional Geoapify preflight. |
+| F hardening — pipeline robustness | Merged in PR #32, squash `216b975`. Resilient Geoapify retries (timeouts, network, HTTP 408/429/500/502/503/504) with capped exponential backoff, jitter and `Retry-After`; bounded `PLACES_RESOLVER_*` config; quiet idempotent job creation (expected P2002 absorbed via `ON CONFLICT DO NOTHING`); `ImportReport` contract preserved. No migration, no public-contract break. |
 
 ## 3. Current execution pointer
 
@@ -42,22 +43,29 @@ No implementation branch is currently active.
 Completed: F1 — Places schema and domain contracts.
 Completed: F2 — Geoapify and caption resolution.
 Completed: F3 — read API, statistics and review.
+Completed: F hardening — pipeline robustness (PR #32).
 
-Phase F code is merged and independently reviewed.
-Operational gate still pending: controlled Geoapify pilot of 30–50 eligible posts.
-Pilot state: PILOT_BLOCKED_BY_ENV.
+Phase F is CLOSED (COMPLETE). The pipeline was validated end to end on a real
+development environment (real DB, real development Geoapify key, real local JSONL):
+real import succeeded, an identical re-import stayed idempotent with no unwanted
+duplicates, the expected P2002 no longer appears, transient errors recovered, and
+UNKNOWN results were handled correctly. No secret, caption, JSONL or production
+data was committed. The Phase F exit gate is explicitly accepted; PILOT_BLOCKED_BY_ENV
+no longer applies.
 
-Phase G must not start until the pilot is executed, its aggregate results are recorded,
-and the Phase F exit gate is explicitly accepted.
+Phase G — Places 2D UI and contextual navigation is READY. It must start in its own
+dedicated branch, reset from the latest `develop`, only after an explicit Phase G
+implementation prompt. It must not be started in this closure change.
 ```
 
-Claude branch constraint:
+Next-phase branch (create only when Phase G implementation is authorized):
 
 ```text
-claude/insta-saved-post-explorer-continue-wli2my
+claude/phase-g-places-2d-ui   (reset from the latest develop)
 ```
 
-Do not reuse the old F3 head. Reset the branch from the latest `develop` before any future implementation, and wait for an explicit Phase G prompt.
+Do not reuse any earlier phase head. The next session must reset its branch from the
+latest `develop` and wait for an explicit Phase G prompt before writing UI code.
 
 ## 4. Merge proof
 
@@ -89,6 +97,16 @@ Do not reuse the old F3 head. Reset the branch from the latest `develop` before 
 - Preview Vercel for the reviewed head was `READY`;
 - no migration or Prisma schema change in F3;
 - Phase G was not started.
+
+### F hardening
+
+- PR: `#32 — harden(places): resilient Geoapify retries and quiet idempotent jobs`;
+- reviewed head: `a62bf573939c9b5d31068c425fc9567bc087ddeb`;
+- squash merge on `develop`: `216b97527bc091d6ffe24925ab3463f7d1f0f1c6`;
+- CI green (lint, types, unit tests, build) and Browser tests green on the reviewed head;
+- retries cover timeouts, network errors and HTTP `408/429/500/502/503/504` with capped exponential backoff, jitter and `Retry-After`; the expected idempotency `P2002` is absorbed at the database level;
+- `ImportReport` public contract preserved; no migration or Prisma schema change;
+- owner-reported real local rerun (real DB, real development Geoapify key, real JSONL) succeeded and is idempotent; no secret or JSONL committed.
 
 ## 5. Phase F contracts
 
@@ -138,22 +156,33 @@ Project: `fancy-mud-69762258`
 
 Do not run `prisma migrate dev`, `prisma db push` or seeds against either deployed database.
 
-## 7. Exact next action — controlled Geoapify pilot
+## 7. Phase F exit gate — accepted
 
-1. Do not start Phase G yet.
-2. Provide a test/development-only `GEOAPIFY_API_KEY` and set `PLACES_ENABLED=1` in a controlled environment.
-3. Export 30–50 eligible posts split between `Voyages` and `Restaurant`.
-4. Run the documented caption candidate workflow and Geoapify resolution without committing secrets, captions or candidate JSONL.
-5. Record only aggregate pilot metrics: exported posts, successful candidate extractions, `UNKNOWN`, Geoapify matches, `EXACT`, `PROBABLE`, `APPROXIMATE`, provider errors, merged duplicates, manual corrections and average provider calls per post.
-6. Verify recovery for `PLACES_INPUT_STALE` and provider errors.
-7. Update this handoff and `IMPLEMENTATION_STATUS.md` with the pilot evidence.
-8. Only then decide whether Phase F becomes `COMPLETE` and Phase G becomes `READY`.
+The controlled Geoapify validation was executed on a real development environment
+and the Phase F exit gate is **accepted**. Recorded evidence (owner-reported real
+local validation; the cloud session cannot reach the real DB, key or JSONL and did
+not run the real import):
 
-Until the environment exists, preserve:
+- F1, F2, F3 and the F hardening (PR #32) are merged on `develop`;
+- cloud validation green (lint, typecheck, tests, build, targeted e2e) with Geoapify fully mocked;
+- real local validation succeeded: `PLACES_ENABLED=1` with a development-only `GEOAPIFY_API_KEY`, real DB, real local JSONL;
+- real import succeeded; an identical re-import stayed **idempotent** with no unwanted `Place`, `PostPlace`, `PlaceEvidence` or `PlaceAnalysisJob` duplicates;
+- the expected, noisy `P2002` no longer appears in the logs;
+- Geoapify retry behaviour validated; transient errors recovered;
+- `UNKNOWN` results handled correctly (no canonical place, evidence kept);
+- `Place` / `PostPlace` / `PlaceEvidence` persistence coherent;
+- no additional migration required; no public-contract break; no functional regression;
+- no secret, caption, candidate JSONL or production data committed.
 
-```text
-PILOT_BLOCKED_BY_ENV
-```
+`PILOT_BLOCKED_BY_ENV` no longer applies and has been removed from the active docs.
+
+### Exact next action — Phase G kickoff (do not start UI here)
+
+1. Wait for an explicit Phase G implementation prompt.
+2. Create the dedicated branch `claude/phase-g-places-2d-ui`, reset from the latest `develop`.
+3. Follow the Phase G source of truth: `docs/phase-g-places-2d-ui-brief.md` (entry brief), which defers to `CODEX_IMPLEMENTATION_ORDER.md` §5 Phase G and `CODEX_PLACES_EXTENSION.md` §13–§14 as the authoritative contract.
+4. Resolve the open product decisions (map library, tile provider, cluster behaviour, viewport limits, display thresholds, final design) with the owner before implementation — do not guess them.
+5. Reuse the existing read-only `/api/v1/places*` routes and server query/stats/review services; no direct Prisma in components, no internal HTTP loop from Server Components.
 
 ## 8. Phase state
 
@@ -163,44 +192,50 @@ PILOT_BLOCKED_BY_ENV
 | D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
 | E — Global worker foundation | READY, separate | Requires VPS decisions. Do not mix with the pilot or Phase G. |
 | F1 — Places schema and domain contracts | COMPLETE | PR #29, squash `8bf8523`; migration verified on Neon `develop`. |
-| F2 — Geoapify and caption resolution | COMPLETE | PR #30, squash `7cc05e2`; CI green, no migration required. |
+| F2 — Geoapify and caption resolution | COMPLETE | PR #30, squash `7cc05e2`; hardened by PR #32, squash `216b975`. CI green, no migration required. |
 | F3 — Read API, statistics and review | COMPLETE | PR #31, squash `15356e9`; CI #94 green, Preview ready, no migration. |
-| F — Places metadata-first domain | IN_PROGRESS | All code sub-phases are merged; controlled Geoapify pilot and exit evidence remain pending. |
-| G — Places 2D UI | BLOCKED | Requires accepted Phase F pilot and explicit exit-gate approval. |
+| F — Places metadata-first domain | COMPLETE | All sub-phases and the F hardening (PR #32) merged; exit gate accepted via successful real local validation (idempotent import, no expected P2002, transient-error recovery, `UNKNOWN` handled). No further migration. |
+| G — Places 2D UI | READY | Phase F complete; stable Places schema, read-only API, statistics and review services; real Places data validated. Start in a dedicated branch after an explicit Phase G prompt. See `phase-g-places-2d-ui-brief.md`. |
 | H — Deep Places analysis | BLOCKED | Requires C, E and stable F. |
 | I — Places 3D globe | BLOCKED | Requires G and stable Places data. |
 | J — Unified MCP and Hermes | BLOCKED | Places tools require complete Phase F. |
 
 ## 9. Open decisions that must not be guessed
 
-- controlled Geoapify pilot environment and API-key ownership;
-- acceptable pilot thresholds for precision, provider errors and manual-review rate;
+Resolved since the last handoff: the controlled Geoapify validation environment and
+key ownership (a development-only key was used for the accepted real local validation).
+
+Still open (must not be guessed):
+
+- Phase G product decisions — map/rendering library, tile provider, cluster behaviour, viewport/query limits, display thresholds, and final `/places` visual design (see `phase-g-places-2d-ui-brief.md`);
 - distributed API rate limiting on Vercel;
-- map rendering provider for Phase G/I;
+- 3D globe rendering provider for Phase I;
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups and observability for Phase E;
 - final confirmation model for sensitive Phase G/J commands.
 
-## 10. Required pilot report
+## 10. Phase F exit-gate decision — recorded
 
-The pilot report must include:
+The Phase F exit gate was accepted on the basis of a successful real local validation
+(see §7). The decision was made against these criteria, all confirmed by the owner:
 
 ```text
-Environment used
-Configuration names only, never secret values
-Posts exported by canonical theme
-Candidate extractions succeeded/failed
-UNKNOWN
-Geoapify matches
-EXACT
-PROBABLE
-APPROXIMATE
-Provider errors
-Duplicates merged
-Manual corrections required
-Average provider calls per post
-Recovery tests
-Final Phase F gate decision
+Final Phase F gate decision  : ACCEPTED (Phase F COMPLETE, Phase G READY)
+Environment used             : real development environment (names only, no secrets)
+Real import                  : succeeded
+Re-import of the same batch   : succeeded, idempotent, no unwanted duplicates
+Expected P2002               : no longer observed in the logs
+Geoapify retries             : validated; transient errors recovered
+UNKNOWN handling             : correct (no canonical place, evidence kept)
+Persistence                  : Place / PostPlace / PlaceEvidence coherent
+Migration required           : none
+Public-contract break        : none
+Sensitive data committed     : none (no captions, JSONL, keys, OAuth or production data)
 ```
 
-Never commit captions, candidate JSONL, API keys, OAuth credentials, database URLs or production data.
+A separate numeric aggregate pilot report (per-theme counts, provider-call averages)
+was not transmitted to this session; the owner accepted the exit gate on the
+qualitative real-validation checklist above. If a numeric aggregate is later
+required for the record, it can be produced from a real run — never fabricated, and
+never with captions, candidate JSONL, API keys, OAuth credentials, database URLs or
+production data committed.
