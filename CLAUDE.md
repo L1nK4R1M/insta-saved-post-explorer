@@ -3,6 +3,7 @@
 @AGENTS.md
 @docs/HANDOFF.md
 @docs/IMPLEMENTATION_STATUS.md
+@.claude/skills/vibespec-pro/SKILL.md
 
 ## Execution Rules
 
