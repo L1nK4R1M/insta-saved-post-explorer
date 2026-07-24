@@ -1,6 +1,16 @@
 import { z } from "zod";
 
+import {
+  PLACE_CATEGORY_GROUPS,
+  parseCategoryGroups,
+  type PlaceCategoryGroupKey,
+} from "@/lib/places/categories";
 import { canonicalPlacesTheme, type PlacesEligibleTheme } from "@/lib/places/eligibility";
+
+const PLACE_CATEGORY_GROUP_KEYS = PLACE_CATEGORY_GROUPS.map((group) => group.key) as [
+  PlaceCategoryGroupKey,
+  ...PlaceCategoryGroupKey[],
+];
 
 // Public DTOs and request parsers for the read-only /api/v1/places surface.
 // DTOs are explicit and stable: routes and services never return raw Prisma
@@ -151,7 +161,23 @@ const placesListSchema = z.object({
   reviewStatus: z.enum(PLACE_REVIEW_STATUSES).optional(),
   precision: z.enum(PLACE_PRECISIONS).optional(),
   city: optionalTrimmed(200),
+  // Exact provider category (historical single-value filter, unchanged).
   category: optionalTrimmed(100),
+  // Additive multi-select place-type filter. Values are the friendly group keys
+  // (restaurant, cafe, …), never raw provider strings; unknown keys are dropped
+  // by the parser so a hand-edited URL cannot widen the filter.
+  categoryGroups: z.array(z.enum(PLACE_CATEGORY_GROUP_KEYS)).optional(),
+  // Additive list filter, normalized through the shared Places predicate exactly
+  // like the statistics one: any case/accent variant folding to Voyages or
+  // Restaurant is accepted; anything else is rejected as a 400.
+  sourceTheme: z
+    .string()
+    .trim()
+    .transform((value) => canonicalPlacesTheme(value))
+    .refine((value): value is PlacesEligibleTheme => value !== null, {
+      message: "source_theme must be Voyages or Restaurant",
+    })
+    .optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   q: optionalTrimmed(200),
 });
@@ -160,6 +186,7 @@ export type PlacesListInput = z.infer<typeof placesListSchema>;
 
 export function parsePlacesListParams(searchParams: URLSearchParams): PlacesListInput {
   const minConfidenceRaw = searchParams.get("min_confidence");
+  const categoryGroups = parseCategoryGroups(searchParams.get("categories"));
   return placesListSchema.parse({
     cursor: searchParams.get("cursor") ?? undefined,
     limit: boundedLimit(searchParams.get("limit")),
@@ -169,6 +196,8 @@ export function parsePlacesListParams(searchParams: URLSearchParams): PlacesList
     precision: searchParams.get("precision") ?? undefined,
     city: searchParams.get("city") ?? undefined,
     category: searchParams.get("category") ?? undefined,
+    categoryGroups: categoryGroups.length > 0 ? categoryGroups : undefined,
+    sourceTheme: searchParams.get("source_theme") ?? undefined,
     minConfidence: minConfidenceRaw != null ? Number(minConfidenceRaw) : undefined,
     q: searchParams.get("q") ?? undefined,
   });

@@ -3,7 +3,8 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 
 import { foldForSearch } from "@/lib/import/normalize";
-import { isPlacesEligibleTheme } from "@/lib/places/eligibility";
+import { rawCategoryPrefixesForGroups } from "@/lib/places/categories";
+import { canonicalPlacesTheme, isPlacesEligibleTheme } from "@/lib/places/eligibility";
 import { decodePlacesCursor, encodePlacesCursor } from "@/lib/places/cursor";
 import type {
   CursorPageInput,
@@ -89,6 +90,33 @@ export async function queryPlaces(input: PlacesListInput, ownerId: string): Prom
       ],
     });
   }
+
+  // Multi-select place types: match any raw provider category belonging to the
+  // selected groups. Prefix matching keeps hierarchical provider values
+  // ("catering.restaurant.italian") in their group.
+  if (input.categoryGroups && input.categoryGroups.length > 0) {
+    const prefixes = rawCategoryPrefixesForGroups(input.categoryGroups);
+    and.push({
+      OR: prefixes.flatMap((prefix) => [
+        { category: { equals: prefix, mode: "insensitive" as const } },
+        { category: { startsWith: `${prefix}.`, mode: "insensitive" as const } },
+      ]),
+    });
+  }
+
+  // Restrict to places linked to at least one post of the requested canonical
+  // theme, reusing the shared eligibility variants (never a collection join).
+  if (input.sourceTheme) {
+    const variants = (await eligibleThemeVariants(ownerId)).filter(
+      (variant) => canonicalPlacesTheme(variant) === input.sourceTheme,
+    );
+    and.push(
+      variants.length > 0
+        ? { postLinks: { some: { post: { mainTheme: { in: variants } } } } }
+        : { id: { in: [] } },
+    );
+  }
+
   if (input.cursor) and.push(updatedAtIdCursorWhere(input.cursor));
 
   const where: Prisma.PlaceWhereInput = {
