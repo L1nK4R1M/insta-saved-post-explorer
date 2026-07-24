@@ -205,6 +205,7 @@ describeWithDatabase("Places review and merge services on PostgreSQL", () => {
   it("carries a confirmed source review state onto an unreviewed target (F2 protection)", async () => {
     const source = await seedPlaceState(OWNER_A, "CONFIRMED", true, "geo-src-1");
     const target = await seedPlaceState(OWNER_A, "UNREVIEWED", false, "geo-tgt-1");
+    await linkAuditableSource(source.id); // a valid audit context lets the merge proceed
 
     const result = await review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX);
     expect(result.reviewStatus).toBe("CONFIRMED");
@@ -215,6 +216,7 @@ describeWithDatabase("Places review and merge services on PostgreSQL", () => {
   it("keeps an already-confirmed target confirmed", async () => {
     const source = await seedPlaceState(OWNER_A, "UNREVIEWED", false, "geo-src-2");
     const target = await seedPlaceState(OWNER_A, "CONFIRMED", true, "geo-tgt-2");
+    await linkAuditableSource(source.id);
     const result = await review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX);
     expect(result).toMatchObject({ reviewStatus: "CONFIRMED", isUserConfirmed: true });
   });
@@ -222,6 +224,7 @@ describeWithDatabase("Places review and merge services on PostgreSQL", () => {
   it("keeps CONFIRMED when both sides are confirmed", async () => {
     const source = await seedPlaceState(OWNER_A, "CONFIRMED", true, "geo-src-3");
     const target = await seedPlaceState(OWNER_A, "CONFIRMED", true, "geo-tgt-3");
+    await linkAuditableSource(source.id);
     const result = await review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX);
     expect(result).toMatchObject({ reviewStatus: "CONFIRMED", isUserConfirmed: true });
   });
@@ -229,6 +232,7 @@ describeWithDatabase("Places review and merge services on PostgreSQL", () => {
   it("resolves a confirmation-versus-rejection to CONFLICT while keeping the confirmation", async () => {
     const source = await seedPlaceState(OWNER_A, "CONFIRMED", true, "geo-src-4");
     const target = await seedPlaceState(OWNER_A, "REJECTED", false, "geo-tgt-4");
+    await linkAuditableSource(source.id);
     const result = await review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX);
     expect(result).toMatchObject({ reviewStatus: "CONFLICT", isUserConfirmed: true });
   });
@@ -236,6 +240,7 @@ describeWithDatabase("Places review and merge services on PostgreSQL", () => {
   it("never downgrades an existing CONFLICT to UNREVIEWED", async () => {
     const source = await seedPlaceState(OWNER_A, "CONFLICT", false, "geo-src-5");
     const target = await seedPlaceState(OWNER_A, "UNREVIEWED", false, "geo-tgt-5");
+    await linkAuditableSource(source.id);
     const result = await review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX);
     expect(result.reviewStatus).toBe("CONFLICT");
   });
@@ -243,6 +248,7 @@ describeWithDatabase("Places review and merge services on PostgreSQL", () => {
   it("lets a rejection dominate an unreviewed target when no confirmation exists", async () => {
     const source = await seedPlaceState(OWNER_A, "REJECTED", false, "geo-src-6");
     const target = await seedPlaceState(OWNER_A, "UNREVIEWED", false, "geo-tgt-6");
+    await linkAuditableSource(source.id);
     const result = await review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX);
     expect(result).toMatchObject({ reviewStatus: "REJECTED", isUserConfirmed: false });
   });
@@ -277,6 +283,154 @@ describeWithDatabase("Places review and merge services on PostgreSQL", () => {
     expect(link.placeId).toBe(source.id);
     expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, placeId: source.id } })).toBe(1);
     expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, placeId: target.id } })).toBe(0);
+  });
+
+  // --- Complete audit context (Problems 1, 2 and 3) ---
+
+  it("refuses to confirm a place when any linked post has no auditable job context", async () => {
+    const place = await seedPlace(OWNER_A);
+    const auditablePost = await seedPost(OWNER_A);
+    const auditableJob = await seedJob(OWNER_A, auditablePost);
+    await linkPostPlace(OWNER_A, auditablePost, place.id, auditableJob);
+    const orphanPost = await seedPost(OWNER_A); // link without a job and no job at all
+    await linkPostPlaceWithoutJob(OWNER_A, orphanPost, place.id);
+
+    await expect(review.confirmPlace(OWNER_A, place.id, CTX)).rejects.toMatchObject({
+      code: "PLACE_REVIEW_AUDIT_CONTEXT_MISSING",
+    });
+    // No partial audit and no state change: the auditable post is not confirmed alone.
+    expect((await prisma.place.findUniqueOrThrow({ where: { id: place.id } })).reviewStatus).toBe("UNREVIEWED");
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A } })).toBe(0);
+  });
+
+  it("refuses to reject a place when any linked post has no auditable job context", async () => {
+    const place = await seedPlace(OWNER_A);
+    const auditablePost = await seedPost(OWNER_A);
+    const auditableJob = await seedJob(OWNER_A, auditablePost);
+    await linkPostPlace(OWNER_A, auditablePost, place.id, auditableJob);
+    const orphanPost = await seedPost(OWNER_A);
+    await linkPostPlaceWithoutJob(OWNER_A, orphanPost, place.id);
+
+    await expect(review.rejectPlaceResult(OWNER_A, place.id, CTX)).rejects.toMatchObject({
+      code: "PLACE_REVIEW_AUDIT_CONTEXT_MISSING",
+    });
+    expect((await prisma.place.findUniqueOrThrow({ where: { id: place.id } })).reviewStatus).toBe("UNREVIEWED");
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, evidenceType: "USER_CORRECTION" } })).toBe(0);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A } })).toBe(2); // links intact
+  });
+
+  it("confirms a multi-post place with exactly one audit per post, using the latest job as fallback", async () => {
+    const place = await seedPlace(OWNER_A);
+    const postWithLinkJob = await seedPost(OWNER_A);
+    const linkJob = await seedJob(OWNER_A, postWithLinkJob);
+    await linkPostPlace(OWNER_A, postWithLinkJob, place.id, linkJob);
+    // Second post: the link carries no job, but a latest owner-scoped job exists.
+    const postWithLatestJob = await seedPost(OWNER_A);
+    const latestJob = await seedJob(OWNER_A, postWithLatestJob);
+    await linkPostPlaceWithoutJob(OWNER_A, postWithLatestJob, place.id);
+
+    const result = await review.confirmPlace(OWNER_A, place.id, CTX);
+    expect(result.reviewStatus).toBe("CONFIRMED");
+    const audits = await prisma.placeEvidence.findMany({
+      where: { ownerId: OWNER_A, placeId: place.id, evidenceType: "USER_CORRECTION" },
+    });
+    // One audit per distinct affected post, each bound to its resolved job.
+    expect(audits.length).toBe(2);
+    const jobByPost = new Map(audits.map((audit) => [audit.postId, audit.analysisJobId]));
+    expect(jobByPost.get(postWithLinkJob)).toBe(linkJob);
+    expect(jobByPost.get(postWithLatestJob)).toBe(latestJob);
+  });
+
+  it("refuses a merge when any affected post has no auditable job context and writes nothing", async () => {
+    const source = await seedPlace(OWNER_A, "geo-partial-src");
+    const target = await seedPlace(OWNER_A, "geo-partial-tgt");
+    const auditablePost = await seedPost(OWNER_A);
+    const auditableJob = await seedJob(OWNER_A, auditablePost);
+    await linkPostPlace(OWNER_A, auditablePost, source.id, auditableJob, true);
+    const orphanPost = await seedPost(OWNER_A); // link without a job and no job at all
+    await linkPostPlaceWithoutJob(OWNER_A, orphanPost, source.id);
+    await seedEvidence(OWNER_A, auditablePost, source.id, auditableJob);
+
+    await expect(
+      review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX),
+    ).rejects.toMatchObject({ code: "PLACE_REVIEW_AUDIT_CONTEXT_MISSING" });
+
+    // Nothing moved, deleted or audited: no partially-auditable merge.
+    expect(await prisma.place.count({ where: { id: source.id } })).toBe(1);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A, placeId: source.id } })).toBe(2);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A, placeId: target.id } })).toBe(0);
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, evidenceType: "USER_CORRECTION" } })).toBe(0);
+    expect(
+      await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, placeId: source.id, evidenceType: "CAPTION" } }),
+    ).toBe(1);
+  });
+
+  it("audits a merge with exactly one evidence per affected post", async () => {
+    const source = await seedPlace(OWNER_A, "geo-full-src");
+    const target = await seedPlace(OWNER_A, "geo-full-tgt");
+    const postA = await seedPost(OWNER_A);
+    const jobA = await seedJob(OWNER_A, postA);
+    const postB = await seedPost(OWNER_A);
+    const jobB = await seedJob(OWNER_A, postB);
+    await linkPostPlace(OWNER_A, postA, source.id, jobA, true);
+    await linkPostPlace(OWNER_A, postB, source.id, jobB, true);
+
+    await review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX);
+    const audits = await prisma.placeEvidence.findMany({
+      where: { ownerId: OWNER_A, placeId: target.id, evidenceType: "USER_CORRECTION" },
+    });
+    expect(audits.length).toBe(2); // one per distinct affected post, not one for the whole merge
+    const jobByPost = new Map(audits.map((audit) => [audit.postId, audit.analysisJobId]));
+    expect(jobByPost.get(postA)).toBe(jobA);
+    expect(jobByPost.get(postB)).toBe(jobB);
+    for (const audit of audits) expect(audit.metadata).toMatchObject({ action: "PLACES_MERGED" });
+  });
+
+  it("refuses a merge when the source place has no links to audit", async () => {
+    const source = await seedPlace(OWNER_A, "geo-linkless-src");
+    const target = await seedPlace(OWNER_A, "geo-linkless-tgt");
+
+    await expect(
+      review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX),
+    ).rejects.toMatchObject({ code: "PLACE_REVIEW_AUDIT_CONTEXT_MISSING" });
+
+    // A link-free merge is refused before any write: the source survives untouched.
+    expect(await prisma.place.count({ where: { id: source.id } })).toBe(1);
+    expect(await prisma.place.count({ where: { id: target.id } })).toBe(1);
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A } })).toBe(0);
+  });
+
+  it("refuses a link-free merge even when stray evidence exists on the source", async () => {
+    const source = await seedPlace(OWNER_A, "geo-orphan-src");
+    const target = await seedPlace(OWNER_A, "geo-orphan-tgt");
+    const post = await seedPost(OWNER_A);
+    const job = await seedJob(OWNER_A, post);
+    await seedEvidence(OWNER_A, post, source.id, job); // evidence but no PostPlace link
+
+    await expect(
+      review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX),
+    ).rejects.toMatchObject({ code: "PLACE_REVIEW_AUDIT_CONTEXT_MISSING" });
+
+    // Stray evidence is not a link-level audit context: nothing is moved or deleted.
+    expect(await prisma.place.count({ where: { id: source.id } })).toBe(1);
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, placeId: source.id } })).toBe(1);
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, placeId: target.id } })).toBe(0);
+  });
+
+  it("audits a merge for a link without its own job by falling back to the latest job", async () => {
+    const source = await seedPlace(OWNER_A, "geo-fallback-src");
+    const target = await seedPlace(OWNER_A, "geo-fallback-tgt");
+    const post = await seedPost(OWNER_A);
+    const latestJob = await seedJob(OWNER_A, post);
+    await linkPostPlaceWithoutJob(OWNER_A, post, source.id, true); // link carries no job
+
+    await review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX);
+    const audit = await prisma.placeEvidence.findFirstOrThrow({
+      where: { ownerId: OWNER_A, placeId: target.id, evidenceType: "USER_CORRECTION" },
+    });
+    expect(audit.postId).toBe(post);
+    expect(audit.analysisJobId).toBe(latestJob);
+    expect(audit.metadata).toMatchObject({ action: "PLACES_MERGED" });
   });
 });
 
@@ -362,6 +516,28 @@ async function linkPostPlace(
 ): Promise<void> {
   await prisma.postPlace.create({
     data: { ownerId, postId, placeId, analysisJobId, isPrimary, isUserConfirmed, precision: "EXACT", confidence: 0.9 },
+  });
+}
+
+// Give a source place a single fully-auditable link (post + job) so a merge that
+// exercises only the review-state policy still has a valid audit context.
+async function linkAuditableSource(placeId: string): Promise<void> {
+  const post = await seedPost(OWNER_A);
+  const job = await seedJob(OWNER_A, post);
+  await linkPostPlace(OWNER_A, post, placeId, job, true);
+}
+
+// A link whose analysis job is unknown (analysisJobId stays null): its audit
+// context must be resolved from the latest owner-scoped job, or refused.
+async function linkPostPlaceWithoutJob(
+  ownerId: string,
+  postId: string,
+  placeId: string,
+  isPrimary = false,
+  isUserConfirmed = false,
+): Promise<void> {
+  await prisma.postPlace.create({
+    data: { ownerId, postId, placeId, isPrimary, isUserConfirmed, precision: "EXACT", confidence: 0.9 },
   });
 }
 

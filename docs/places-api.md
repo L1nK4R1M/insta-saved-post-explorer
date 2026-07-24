@@ -119,20 +119,53 @@ attempt count, bounded `errorCode`, structured `result`, timestamps). The raw
 
 `src/server/places/review.ts` exposes service-only mutations — **never** wired to
 the read-only external API and reserved for a future authenticated admin UI or
-scoped MCP command:
+scoped MCP command. Each takes a validated `context = { actor, reason }`:
 
-- `confirmPlace(ownerId, placeId)` — mark CONFIRMED and user-confirmed.
-- `rejectPlaceResult(ownerId, placeId)` — mark REJECTED without deleting links or evidence.
-- `correctPostPlace(ownerId, { postId, placeId, isPrimary?, reason? })` — mark a
+- `confirmPlace(ownerId, placeId, context)` — mark CONFIRMED and user-confirmed.
+- `rejectPlaceResult(ownerId, placeId, context)` — mark REJECTED durably
+  (`isUserConfirmed`) without deleting links or evidence.
+- `correctPostPlace(ownerId, { postId, placeId, isPrimary? }, context)` — mark a
   link user-confirmed, optionally set the single primary, and record a bounded
   `USER_CORRECTION` evidence row.
-- `mergePlaces(ownerId, { sourcePlaceId, targetPlaceId })` — transactional merge:
-  move/dedup links, re-point evidence, preserve user corrections, keep one
-  primary per post, delete the source, roll back on failure.
+- `mergePlaces(ownerId, { sourcePlaceId, targetPlaceId }, context)` —
+  transactional merge: move/dedup links, re-point evidence, preserve user
+  corrections, keep one primary per post, delete the source, roll back on failure.
 
 A user correction dominates automatic re-analysis (enforced by the F2 analysis
 service, which never overwrites user-confirmed places or links). Every method is
 owner-scoped; a cross-owner resource behaves as `PLACE_NOT_FOUND`.
+
+### Auditable actions and complete audit context
+
+Every human action is auditable and the audit is **all-or-nothing**. An action
+persists a bounded `USER_CORRECTION` evidence row — the action and actor identity
+in `metadata`, the reason in the `excerpt`, `confidence = 1` — in the **same
+transaction** as the mutation. A `PlaceEvidence` row structurally requires a
+non-null `postId` **and** `analysisJobId`, so a proof exists only when the
+affected post resolves to an analysis job.
+
+Before any mutation, every affected post must resolve to exactly one job — its
+link's own `analysisJobId`, otherwise the latest owner-scoped job for that post.
+If **any** affected post cannot be resolved, the whole action fails with
+`PLACE_REVIEW_AUDIT_CONTEXT_MISSING` and **nothing** is written; a partial or
+empty audit trail is never left behind:
+
+- `confirmPlace` / `rejectPlaceResult`: every post linked to the place. A place
+  with no links has nothing to audit and is refused.
+- `correctPostPlace`: the single corrected post.
+- `mergePlaces`: every post linked to the **source**. Exactly one audit row is
+  written per distinct affected post (audit rows == distinct affected posts), so a
+  partially auditable merge never mutates. A **link-free merge** (a source with no
+  links) is refused before any write, so the source is never deleted without a
+  recorded proof — stray evidence with no link does not count as a link-level
+  audit context. Merging an orphan (linkless) place would require a valid audit
+  context or a future explicit evolution of the audit model; it is out of scope
+  for F3.
+
+Validation and audit codes never carry a post id, actor id, or reason: an invalid
+`context` fails with `INVALID_REVIEW_CONTEXT`, a missing audit context with
+`PLACE_REVIEW_AUDIT_CONTEXT_MISSING`, and the thrown message is the stable code
+only.
 
 ### Merge review-state resolution
 

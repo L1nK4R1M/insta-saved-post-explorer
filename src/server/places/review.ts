@@ -17,9 +17,10 @@ import { prisma } from "@/server/db";
 // owner-scoped, and treats a resource owned by someone else as absent. Every
 // human action is auditable: it persists a bounded USER_CORRECTION evidence row
 // (action + actor, reason in the excerpt) in the same transaction as the
-// mutation, and fails before mutating when no post/job context can carry a
-// correct proof. A user correction dominates automatic re-analysis (enforced by
-// the analysis service, F2).
+// mutation. Auditing is all-or-nothing: an action fails before any mutation
+// unless every affected post resolves to a job that can carry its proof, so a
+// review can never leave a partial or empty audit trail. A user correction
+// dominates automatic re-analysis (enforced by the analysis service, F2).
 
 type TxClient = Prisma.TransactionClient;
 type AuditTarget = { postId: string; jobId: string };
@@ -58,17 +59,54 @@ async function latestJobId(tx: TxClient, ownerId: string, postId: string): Promi
   return job?.id ?? null;
 }
 
-// Resolve one auditable (post, job) target per link of a place: each link's own
-// job, or the latest owner-scoped job for its post. Links without any job are
-// skipped; the caller decides whether that leaves no auditable context at all.
-async function auditTargetsForPlace(tx: TxClient, ownerId: string, placeId: string): Promise<AuditTarget[]> {
-  const links = await tx.postPlace.findMany({ where: { ownerId, placeId }, select: { postId: true, analysisJobId: true } });
-  const targets: AuditTarget[] = [];
-  for (const link of links) {
-    const jobId = link.analysisJobId ?? (await latestJobId(tx, ownerId, link.postId));
-    if (jobId) targets.push({ postId: link.postId, jobId });
+// Resolve exactly one auditable (post, job) target per DISTINCT affected post.
+// For each post it prefers a job already carried by one of its links, then the
+// latest owner-scoped job for that post. It is all-or-nothing: if any distinct
+// post cannot be resolved to a job, it throws PLACE_REVIEW_AUDIT_CONTEXT_MISSING
+// before the caller performs any mutation, so a review action can never persist a
+// partial audit trail. Targets are deduplicated per post (owner is fixed), so the
+// count of targets equals the number of distinct affected posts. An empty input
+// yields an empty result; callers that require at least one proof refuse it. The
+// error never carries a post id: only a count of unresolved posts is tracked.
+async function requireAuditTargetsForPosts(
+  tx: TxClient,
+  ownerId: string,
+  posts: ReadonlyArray<{ postId: string; analysisJobId: string | null }>,
+): Promise<AuditTarget[]> {
+  // Collapse links to distinct posts, remembering the first job a link already
+  // carries for each post (a link job is preferred over the latest job).
+  const orderedPostIds: string[] = [];
+  const seen = new Set<string>();
+  const linkJobByPost = new Map<string, string>();
+  for (const { postId, analysisJobId } of posts) {
+    if (!seen.has(postId)) {
+      seen.add(postId);
+      orderedPostIds.push(postId);
+    }
+    if (analysisJobId && !linkJobByPost.has(postId)) linkJobByPost.set(postId, analysisJobId);
   }
+
+  const targets: AuditTarget[] = [];
+  let unresolvedCount = 0;
+  for (const postId of orderedPostIds) {
+    const jobId = linkJobByPost.get(postId) ?? (await latestJobId(tx, ownerId, postId));
+    if (!jobId) {
+      unresolvedCount += 1;
+      continue;
+    }
+    targets.push({ postId, jobId });
+  }
+  if (unresolvedCount > 0) throw new PlaceReviewError("PLACE_REVIEW_AUDIT_CONTEXT_MISSING");
   return targets;
+}
+
+// Convenience wrapper: resolve complete audit targets from every link of a place.
+async function requireAuditTargetsForPlace(tx: TxClient, ownerId: string, placeId: string): Promise<AuditTarget[]> {
+  const links = await tx.postPlace.findMany({
+    where: { ownerId, placeId },
+    select: { postId: true, analysisJobId: true },
+  });
+  return requireAuditTargetsForPosts(tx, ownerId, links);
 }
 
 async function writeAuditEvidence(
@@ -103,7 +141,9 @@ export async function confirmPlace(ownerId: string, placeId: string, context: un
     const place = await tx.place.findFirst({ where: { id: placeId, ownerId }, select: { id: true } });
     if (!place) throw new PlaceReviewError("PLACE_NOT_FOUND");
 
-    const targets = await auditTargetsForPlace(tx, ownerId, placeId);
+    // Every linked post must resolve to a job before mutating; a place with no
+    // links has nothing to audit and is refused too.
+    const targets = await requireAuditTargetsForPlace(tx, ownerId, placeId);
     if (targets.length === 0) throw new PlaceReviewError("PLACE_REVIEW_AUDIT_CONTEXT_MISSING");
 
     await tx.place.update({ where: { id: placeId }, data: { reviewStatus: "CONFIRMED", isUserConfirmed: true } });
@@ -122,7 +162,9 @@ export async function rejectPlaceResult(ownerId: string, placeId: string, contex
     const place = await tx.place.findFirst({ where: { id: placeId, ownerId }, select: { id: true } });
     if (!place) throw new PlaceReviewError("PLACE_NOT_FOUND");
 
-    const targets = await auditTargetsForPlace(tx, ownerId, placeId);
+    // Every linked post must resolve to a job before mutating; a place with no
+    // links has nothing to audit and is refused too.
+    const targets = await requireAuditTargetsForPlace(tx, ownerId, placeId);
     if (targets.length === 0) throw new PlaceReviewError("PLACE_REVIEW_AUDIT_CONTEXT_MISSING");
 
     await tx.place.update({ where: { id: placeId }, data: { reviewStatus: "REJECTED", isUserConfirmed: true } });
@@ -151,8 +193,11 @@ export async function correctPostPlace(
     });
     if (!link) throw new PlaceReviewError("POST_PLACE_NOT_FOUND");
 
-    const jobId = link.analysisJobId ?? (await latestJobId(tx, ownerId, input.postId));
-    if (!jobId) throw new PlaceReviewError("PLACE_REVIEW_AUDIT_CONTEXT_MISSING");
+    // The single affected post must resolve to a job before mutating (throws
+    // PLACE_REVIEW_AUDIT_CONTEXT_MISSING otherwise), keeping one shared rule.
+    const targets = await requireAuditTargetsForPosts(tx, ownerId, [
+      { postId: input.postId, analysisJobId: link.analysisJobId },
+    ]);
 
     if (input.isPrimary === true) {
       await tx.postPlace.updateMany({
@@ -166,14 +211,7 @@ export async function correctPostPlace(
       data: { isUserConfirmed: true, ...(input.isPrimary != null ? { isPrimary: input.isPrimary } : {}) },
     });
 
-    await writeAuditEvidence(
-      tx,
-      ownerId,
-      input.placeId,
-      [{ postId: input.postId, jobId }],
-      "POST_PLACE_CORRECTED",
-      reviewContext,
-    );
+    await writeAuditEvidence(tx, ownerId, input.placeId, targets, "POST_PLACE_CORRECTED", reviewContext);
 
     return updated;
   });
@@ -200,23 +238,16 @@ export async function mergePlaces(ownerId: string, input: MergePlacesInput, cont
       if (!target || target.ownerId !== ownerId) throw new PlaceReviewError("PLACE_NOT_FOUND");
 
       const sourceLinks = await tx.postPlace.findMany({ where: { ownerId, placeId: input.sourcePlaceId } });
-      const affectedPostIds = new Set<string>();
 
-      // Resolve an auditable (post, job) per affected post before mutating. A
-      // merge that touches links but has no resolvable job context fails before
-      // any write; a link-free merge has nothing to audit at the link level.
-      const auditTargets: AuditTarget[] = [];
-      for (const link of sourceLinks) {
-        affectedPostIds.add(link.postId);
-      }
-      for (const postId of affectedPostIds) {
-        const linkJob = sourceLinks.find((link) => link.postId === postId && link.analysisJobId)?.analysisJobId;
-        const jobId = linkJob ?? (await latestJobId(tx, ownerId, postId));
-        if (jobId) auditTargets.push({ postId, jobId });
-      }
-      if (affectedPostIds.size > 0 && auditTargets.length === 0) {
-        throw new PlaceReviewError("PLACE_REVIEW_AUDIT_CONTEXT_MISSING");
-      }
+      // Resolve one auditable (post, job) per affected post before any write.
+      // This throws if any affected post cannot be resolved to a job, so a
+      // partially auditable merge never mutates. It returns one target per
+      // distinct affected post, hence auditTargets.length === affectedPostIds.size.
+      const auditTargets = await requireAuditTargetsForPosts(tx, ownerId, sourceLinks);
+      // A link-free merge has no link-level audit context; refuse it before any
+      // write so a merge can never delete the source without recording a proof.
+      if (auditTargets.length === 0) throw new PlaceReviewError("PLACE_REVIEW_AUDIT_CONTEXT_MISSING");
+      const affectedPostIds = new Set(auditTargets.map((target) => target.postId));
 
       for (const link of sourceLinks) {
         const existing = await tx.postPlace.findUnique({
