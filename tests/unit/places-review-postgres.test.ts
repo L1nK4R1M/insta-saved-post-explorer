@@ -432,6 +432,149 @@ describeWithDatabase("Places review and merge services on PostgreSQL", () => {
     expect(audit.analysisJobId).toBe(latestJob);
     expect(audit.metadata).toMatchObject({ action: "PLACES_MERGED" });
   });
+
+  // --- Audit job ownership isolation (link-carried job must match owner + post) ---
+
+  it("ignores a cross-owner link job and refuses when no valid fallback exists", async () => {
+    const place = await seedPlace(OWNER_A);
+    const postA = await seedPost(OWNER_A);
+    await linkPostPlaceWithoutJob(OWNER_A, postA, place.id);
+    // A job owned by OWNER_B; the composite FK normally forbids referencing it.
+    const otherPost = await seedPost(OWNER_B);
+    const crossOwnerJob = await seedJob(OWNER_B, otherPost);
+    await breakLinkJob(OWNER_A, postA, place.id, crossOwnerJob);
+
+    await expect(review.confirmPlace(OWNER_A, place.id, CTX)).rejects.toMatchObject({
+      code: "PLACE_REVIEW_AUDIT_CONTEXT_MISSING",
+    });
+    expect((await prisma.place.findUniqueOrThrow({ where: { id: place.id } })).reviewStatus).toBe("UNREVIEWED");
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A } })).toBe(0);
+  });
+
+  it("ignores a cross-post link job and refuses when no valid fallback exists", async () => {
+    const place = await seedPlace(OWNER_A);
+    const postA = await seedPost(OWNER_A);
+    const postB = await seedPost(OWNER_A);
+    const jobB = await seedJob(OWNER_A, postB); // a real job, but for another post
+    await linkPostPlaceWithoutJob(OWNER_A, postA, place.id);
+    await breakLinkJob(OWNER_A, postA, place.id, jobB);
+
+    await expect(review.confirmPlace(OWNER_A, place.id, CTX)).rejects.toMatchObject({
+      code: "PLACE_REVIEW_AUDIT_CONTEXT_MISSING",
+    });
+    // post B's job must never become post A's audit context.
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A } })).toBe(0);
+  });
+
+  it("falls back to a valid owner/post job when the link job is cross-owner", async () => {
+    const place = await seedPlace(OWNER_A);
+    const postA = await seedPost(OWNER_A);
+    const validJob = await seedJob(OWNER_A, postA); // valid fallback for post A
+    await linkPostPlaceWithoutJob(OWNER_A, postA, place.id);
+    const otherPost = await seedPost(OWNER_B);
+    const crossOwnerJob = await seedJob(OWNER_B, otherPost);
+    await breakLinkJob(OWNER_A, postA, place.id, crossOwnerJob);
+
+    const result = await review.confirmPlace(OWNER_A, place.id, CTX);
+    expect(result.reviewStatus).toBe("CONFIRMED");
+    const audit = await prisma.placeEvidence.findFirstOrThrow({
+      where: { ownerId: OWNER_A, evidenceType: "USER_CORRECTION" },
+    });
+    expect(audit.analysisJobId).toBe(validJob); // never the cross-owner job
+  });
+
+  it("falls back to a valid owner/post job when the link job belongs to another post", async () => {
+    const place = await seedPlace(OWNER_A);
+    const postA = await seedPost(OWNER_A);
+    const validJob = await seedJob(OWNER_A, postA); // valid fallback for post A
+    const postB = await seedPost(OWNER_A);
+    const jobB = await seedJob(OWNER_A, postB);
+    await linkPostPlaceWithoutJob(OWNER_A, postA, place.id);
+    await breakLinkJob(OWNER_A, postA, place.id, jobB);
+
+    const result = await review.confirmPlace(OWNER_A, place.id, CTX);
+    expect(result.reviewStatus).toBe("CONFIRMED");
+    const audit = await prisma.placeEvidence.findFirstOrThrow({
+      where: { ownerId: OWNER_A, evidenceType: "USER_CORRECTION" },
+    });
+    expect(audit.analysisJobId).toBe(validJob); // never post B's job
+  });
+
+  it("refuses a merge when an affected post's only job is a cross-owner link job", async () => {
+    const source = await seedPlace(OWNER_A, "geo-iso-src");
+    const target = await seedPlace(OWNER_A, "geo-iso-tgt");
+    const postA = await seedPost(OWNER_A);
+    const jobA = await seedJob(OWNER_A, postA);
+    await linkPostPlace(OWNER_A, postA, source.id, jobA, true); // valid
+    const postB = await seedPost(OWNER_A);
+    await linkPostPlaceWithoutJob(OWNER_A, postB, source.id);
+    const otherPost = await seedPost(OWNER_B);
+    const crossOwnerJob = await seedJob(OWNER_B, otherPost);
+    await breakLinkJob(OWNER_A, postB, source.id, crossOwnerJob); // post B has no valid context
+    await seedEvidence(OWNER_A, postA, source.id, jobA);
+
+    await expect(
+      review.mergePlaces(OWNER_A, { sourcePlaceId: source.id, targetPlaceId: target.id }, CTX),
+    ).rejects.toMatchObject({ code: "PLACE_REVIEW_AUDIT_CONTEXT_MISSING" });
+
+    // Nothing moved, deleted or audited.
+    expect(await prisma.place.count({ where: { id: source.id } })).toBe(1);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A, placeId: source.id } })).toBe(2);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A, placeId: target.id } })).toBe(0);
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, evidenceType: "USER_CORRECTION" } })).toBe(0);
+    expect(
+      await prisma.placeEvidence.count({ where: { ownerId: OWNER_A, placeId: source.id, evidenceType: "CAPTION" } }),
+    ).toBe(1);
+  });
+
+  it("never leaks a job, post, or owner id when refusing on an invalid link job", async () => {
+    const place = await seedPlace(OWNER_A);
+    const postA = await seedPost(OWNER_A);
+    await linkPostPlaceWithoutJob(OWNER_A, postA, place.id);
+    const otherPost = await seedPost(OWNER_B);
+    const crossOwnerJob = await prisma.placeAnalysisJob.create({
+      data: {
+        id: "SECRET-JOB-ID",
+        ownerId: OWNER_B,
+        postId: otherPost,
+        sourceTheme: "Voyages",
+        analysisVersion: "places-v1",
+        inputHash: "rh-secret",
+      },
+      select: { id: true },
+    });
+    await breakLinkJob(OWNER_A, postA, place.id, crossOwnerJob.id);
+
+    try {
+      await review.confirmPlace(OWNER_A, place.id, CTX);
+      throw new Error("expected a review error");
+    } catch (error) {
+      const serialized = `${(error as Error).message} ${(error as Error).stack ?? ""}`;
+      expect(serialized).toContain("PLACE_REVIEW_AUDIT_CONTEXT_MISSING");
+      expect(serialized).not.toContain("SECRET-JOB-ID"); // job id
+      expect(serialized).not.toContain(postA); // post id
+      expect(serialized).not.toContain(OWNER_A); // owner id
+    }
+    expect(await prisma.placeEvidence.count({ where: { ownerId: OWNER_A } })).toBe(0);
+  });
+
+  it("prefers a valid direct link job over the latest fallback and creates one evidence", async () => {
+    const place = await seedPlace(OWNER_A);
+    const postA = await seedPost(OWNER_A);
+    const directJob = await seedJob(OWNER_A, postA); // carried by the link
+    await seedJob(OWNER_A, postA); // a newer latest job for the same post
+    await linkPostPlace(OWNER_A, postA, place.id, directJob);
+
+    const result = await review.confirmPlace(OWNER_A, place.id, CTX);
+    expect(result.reviewStatus).toBe("CONFIRMED");
+    const audits = await prisma.placeEvidence.findMany({
+      where: { ownerId: OWNER_A, evidenceType: "USER_CORRECTION" },
+    });
+    // Deterministic: the valid direct link job wins over a newer latest job, and a
+    // single post yields exactly one evidence row.
+    expect(audits.length).toBe(1);
+    expect(audits[0].analysisJobId).toBe(directJob);
+  });
 });
 
 let placeCounter = 0;
@@ -525,6 +668,23 @@ async function linkAuditableSource(placeId: string): Promise<void> {
   const post = await seedPost(OWNER_A);
   const job = await seedJob(OWNER_A, post);
   await linkPostPlace(OWNER_A, post, placeId, job, true);
+}
+
+// Force an existing link to reference a job that violates owner/post consistency,
+// simulating a legacy/incoherent row that predates the composite owner/post FK.
+// The real schema forbids inserting such a row, so a superuser-only FK bypass is
+// used for a single transaction. The resolver must ignore the invalid direct job.
+async function breakLinkJob(ownerId: string, postId: string, placeId: string, brokenJobId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+    await tx.$executeRawUnsafe(
+      "UPDATE post_places SET analysis_job_id = $1 WHERE owner_id = $2 AND post_id = $3 AND place_id = $4",
+      brokenJobId,
+      ownerId,
+      postId,
+      placeId,
+    );
+  });
 }
 
 // A link whose analysis job is unknown (analysisJobId stays null): its audit

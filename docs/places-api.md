@@ -145,10 +145,10 @@ non-null `postId` **and** `analysisJobId`, so a proof exists only when the
 affected post resolves to an analysis job.
 
 Before any mutation, every affected post must resolve to exactly one job — its
-link's own `analysisJobId`, otherwise the latest owner-scoped job for that post.
-If **any** affected post cannot be resolved, the whole action fails with
-`PLACE_REVIEW_AUDIT_CONTEXT_MISSING` and **nothing** is written; a partial or
-empty audit trail is never left behind:
+link's own `analysisJobId` (only after validation, see below), otherwise the
+latest owner-scoped job for that post. If **any** affected post cannot be
+resolved, the whole action fails with `PLACE_REVIEW_AUDIT_CONTEXT_MISSING` and
+**nothing** is written; a partial or empty audit trail is never left behind:
 
 - `confirmPlace` / `rejectPlaceResult`: every post linked to the place. A place
   with no links has nothing to audit and is refused.
@@ -162,10 +162,32 @@ empty audit trail is never left behind:
   context or a future explicit evolution of the audit model; it is out of scope
   for F3.
 
-Validation and audit codes never carry a post id, actor id, or reason: an invalid
-`context` fails with `INVALID_REVIEW_CONTEXT`, a missing audit context with
-`PLACE_REVIEW_AUDIT_CONTEXT_MISSING`, and the thrown message is the stable code
-only.
+A job id carried by a link is **never trusted on its own**. Before it can carry a
+proof it must be validated as an exact `(jobId, ownerId, postId)` match against
+`place_analysis_jobs`:
+
+- a job of another owner is ignored;
+- a job of another post is ignored;
+- an ignored direct job never blocks a valid fallback — the resolver then uses the
+  latest owner-scoped job for that post;
+- if neither a valid direct job nor a valid owner-scoped fallback exists, the
+  action fails with `PLACE_REVIEW_AUDIT_CONTEXT_MISSING`;
+- when several links of the same post carry different jobs, the first valid one in
+  a stable order is chosen (deterministic), then the latest owner-scoped job.
+
+The composite foreign keys `post_places_owner_post_job_fkey` and
+`place_evidence_owner_post_job_fkey` already bind `(owner_id, post_id,
+analysis_job_id)` to the same owner and post at the database level, so a coherent
+schema cannot store a cross-owner or cross-post link job. This validation is
+defense-in-depth for legacy or imported rows predating that constraint, and it
+turns such a row into a clean refusal or a valid fallback instead of a raw
+foreign-key failure. `writeAuditEvidence` keeps a final structural check so a
+proof is never created from an unvalidated job id.
+
+Validation and audit codes never carry a post id, job id, actor id, or reason: an
+invalid `context` fails with `INVALID_REVIEW_CONTEXT`, a missing or invalid audit
+context with `PLACE_REVIEW_AUDIT_CONTEXT_MISSING`, and the thrown message is the
+stable code only.
 
 ### Merge review-state resolution
 

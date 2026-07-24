@@ -50,46 +50,89 @@ function validateContext(context: unknown): PlaceReviewContext {
   return parsed.data;
 }
 
+// The latest owner-scoped job for a post. The id tiebreaker keeps the choice
+// deterministic when two jobs share a createdAt (never rely on an implicit order).
 async function latestJobId(tx: TxClient, ownerId: string, postId: string): Promise<string | null> {
   const job = await tx.placeAnalysisJob.findFirst({
     where: { ownerId, postId },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true },
+  });
+  return job?.id ?? null;
+}
+
+// Verify that a job id carried directly by a link is a real analysis job for THIS
+// owner AND THIS post. A link's analysisJobId is never trusted on its own: an
+// incoherent or imported row (predating the composite owner/post foreign key)
+// could point at another owner's or another post's job, which would attach an
+// invalid PlaceEvidence. Returns the id only on an exact (id, ownerId, postId)
+// match; otherwise null. Never throws and never embeds an id in an error, so an
+// invalid direct job is silently ignored and a valid fallback can still be used.
+async function validLinkedJobId(
+  tx: TxClient,
+  ownerId: string,
+  postId: string,
+  analysisJobId: string | null,
+): Promise<string | null> {
+  if (!analysisJobId) return null;
+  const job = await tx.placeAnalysisJob.findFirst({
+    where: { id: analysisJobId, ownerId, postId },
     select: { id: true },
   });
   return job?.id ?? null;
 }
 
 // Resolve exactly one auditable (post, job) target per DISTINCT affected post.
-// For each post it prefers a job already carried by one of its links, then the
-// latest owner-scoped job for that post. It is all-or-nothing: if any distinct
+// For each post it prefers a job carried by one of its links — but only after
+// validating that the job truly belongs to this owner and this post — then the
+// latest owner-scoped job for that post. A direct job that fails validation is
+// ignored, never blocking a valid fallback. It is all-or-nothing: if any distinct
 // post cannot be resolved to a job, it throws PLACE_REVIEW_AUDIT_CONTEXT_MISSING
 // before the caller performs any mutation, so a review action can never persist a
 // partial audit trail. Targets are deduplicated per post (owner is fixed), so the
 // count of targets equals the number of distinct affected posts. An empty input
 // yields an empty result; callers that require at least one proof refuse it. The
-// error never carries a post id: only a count of unresolved posts is tracked.
+// error never carries a post id: only a count of unresolved posts is tracked. The
+// per-place/merge link set is already bounded, so the per-post validation and
+// fallback queries stay bounded (no unbounded N+1).
 async function requireAuditTargetsForPosts(
   tx: TxClient,
   ownerId: string,
   posts: ReadonlyArray<{ postId: string; analysisJobId: string | null }>,
 ): Promise<AuditTarget[]> {
-  // Collapse links to distinct posts, remembering the first job a link already
-  // carries for each post (a link job is preferred over the latest job).
+  // Collapse links to distinct posts, collecting every distinct job id a link
+  // carries for each post so each candidate can be validated independently.
   const orderedPostIds: string[] = [];
   const seen = new Set<string>();
-  const linkJobByPost = new Map<string, string>();
+  const directJobIdsByPost = new Map<string, string[]>();
   for (const { postId, analysisJobId } of posts) {
     if (!seen.has(postId)) {
       seen.add(postId);
       orderedPostIds.push(postId);
     }
-    if (analysisJobId && !linkJobByPost.has(postId)) linkJobByPost.set(postId, analysisJobId);
+    if (analysisJobId) {
+      const candidates = directJobIdsByPost.get(postId);
+      if (candidates) {
+        if (!candidates.includes(analysisJobId)) candidates.push(analysisJobId);
+      } else {
+        directJobIdsByPost.set(postId, [analysisJobId]);
+      }
+    }
   }
 
   const targets: AuditTarget[] = [];
   let unresolvedCount = 0;
   for (const postId of orderedPostIds) {
-    const jobId = linkJobByPost.get(postId) ?? (await latestJobId(tx, ownerId, postId));
+    // Prefer the first direct job that validates as (id, ownerId, postId), using a
+    // stable lexicographic order over the candidates; otherwise fall back to the
+    // latest owner-scoped job. An invalid direct job never wins over a valid one.
+    const candidates = [...(directJobIdsByPost.get(postId) ?? [])].sort();
+    let jobId: string | null = null;
+    for (const candidate of candidates) {
+      jobId = await validLinkedJobId(tx, ownerId, postId, candidate);
+      if (jobId) break;
+    }
+    jobId ??= await latestJobId(tx, ownerId, postId);
     if (!jobId) {
       unresolvedCount += 1;
       continue;
@@ -118,6 +161,12 @@ async function writeAuditEvidence(
   context: PlaceReviewContext,
 ): Promise<void> {
   if (targets.length === 0) return;
+  // Defensive invariant: the resolution helper is the single source of truth, and
+  // every target must already carry a validated post and job. This is a structural
+  // check only (no extra query) so a proof is never created from a bare id.
+  for (const target of targets) {
+    if (!target.postId || !target.jobId) throw new PlaceReviewError("PLACE_REVIEW_AUDIT_CONTEXT_MISSING");
+  }
   const metadata = buildAuditMetadata(action, context.actor);
   await tx.placeEvidence.createMany({
     data: targets.map((target) => ({
