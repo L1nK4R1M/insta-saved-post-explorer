@@ -137,6 +137,12 @@ export type ImportCandidateBatchInput = {
   continueOnError?: boolean;
 };
 
+// Import summary. Counts are aggregated across every processed post. The three
+// *Persisted counters are per-post upsert counts summed over the batch — a
+// canonical place shared by two posts contributes to `placesPersisted` once per
+// post, so this is a count of place/link/evidence writes, not of distinct new
+// rows. Field names are stable for tooling; see docs/places-caption-workflow.md
+// for the precise meaning of each counter.
 export type ImportReport = {
   committed: boolean;
   totalLines: number;
@@ -146,9 +152,14 @@ export type ImportReport = {
   postsSucceeded: number;
   postsNeedingReview: number;
   postsFailed: number;
+  // Sum over posts of distinct canonical places upserted for that post (a place
+  // linked to several posts is counted once per post, not once globally).
   placesPersisted: number;
+  // Sum over posts of PostPlace links created or updated (never user-confirmed ones).
   linksPersisted: number;
+  // Sum over posts of PlaceEvidence rows written (caption/provider evidence).
   evidencePersisted: number;
+  // Candidates that resolved to UNKNOWN (no Place row; textual evidence kept).
   unknownCandidates: number;
   errors: Array<{ line: number; code: string }>;
 };

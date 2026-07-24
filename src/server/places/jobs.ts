@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, type PlaceAnalysisJob } from "@prisma/client";
+import type { PlaceAnalysisJob } from "@prisma/client";
 
 import { canonicalPlacesTheme } from "@/lib/places/eligibility";
 import { prisma } from "@/server/db";
@@ -11,7 +11,11 @@ import { loadAnalysisPostInputs } from "@/server/places/repository";
 // new idempotent job; the same content and version returns the existing job.
 export const PLACES_ANALYSIS_VERSION = process.env.PLACES_ANALYSIS_VERSION?.trim() || "places-v1";
 
-export type PlacesJobErrorCode = "POST_NOT_FOUND" | "POST_NOT_PLACES_ELIGIBLE" | "PLACES_INPUT_STALE";
+export type PlacesJobErrorCode =
+  | "POST_NOT_FOUND"
+  | "POST_NOT_PLACES_ELIGIBLE"
+  | "PLACES_INPUT_STALE"
+  | "PLACES_JOB_CONFLICT";
 
 export class PlacesJobError extends Error {
   readonly code: PlacesJobErrorCode;
@@ -60,23 +64,20 @@ export async function createMetadataAnalysisJob(
     analysisVersion,
   };
 
-  // Concurrency-safe idempotency. Prisma's upsert with an empty `update` cannot
-  // use the database-native path, so two concurrent first calls can both read
-  // "missing" and one then fails with P2002. Instead we attempt the insert and,
-  // only when the idempotency unique constraint conflicts, re-read the existing
-  // row. A P2002 from any other constraint (or a conflict with no matching row)
-  // is rethrown untouched.
-  try {
-    return await prisma.placeAnalysisJob.create({
-      data: { ...identity, sourceTheme, depth: "METADATA_ONLY" },
-    });
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const existing = await prisma.placeAnalysisJob.findUnique({
-        where: { ownerId_postId_inputHash_analysisVersion: identity },
-      });
-      if (existing) return existing;
-    }
-    throw error;
-  }
+  // Concurrency-safe idempotency without a thrown P2002. `createMany` with
+  // `skipDuplicates` issues INSERT ... ON CONFLICT DO NOTHING, so a duplicate
+  // idempotency key is absorbed at the database level — no exception is thrown and
+  // nothing is logged (the noisy "expected P2002" is gone). We then read the row
+  // back: a fresh cuid id can only ever conflict on the idempotency key, so the
+  // read must succeed. If it does not, an unexpected conflict occurred and we
+  // surface a stable code instead of masking it.
+  await prisma.placeAnalysisJob.createMany({
+    data: [{ ...identity, sourceTheme, depth: "METADATA_ONLY" }],
+    skipDuplicates: true,
+  });
+  const job = await prisma.placeAnalysisJob.findUnique({
+    where: { ownerId_postId_inputHash_analysisVersion: identity },
+  });
+  if (!job) throw new PlacesJobError("PLACES_JOB_CONFLICT");
+  return job;
 }
