@@ -133,3 +133,29 @@ scoped MCP command:
 A user correction dominates automatic re-analysis (enforced by the F2 analysis
 service, which never overwrites user-confirmed places or links). Every method is
 owner-scoped; a cross-owner resource behaves as `PLACE_NOT_FOUND`.
+
+### Merge review-state resolution
+
+`mergePlaces` never loses a durable user decision carried by either place. The
+target's review state is recomputed from both sides with a deterministic,
+commutative policy (`resolveMergedPlaceReviewState`) inside the same transaction
+as the source deletion:
+
+- `isUserConfirmed` is preserved as a logical OR — true when **either** place was
+  confirmed or corrected by the user, so F2 automatic re-analysis can no longer
+  overwrite the merged canonical place;
+- `CONFIRMED` dominates `UNREVIEWED` (a confirmation is never silently downgraded);
+- `REJECTED` dominates `UNREVIEWED` only when no confirmation is involved;
+- a confirmation-versus-rejection contradiction becomes `CONFLICT` (the user
+  confirmation is still retained via `isUserConfirmed`);
+- `CONFLICT` dominates every automatic or ambiguous state and is never downgraded.
+
+| source \ target | UNREVIEWED | CONFIRMED | REJECTED | CONFLICT |
+| --- | --- | --- | --- | --- |
+| **UNREVIEWED** | UNREVIEWED | CONFIRMED | REJECTED | CONFLICT |
+| **CONFIRMED** | CONFIRMED | CONFIRMED | CONFLICT | CONFLICT |
+| **REJECTED** | REJECTED | CONFLICT | REJECTED | CONFLICT |
+| **CONFLICT** | CONFLICT | CONFLICT | CONFLICT | CONFLICT |
+
+The target update and the source deletion share the merge transaction: any
+failure rolls both back, leaving the source present and the target untouched.

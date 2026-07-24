@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Place, PostPlace } from "@prisma/client";
 
+import { resolveMergedPlaceReviewState } from "@/lib/places/merge-state";
 import { prisma } from "@/server/db";
 
 // Internal Places review and merge services for a future admin UI or scoped MCP
@@ -142,6 +143,18 @@ export async function mergePlaces(ownerId: string, input: MergePlacesInput): Pro
     await tx.placeEvidence.updateMany({
       where: { ownerId, placeId: input.sourcePlaceId },
       data: { placeId: input.targetPlaceId },
+    });
+
+    // Preserve the user's durable review decision from either side before the
+    // source row is removed, using the deterministic merge policy. This runs in
+    // the same transaction as the source deletion, so a failure rolls both back.
+    // Preserve the user's durable review decision from either side before the
+    // source row is removed, using the deterministic merge policy. This runs in
+    // the same transaction as the source deletion, so a failure rolls both back.
+    const merged = resolveMergedPlaceReviewState(source, target);
+    await tx.place.update({
+      where: { id: input.targetPlaceId },
+      data: { reviewStatus: merged.reviewStatus, isUserConfirmed: merged.isUserConfirmed },
     });
 
     await tx.place.delete({ where: { id: input.sourcePlaceId } });
