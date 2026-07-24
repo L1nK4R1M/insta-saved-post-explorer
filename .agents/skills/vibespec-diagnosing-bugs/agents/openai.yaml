@@ -1,0 +1,3 @@
+interface:
+  display_name: "Diagnose Bug"
+  short_description: "Use when behavior is broken, slow, flaky, inconsistent, crashing, or producing"

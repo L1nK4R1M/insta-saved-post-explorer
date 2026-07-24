@@ -173,3 +173,17 @@ Arrêter l’implémentation et documenter le blocage si :
 - la phase active dépend d’une gate non satisfaite.
 
 Ne pas improviser une nouvelle architecture pour contourner le blocage.
+
+<!-- BEGIN VIBESPEC CLOUD -->
+# VibeSpec Pro Cloud Bundle
+
+Use the repository-managed VibeSpec skills for software changes.
+
+Before implementation:
+1. Read `.vibespec/project.yaml` when present.
+2. Treat `.vibespec/bundle` as the active VibeSpec root.
+3. Route the change as Patch, Standard, or Critical.
+4. Load only the skills, profiles, and templates needed for the selected route.
+
+Never claim completion without fresh verification evidence. Never commit, push, deploy, migrate, or run destructive operations unless explicitly authorized. Repository-specific instructions outside this managed block override these defaults.
+<!-- END VIBESPEC CLOUD -->

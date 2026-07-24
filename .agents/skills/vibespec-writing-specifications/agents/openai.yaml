@@ -1,0 +1,3 @@
+interface:
+  display_name: "Write Specification"
+  short_description: "Use when a Standard or Critical change needs explicit observable requirements,"

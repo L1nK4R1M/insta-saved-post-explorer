@@ -1,0 +1,3 @@
+interface:
+  display_name: "Verify Completion"
+  short_description: "Use when preparing to state that a task, bug fix, feature, migration, refactor"

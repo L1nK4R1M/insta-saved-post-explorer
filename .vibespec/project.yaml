@@ -1,0 +1,21 @@
+version: 1
+project:
+  name: insta-saved-post-explorer
+  type: application
+profiles:
+  - web-app
+  - backend-api
+commands:
+  test: npm run test
+  lint: npm run lint
+  typecheck: npm run typecheck
+  build: npm run build
+  install: npm install
+documentation:
+  root: docs
+  changes: docs/changes
+permissions:
+  auto_commit: false
+  auto_push: false
+  auto_deploy: false
+  destructive_operations: require-confirmation
