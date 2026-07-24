@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { ExternalApiUnauthorizedError, ExternalApiUnavailableError } from "@/auth/api-key";
+import { PlacesCursorError } from "@/lib/places/cursor";
 
 // Stable error contract for /api/v1. External responses never leak stack
 // traces, SQL, Prisma internals, environment values, or auth details.
@@ -53,6 +54,9 @@ export function externalApiErrorResponse(error: unknown): NextResponse {
   }
   if (error instanceof ExternalApiNotFoundError) {
     return externalApiError("NOT_FOUND", "Resource not found", 404);
+  }
+  if (error instanceof PlacesCursorError) {
+    return externalApiError("BAD_REQUEST", "Invalid cursor", 400);
   }
   if (error instanceof z.ZodError) {
     return externalApiError("BAD_REQUEST", "Invalid request parameters", 400);
