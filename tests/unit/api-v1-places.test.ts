@@ -127,6 +127,23 @@ describe("/api/v1/places routes", () => {
     expect(mocks.getPlacesStats).toHaveBeenCalledWith({ countryCode: "FR" }, "owner-a");
   });
 
+  it("canonicalizes a source_theme filter and forwards it", async () => {
+    mocks.getPlacesStats.mockResolvedValue({ totals: {} });
+    const response = await getStats(request("http://localhost/api/v1/places/stats?source_theme=voyages"));
+    expect(response.status).toBe(200);
+    expect(mocks.getPlacesStats).toHaveBeenCalledWith({ sourceTheme: "Voyages" }, "owner-a");
+  });
+
+  it.each(["Cuisine", "Voyage", "Restaurants", "Lieux", ""]) (
+    "rejects an ineligible source_theme %s with 400",
+    async (theme) => {
+      const response = await getStats(request(`http://localhost/api/v1/places/stats?source_theme=${encodeURIComponent(theme)}`));
+      expect(response.status).toBe(400);
+      expect((await response.json()).error.code).toBe("BAD_REQUEST");
+      expect(mocks.getPlacesStats).not.toHaveBeenCalled();
+    },
+  );
+
   it("serves eligible-posts and unresolved with authentication first", async () => {
     const unauth = await getEligible(request("http://localhost/api/v1/places/eligible-posts", null));
     expect(unauth.status).toBe(401);

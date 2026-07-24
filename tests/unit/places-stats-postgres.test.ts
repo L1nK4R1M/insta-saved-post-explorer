@@ -113,6 +113,63 @@ describeWithDatabase("Places statistics on PostgreSQL", () => {
     expect(result.totals.eligiblePosts).toBe(0);
     expect(result.byCountry).toEqual([]);
   });
+
+  it("filters every aggregation by source_theme Voyages", async () => {
+    await seedFixture();
+    const result = await stats.getPlacesStats({ sourceTheme: "Voyages" }, OWNER_A);
+    expect(result.totals.eligiblePosts).toBe(2); // post1, post3
+    expect(result.totals.identifiedPlaces).toBe(2); // PA1, PA2 (both linked to Voyages post1)
+    expect(result.totals.postsWithPlaces).toBe(1); // post1 (post3 links only a rejected place)
+    expect(result.totals.needsReview).toBe(1); // the Voyages NEEDS_REVIEW job
+    expect(result.byTheme).toHaveLength(1);
+    expect(result.byTheme[0]).toMatchObject({ theme: "Voyages", placeCount: 2, postCount: 1 });
+    // OWNER_B data never appears.
+    expect(result.byCountry.every((row) => row.postCount <= 1)).toBe(true);
+  });
+
+  it("filters every aggregation by source_theme Restaurant, counting a shared place once", async () => {
+    await seedFixture();
+    const result = await stats.getPlacesStats({ sourceTheme: "Restaurant" }, OWNER_A);
+    expect(result.totals.eligiblePosts).toBe(1); // post2
+    // PA1 is shared with the Voyages theme but counts once for Restaurant.
+    expect(result.totals.identifiedPlaces).toBe(1); // PA1 (linked to Restaurant post2)
+    expect(result.totals.postsWithPlaces).toBe(1); // post2
+    expect(result.totals.needsReview).toBe(0); // no Restaurant NEEDS_REVIEW job, no linked CONFLICT
+    expect(result.byTheme).toEqual([{ theme: "Restaurant", placeCount: 1, postCount: 1 }]);
+  });
+
+  it("does not double-count a post linked to several places under a theme filter", async () => {
+    // post1 links PA1 and PA2 (both Voyages-eligible); it must count once.
+    await seedFixture();
+    const result = await stats.getPlacesStats({ sourceTheme: "Voyages" }, OWNER_A);
+    expect(result.totals.postsWithPlaces).toBe(1);
+  });
+
+  it("filters NEEDS_REVIEW jobs by sourceTheme and CONFLICT places by their linked posts", async () => {
+    const voyagesPost = await seedPost(OWNER_A, "Voyages");
+    const restoPost = await seedPost(OWNER_A, "Restaurant");
+    await prisma.placeAnalysisJob.create({ data: { ownerId: OWNER_A, postId: voyagesPost, sourceTheme: "Voyages", analysisVersion: "v", inputHash: "nr-v", status: "NEEDS_REVIEW" } });
+    await prisma.placeAnalysisJob.create({ data: { ownerId: OWNER_A, postId: restoPost, sourceTheme: "Restaurant", analysisVersion: "v", inputHash: "nr-r", status: "NEEDS_REVIEW" } });
+    const conflict = await seedPlace(OWNER_A, { providerPlaceId: "cf-1", reviewStatus: "CONFLICT", countryCode: "FR", continentCode: "EU" });
+    await linkPostPlace(OWNER_A, restoPost, conflict.id);
+
+    const resto = await stats.getPlacesStats({ sourceTheme: "Restaurant" }, OWNER_A);
+    expect(resto.totals.needsReview).toBe(2); // 1 Restaurant job + 1 CONFLICT place linked to a Restaurant post
+    const voyages = await stats.getPlacesStats({ sourceTheme: "Voyages" }, OWNER_A);
+    expect(voyages.totals.needsReview).toBe(1); // only the Voyages job; the CONFLICT place is not Voyages-linked
+  });
+
+  it("ignores collection membership when computing themed statistics", async () => {
+    const post = await seedPost(OWNER_A, "Voyages");
+    const place = await seedPlace(OWNER_A, { providerPlaceId: "col-1", countryCode: "FR", continentCode: "EU" });
+    await linkPostPlace(OWNER_A, post, place.id);
+    const collection = await prisma.collection.create({ data: { ownerId: OWNER_A, name: "Lieux", slug: "lieux" }, select: { id: true } });
+    await prisma.collectionPost.create({ data: { collectionId: collection.id, postId: post } });
+
+    const result = await stats.getPlacesStats({ sourceTheme: "Voyages" }, OWNER_A);
+    expect(result.totals.identifiedPlaces).toBe(1);
+    expect(result.totals.postsWithPlaces).toBe(1);
+  });
 });
 
 let placeCounter = 0;
@@ -179,4 +236,5 @@ async function resetDatabase(): Promise<void> {
   const owners = { ownerId: { in: [OWNER_A, OWNER_B] } };
   await prisma.post.deleteMany({ where: owners });
   await prisma.place.deleteMany({ where: owners });
+  await prisma.collection.deleteMany({ where: owners });
 }

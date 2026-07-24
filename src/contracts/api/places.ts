@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { canonicalPlacesTheme, type PlacesEligibleTheme } from "@/lib/places/eligibility";
+
 // Public DTOs and request parsers for the read-only /api/v1/places surface.
 // DTOs are explicit and stable: routes and services never return raw Prisma
 // objects, provider payloads, secrets, or another owner's data.
@@ -200,6 +202,18 @@ const statsSchema = z.object({
     .transform((value) => value.toUpperCase())
     .optional(),
   precision: z.enum(PLACE_PRECISIONS).optional(),
+  // source_theme is normalized through the shared Places predicate: any case or
+  // accent variant that folds to Voyages/Restaurant is accepted and canonicalized;
+  // everything else (Voyage, Restaurants, Cuisine, Lieux, empty, unknown) is null
+  // and rejected as a 400. There is no independent theme list here.
+  sourceTheme: z
+    .string()
+    .trim()
+    .transform((value) => canonicalPlacesTheme(value))
+    .refine((value): value is PlacesEligibleTheme => value !== null, {
+      message: "source_theme must be Voyages or Restaurant",
+    })
+    .optional(),
 });
 
 export type PlacesStatsInput = z.infer<typeof statsSchema>;
@@ -209,5 +223,6 @@ export function parsePlacesStatsParams(searchParams: URLSearchParams): PlacesSta
     countryCode: searchParams.get("country_code") ?? undefined,
     continentCode: searchParams.get("continent_code") ?? undefined,
     precision: searchParams.get("precision") ?? undefined,
+    sourceTheme: searchParams.get("source_theme") ?? undefined,
   });
 }
