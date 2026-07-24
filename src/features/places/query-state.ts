@@ -1,0 +1,153 @@
+import { foldForSearch } from "@/lib/import/normalize";
+import { parseCategoryGroups, type PlaceCategoryGroupKey } from "@/lib/places/categories";
+import { canonicalPlacesTheme, type PlacesEligibleTheme } from "@/lib/places/eligibility";
+import type { PlacePrecisionDto } from "@/contracts/api/places";
+import type { PlacesMapItem } from "@/server/places/map-view";
+
+// Pure filter state for the Places page: parsed from the URL, serialized back to
+// it, and applied in the browser over the full owner-scoped set (the owner capped
+// Places at ~1000 canonical places, so filtering never needs a round trip).
+// Keeping this module free of React and Leaflet makes every rule directly
+// testable and keeps deep links, history and rendering consistent.
+
+export const PLACE_PRECISION_VALUES = ["EXACT", "PROBABLE", "APPROXIMATE"] as const;
+export const REVIEW_FILTERS = ["needs_review", "confirmed"] as const;
+export type ReviewFilter = (typeof REVIEW_FILTERS)[number];
+
+export type PlacesFilters = {
+  q: string;
+  themes: PlacesEligibleTheme[];
+  categories: PlaceCategoryGroupKey[];
+  precisions: PlacePrecisionDto[];
+  reviews: ReviewFilter[];
+  countryCodes: string[];
+};
+
+export type PlacesUrlState = PlacesFilters & {
+  placeId: string | null;
+};
+
+export const EMPTY_FILTERS: PlacesFilters = {
+  q: "",
+  themes: [],
+  categories: [],
+  precisions: [],
+  reviews: [],
+  countryCodes: [],
+};
+
+function splitList(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of value.split(",")) {
+    const trimmed = part.trim();
+    if (!trimmed || seen.has(trimmed.toLowerCase())) continue;
+    seen.add(trimmed.toLowerCase());
+    out.push(trimmed);
+  }
+  return out;
+}
+
+export function parsePlacesUrlState(params: URLSearchParams): PlacesUrlState {
+  const themes: PlacesEligibleTheme[] = [];
+  for (const raw of splitList(params.get("theme"))) {
+    const theme = canonicalPlacesTheme(raw);
+    if (theme && !themes.includes(theme)) themes.push(theme);
+  }
+
+  const precisions = splitList(params.get("precision"))
+    .map((value) => value.toUpperCase())
+    .filter((value): value is PlacePrecisionDto =>
+      (PLACE_PRECISION_VALUES as readonly string[]).includes(value),
+    );
+
+  const reviews = splitList(params.get("review"))
+    .map((value) => value.toLowerCase())
+    .filter((value): value is ReviewFilter => (REVIEW_FILTERS as readonly string[]).includes(value));
+
+  const countryCodes = splitList(params.get("country"))
+    .map((value) => value.toUpperCase())
+    .filter((value) => /^[A-Z]{2}$/.test(value));
+
+  return {
+    q: (params.get("q") ?? "").trim(),
+    themes,
+    categories: parseCategoryGroups(params.get("categories")),
+    precisions,
+    reviews,
+    countryCodes,
+    placeId: params.get("placeId")?.trim() || null,
+  };
+}
+
+// Serialize back to a query string. Empty values are omitted so a default page
+// keeps a clean URL and the browser history stays meaningful.
+export function serializePlacesUrlState(state: PlacesUrlState): string {
+  const params = new URLSearchParams();
+  if (state.q) params.set("q", state.q);
+  if (state.themes.length > 0) params.set("theme", state.themes.join(","));
+  if (state.categories.length > 0) params.set("categories", state.categories.join(","));
+  if (state.precisions.length > 0) params.set("precision", state.precisions.join(","));
+  if (state.reviews.length > 0) params.set("review", state.reviews.join(","));
+  if (state.countryCodes.length > 0) params.set("country", state.countryCodes.join(","));
+  if (state.placeId) params.set("placeId", state.placeId);
+  return params.toString();
+}
+
+export function countActiveFilters(filters: PlacesFilters): number {
+  return (
+    (filters.q ? 1 : 0) +
+    filters.themes.length +
+    filters.categories.length +
+    filters.precisions.length +
+    filters.reviews.length +
+    filters.countryCodes.length
+  );
+}
+
+export function toggleValue<T>(list: readonly T[], value: T): T[] {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function matchesSearch(place: PlacesMapItem, folded: string): boolean {
+  if (!folded) return true;
+  const haystack = foldForSearch(
+    [place.displayName, place.city, place.region, place.country].filter(Boolean).join(" "),
+  );
+  return haystack.includes(folded);
+}
+
+// A place is "needs review" when it is unreviewed or in conflict and the user has
+// not confirmed it; "confirmed" mirrors the durable user decision.
+function matchesReview(place: PlacesMapItem, reviews: readonly ReviewFilter[]): boolean {
+  if (reviews.length === 0) return true;
+  return reviews.some((filter) =>
+    filter === "confirmed"
+      ? place.isUserConfirmed || place.reviewStatus === "CONFIRMED"
+      : !place.isUserConfirmed && (place.reviewStatus === "UNREVIEWED" || place.reviewStatus === "CONFLICT"),
+  );
+}
+
+export function filterPlaces(places: readonly PlacesMapItem[], filters: PlacesFilters): PlacesMapItem[] {
+  const folded = foldForSearch(filters.q.trim());
+  return places.filter((place) => {
+    if (!matchesSearch(place, folded)) return false;
+    if (filters.themes.length > 0 && !filters.themes.some((theme) => place.sourceThemes.includes(theme))) return false;
+    if (filters.categories.length > 0 && (!place.categoryGroup || !filters.categories.includes(place.categoryGroup))) {
+      return false;
+    }
+    if (filters.precisions.length > 0 && !filters.precisions.includes(place.precision)) return false;
+    if (!matchesReview(place, filters.reviews)) return false;
+    if (filters.countryCodes.length > 0 && (!place.countryCode || !filters.countryCodes.includes(place.countryCode))) {
+      return false;
+    }
+    return true;
+  });
+}
+
+// REJECTED places stay out of the map and the list: a rejected result is not a
+// place the user keeps. They remain reachable through the review filters only.
+export function isMappable(place: PlacesMapItem): boolean {
+  return place.reviewStatus !== "REJECTED";
+}

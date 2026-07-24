@@ -1,0 +1,455 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { BarChart3, Check, ListFilter, MapPin, Search, SlidersHorizontal, X } from "lucide-react";
+
+import { PLACE_CATEGORY_GROUPS } from "@/lib/places/categories";
+import { PLACES_ELIGIBLE_THEMES } from "@/lib/places/eligibility";
+import type { PlacesStatsDto } from "@/contracts/api/places";
+import type { PlacesMapItem } from "@/server/places/map-view";
+import { cn } from "@/lib/utils";
+import {
+  EMPTY_FILTERS,
+  PLACE_PRECISION_VALUES,
+  countActiveFilters,
+  filterPlaces,
+  isMappable,
+  serializePlacesUrlState,
+  toggleValue,
+  type PlacesFilters,
+  type PlacesUrlState,
+  type ReviewFilter,
+} from "@/features/places/query-state";
+import { PlaceDetailSheet } from "@/features/places/components/place-detail-sheet";
+
+// Leaflet must not run during SSR; the map arrives on the client only.
+const PlacesMap = dynamic(() => import("@/features/places/components/places-map"), {
+  ssr: false,
+  loading: () => <div className="places-map-canvas places-map-loading" aria-hidden="true" />,
+});
+
+const PRECISION_LABEL: Record<string, string> = {
+  EXACT: "Exact",
+  PROBABLE: "Probable",
+  APPROXIMATE: "Approximatif",
+};
+const REVIEW_LABEL: Record<ReviewFilter, string> = {
+  needs_review: "À vérifier",
+  confirmed: "Confirmés",
+};
+
+export type PlacesExplorerProps = {
+  places: PlacesMapItem[];
+  stats: PlacesStatsDto;
+  initialState: PlacesUrlState;
+  truncated: boolean;
+  isAdmin: boolean;
+  tileUrl: string;
+  tileAttribution: string;
+  tilesConfigured: boolean;
+};
+
+export function PlacesExplorer({
+  places,
+  stats,
+  initialState,
+  truncated,
+  isAdmin,
+  tileUrl,
+  tileAttribution,
+  tilesConfigured,
+}: PlacesExplorerProps) {
+  const [filters, setFilters] = useState<PlacesFilters>({ ...EMPTY_FILTERS, ...initialState });
+  const [selectedId, setSelectedId] = useState<string | null>(initialState.placeId);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [hover, setHover] = useState<{ place: PlacesMapItem; x: number; y: number } | null>(null);
+  const [, startTransition] = useTransition();
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  const mappable = useMemo(() => places.filter(isMappable), [places]);
+  const visible = useMemo(() => filterPlaces(mappable, filters), [mappable, filters]);
+  const selected = useMemo(
+    () => visible.find((place) => place.id === selectedId) ?? places.find((place) => place.id === selectedId) ?? null,
+    [visible, places, selectedId],
+  );
+  const activeFilterCount = countActiveFilters(filters);
+
+  // Countries actually present, so a filter can never be empty by construction.
+  const countries = useMemo(() => {
+    const map = new Map<string, { code: string; label: string; count: number }>();
+    for (const place of mappable) {
+      if (!place.countryCode) continue;
+      const entry = map.get(place.countryCode);
+      if (entry) entry.count += 1;
+      else map.set(place.countryCode, { code: place.countryCode, label: place.country ?? place.countryCode, count: 1 });
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }, [mappable]);
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const place of mappable) {
+      if (!place.categoryGroup) continue;
+      counts.set(place.categoryGroup, (counts.get(place.categoryGroup) ?? 0) + 1);
+    }
+    return counts;
+  }, [mappable]);
+
+  // Keep the URL in sync so filters and the selection are shareable and the
+  // browser back button works, without pushing an entry per keystroke.
+  useEffect(() => {
+    const query = serializePlacesUrlState({ ...filters, placeId: selectedId });
+    const next = query ? `/places?${query}` : "/places";
+    if (typeof window !== "undefined" && window.location.pathname + window.location.search !== next) {
+      window.history.replaceState(null, "", next);
+    }
+  }, [filters, selectedId]);
+
+  const patch = useCallback((next: Partial<PlacesFilters>) => {
+    startTransition(() => setFilters((current) => ({ ...current, ...next })));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    startTransition(() => setFilters({ ...EMPTY_FILTERS }));
+  }, []);
+
+  const handleSelect = useCallback((placeId: string) => {
+    setSelectedId(placeId);
+    setHover(null);
+  }, []);
+
+  const handleHover = useCallback((place: PlacesMapItem | null, point: { x: number; y: number } | null) => {
+    setHover(place && point ? { place, x: point.x, y: point.y } : null);
+  }, []);
+
+  return (
+    <section className="places-shell" aria-label="Lieux sauvegardés">
+      <div className="places-stage">
+        {tilesConfigured ? (
+          <PlacesMap
+            places={visible}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+            onHover={handleHover}
+            tileUrl={tileUrl}
+            tileAttribution={tileAttribution}
+          />
+        ) : (
+          <div className="places-map-canvas places-map-missing">
+            <MapPin aria-hidden="true" />
+            <p>
+              La carte n’est pas configurée. Renseignez <code>NEXT_PUBLIC_PLACES_TILE_URL</code> pour afficher le fond
+              de carte ; la liste et les filtres restent utilisables.
+            </p>
+          </div>
+        )}
+
+        {/* Hover callout: photo + arrow pointing at the marker. Informative only. */}
+        {hover ? (
+          <div
+            className="places-callout"
+            style={{ left: hover.x, top: hover.y }}
+            role="tooltip"
+            aria-hidden="true"
+          >
+            <div className="places-callout-media">
+              {hover.place.previewThumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={hover.place.previewThumbnailUrl} alt="" loading="lazy" />
+              ) : (
+                <span className="places-callout-fallback" aria-hidden="true">
+                  <MapPin />
+                </span>
+              )}
+              <span className={cn("places-badge", `is-${hover.place.precision.toLowerCase()}`)}>
+                {hover.place.precision === "APPROXIMATE" && hover.place.approximationRadiusMeters
+                  ? `Zone ~${Math.round(hover.place.approximationRadiusMeters / 1000)} km`
+                  : PRECISION_LABEL[hover.place.precision]}
+              </span>
+            </div>
+            <div className="places-callout-body">
+              <p className="places-callout-name">{hover.place.displayName}</p>
+              <p className="places-callout-sub">
+                {[hover.place.city, hover.place.country].filter(Boolean).join(" · ") || "Localisation"}
+              </p>
+              <p className="places-callout-count">{hover.place.postCount} post(s)</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Top control bar: search + a single filters button. */}
+        <div className="places-topbar">
+          <div className="places-search">
+            <Search aria-hidden="true" size={15} />
+            <input
+              ref={searchRef}
+              type="search"
+              value={filters.q}
+              placeholder="Rechercher un lieu, une ville, un pays…"
+              aria-label="Rechercher un lieu"
+              onChange={(event) => patch({ q: event.target.value })}
+            />
+            {filters.q ? (
+              <button type="button" className="places-search-clear" aria-label="Effacer la recherche" onClick={() => patch({ q: "" })}>
+                <X size={14} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className={cn("places-button", activeFilterCount > 0 && "is-active")}
+            aria-expanded={filtersOpen}
+            aria-controls="places-filters"
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            <SlidersHorizontal size={15} aria-hidden="true" />
+            Filtres
+            {activeFilterCount > 0 ? <span className="places-count-badge">{activeFilterCount}</span> : null}
+          </button>
+        </div>
+
+        {filtersOpen ? (
+          <div className="places-panel" id="places-filters" role="dialog" aria-label="Filtres">
+            <header>
+              <h2>Filtres</h2>
+              <div className="places-panel-actions">
+                <button type="button" className="places-link" onClick={clearFilters}>
+                  Effacer
+                </button>
+                <button type="button" className="places-icon-button" aria-label="Fermer les filtres" onClick={() => setFiltersOpen(false)}>
+                  <X size={15} aria-hidden="true" />
+                </button>
+              </div>
+            </header>
+            <div className="places-panel-body">
+              <FilterGroup label="Thème du post">
+                {PLACES_ELIGIBLE_THEMES.map((theme) => (
+                  <FilterOption
+                    key={theme}
+                    checked={filters.themes.includes(theme)}
+                    label={theme}
+                    onToggle={() => patch({ themes: toggleValue(filters.themes, theme) })}
+                  />
+                ))}
+              </FilterGroup>
+
+              <FilterGroup label="Type de lieu">
+                {PLACE_CATEGORY_GROUPS.map((group) => (
+                  <FilterOption
+                    key={group.key}
+                    checked={filters.categories.includes(group.key)}
+                    label={`${group.icon} ${group.label}`}
+                    count={categoryCounts.get(group.key) ?? 0}
+                    onToggle={() => patch({ categories: toggleValue(filters.categories, group.key) })}
+                  />
+                ))}
+              </FilterGroup>
+
+              <FilterGroup label="Précision">
+                {PLACE_PRECISION_VALUES.map((precision) => (
+                  <FilterOption
+                    key={precision}
+                    checked={filters.precisions.includes(precision)}
+                    label={PRECISION_LABEL[precision]}
+                    swatch={precision}
+                    onToggle={() => patch({ precisions: toggleValue(filters.precisions, precision) })}
+                  />
+                ))}
+              </FilterGroup>
+
+              <FilterGroup label="Revue">
+                {(Object.keys(REVIEW_LABEL) as ReviewFilter[]).map((review) => (
+                  <FilterOption
+                    key={review}
+                    checked={filters.reviews.includes(review)}
+                    label={REVIEW_LABEL[review]}
+                    onToggle={() => patch({ reviews: toggleValue(filters.reviews, review) })}
+                  />
+                ))}
+              </FilterGroup>
+
+              {countries.length > 0 ? (
+                <FilterGroup label="Pays">
+                  {countries.slice(0, 12).map((country) => (
+                    <FilterOption
+                      key={country.code}
+                      checked={filters.countryCodes.includes(country.code)}
+                      label={country.label}
+                      count={country.count}
+                      onToggle={() => patch({ countryCodes: toggleValue(filters.countryCodes, country.code) })}
+                    />
+                  ))}
+                </FilterGroup>
+              ) : null}
+            </div>
+            <footer>
+              <button type="button" className="places-primary" onClick={() => setFiltersOpen(false)}>
+                Appliquer
+              </button>
+            </footer>
+          </div>
+        ) : null}
+
+        {statsOpen ? (
+          <div className="places-stats" role="dialog" aria-label="Statistiques">
+            <header>
+              <h2>Statistiques</h2>
+              <button type="button" className="places-icon-button" aria-label="Fermer les statistiques" onClick={() => setStatsOpen(false)}>
+                <X size={15} aria-hidden="true" />
+              </button>
+            </header>
+            <StatBars label="Par thème" rows={stats.byTheme.map((row) => ({ key: row.theme, label: row.theme, value: row.placeCount }))} />
+            <StatBars
+              label="Par pays"
+              rows={stats.byCountry
+                .slice(0, 6)
+                .map((row) => ({ key: row.countryCode ?? row.country ?? "?", label: row.country ?? row.countryCode ?? "Inconnu", value: row.placeCount }))}
+            />
+          </div>
+        ) : null}
+
+        {listOpen ? (
+          <aside className="places-drawer" aria-label="Liste des lieux">
+            <header>
+              <h2>
+                {visible.length} lieu{visible.length > 1 ? "x" : ""}
+              </h2>
+              <button type="button" className="places-icon-button" aria-label="Fermer la liste" onClick={() => setListOpen(false)}>
+                <X size={15} aria-hidden="true" />
+              </button>
+            </header>
+            <ul className="places-list">
+              {visible.map((place) => (
+                <li key={place.id}>
+                  <button
+                    type="button"
+                    className={cn("places-row", place.id === selectedId && "is-selected")}
+                    data-place-id={place.id}
+                    onClick={() => handleSelect(place.id)}
+                  >
+                    <span className="places-row-thumb" aria-hidden="true">
+                      {place.previewThumbnailUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={place.previewThumbnailUrl} alt="" loading="lazy" />
+                      ) : (
+                        <MapPin size={16} />
+                      )}
+                    </span>
+                    <span className="places-row-body">
+                      <span className="places-row-name">{place.displayName}</span>
+                      <span className="places-row-sub">
+                        {[place.city, place.country].filter(Boolean).join(" · ") || "—"}
+                      </span>
+                      <span className="places-row-meta">
+                        <span className={cn("places-badge", `is-${place.precision.toLowerCase()}`)}>
+                          {PRECISION_LABEL[place.precision]}
+                        </span>
+                        <span className="places-row-count">{place.postCount} post(s)</span>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {visible.length === 0 ? <li className="places-empty">Aucun lieu ne correspond à ces filtres.</li> : null}
+            </ul>
+          </aside>
+        ) : null}
+
+        {selected ? (
+          <PlaceDetailSheet
+            place={selected}
+            isAdmin={isAdmin}
+            onClose={() => setSelectedId(null)}
+          />
+        ) : null}
+
+        <div className="places-summary" role="status">
+          <span>
+            <strong>{visible.length}</strong> lieu{visible.length > 1 ? "x" : ""}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            <strong>{stats.totals.postsWithPlaces}</strong> posts
+          </span>
+          {stats.totals.needsReview > 0 ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="places-summary-review">{stats.totals.needsReview} à vérifier</span>
+            </>
+          ) : null}
+          <span aria-hidden="true">·</span>
+          <button type="button" className="places-link" aria-expanded={statsOpen} onClick={() => setStatsOpen((open) => !open)}>
+            <BarChart3 size={13} aria-hidden="true" /> Statistiques
+          </button>
+          <span aria-hidden="true">·</span>
+          <button type="button" className="places-link" aria-expanded={listOpen} onClick={() => setListOpen((open) => !open)}>
+            <ListFilter size={13} aria-hidden="true" /> Liste
+          </button>
+        </div>
+
+        {truncated ? (
+          <p className="places-truncated" role="status">
+            Seuls les 1000 lieux les plus récents sont affichés.
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="places-filter-group">
+      <legend>{label}</legend>
+      {children}
+    </fieldset>
+  );
+}
+
+function FilterOption({
+  checked,
+  label,
+  count,
+  swatch,
+  onToggle,
+}: {
+  checked: boolean;
+  label: string;
+  count?: number;
+  swatch?: string;
+  onToggle: () => void;
+}) {
+  return (
+    <label className="places-option">
+      <input type="checkbox" checked={checked} onChange={onToggle} />
+      <span className={cn("places-checkbox", checked && "is-checked")} aria-hidden="true">
+        {checked ? <Check size={12} /> : null}
+      </span>
+      {swatch ? <span className={cn("places-swatch", `is-${swatch.toLowerCase()}`)} aria-hidden="true" /> : null}
+      <span className="places-option-label">{label}</span>
+      {count != null ? <span className="places-option-count">{count}</span> : null}
+    </label>
+  );
+}
+
+function StatBars({ label, rows }: { label: string; rows: Array<{ key: string; label: string; value: number }> }) {
+  const max = rows.reduce((peak, row) => Math.max(peak, row.value), 0) || 1;
+  return (
+    <div className="places-stat-block">
+      <p className="places-stat-label">{label}</p>
+      {rows.length === 0 ? <p className="places-stat-empty">Aucune donnée.</p> : null}
+      {rows.map((row) => (
+        <div className="places-stat-row" key={row.key}>
+          <span className="places-stat-key">{row.label}</span>
+          <span className="places-stat-track">
+            <span className="places-stat-fill" style={{ width: `${Math.round((row.value / max) * 100)}%` }} />
+          </span>
+          <span className="places-stat-value">{row.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
