@@ -52,9 +52,11 @@ CI #115 passed on reviewed head:
 Merge commit on develop:
 08be9f04df60c9d8e138242fc0d7b0504e0ba51e
 
-Operational follow-up only:
-FPS_BUDGET_PENDING_REAL_GPU_VALIDATION — the CI container used SwiftShader and no
-real GPU. This does not reopen or block the merged Phase I architecture.
+Performance validation:
+FPS_BUDGET_VALIDATED_ON_REAL_GPU — closed 25 July 2026. Measured on an NVIDIA
+GeForce RTX 5090 (ANGLE / Direct3D11): 240 fps and 276-326 ms first globe render
+at 100, 500 and 1000 places, desktop and mobile viewport. All D6 budgets met.
+No Phase I follow-up remains open.
 ```
 
 Phase G owner decisions remain final for the 2D implementation:
@@ -153,7 +155,7 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 
 ## 7. Open decisions and operational follow-ups
 
-- **Phase I GPU measurement:** status `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`. SwiftShader measured 20 fps desktop and 18 fps mobile. The workload evidence is fill-rate bound and the applied pixel-ratio cap improved mobile from 12 to 18 fps. A real-GPU run remains useful, but it is not a merge blocker and does not reopen Phase I.
+- ~~**Phase I GPU measurement**~~ — **closed 25 July 2026**, status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`. Measured on an NVIDIA GeForce RTX 5090: 240 fps and 276-326 ms first render at every place count, desktop and mobile viewport. This confirmed the recorded diagnosis — the CI figures (20 fps desktop, 18 fps mobile) were fill-rate bound on a SwiftShader software rasterizer, not scene bound. Both runs are kept in the change record. One honest limit stands: the mobile figures come from a mobile **viewport** on desktop-class hardware, not from a phone GPU, so low-end phone behaviour remains a reasoned expectation rather than a measurement — which is why the WebGL fallback and the pixel-ratio cap stay in place.
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups and observability for Phase E;
 - final confirmation model for sensitive Phase J commands.

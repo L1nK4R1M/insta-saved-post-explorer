@@ -31,7 +31,7 @@ Status values:
 | E — Global worker foundation | READY | Phase C | None | Separate VPS phase. Required before Phase H deep analysis. |
 | G — Places 2D UI and contextual navigation | COMPLETE | Phase F complete | PR #34, squash `2bd2098` | `/places`, Leaflet + markercluster, Geoapify raster tiles, synchronized list, complete filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. Review fixes validated: authenticated read Server Action, complete `sourceThemes`, all countries filterable. CI #107 green; 50 files / 440 tests locally; no migration. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
-| I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | T1–T10 merged: additive `view=map|globe`, pure projection module, renderer seam, WebGL probe and fallback, lazy `react-globe.gl` 2.38.0 / `three` 0.185.1, public-domain Natural Earth texture generated locally with documented licence, segmented `2D | 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. CI #115 green; 466 unit tests and 92 e2e green after risk-based consolidation. No migration, no API change, Leaflet preserved. Measured: `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry, first globe render 907–1033 ms at 1000 places. `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION` remains an operational follow-up, not a merge blocker. |
+| I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | T1–T10 merged: additive `view=map|globe`, pure projection module, renderer seam, WebGL probe and fallback, lazy `react-globe.gl` 2.38.0 / `three` 0.185.1, public-domain Natural Earth texture generated locally with documented licence, segmented `2D | 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. CI #115 green; 466 unit tests and 92 e2e green after risk-based consolidation. No migration, no API change, Leaflet preserved. Measured: `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry; first globe render 907–1033 ms on the GPU-less CI baseline. **Performance validated on real GPU** (`FPS_BUDGET_VALIDATED_ON_REAL_GPU`, 25 July 2026): NVIDIA GeForce RTX 5090, 240 fps and 276-326 ms first render at 100/500/1000 places, desktop and mobile viewport — all D6 budgets met. No Phase I follow-up remains open. |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
 
 ## Current execution pointer
@@ -57,16 +57,20 @@ Recorded proof for Phase I
 - The Phase G e2e suite passes unmodified.
 - /places initial 2D client JS: 392.0 KiB -> 396.3 KiB (+4.2 KiB, +1.08 %).
 - The 1.86 MiB 3D chunk is absent from the /places 2D entry.
-- First globe render 907-1033 ms with 1000 places.
-- Frame rate measured under SwiftShader: 20 fps desktop / 18 fps mobile.
-  Status: FPS_BUDGET_PENDING_REAL_GPU_VALIDATION.
+- Performance validated on real GPU hardware (NVIDIA GeForce RTX 5090, ANGLE/D3D11):
+  240 fps and 276-326 ms first globe render at 100, 500 and 1000 places, desktop and
+  mobile viewport. All D6 budgets met.
+  Status: FPS_BUDGET_VALIDATED_ON_REAL_GPU.
+- Kept for context: the GPU-less CI baseline measured 907-1033 ms first render and
+  20 fps desktop / 18 fps mobile under SwiftShader. The GPU run confirmed that gap
+  was fill-rate bound on a software rasterizer, not scene bound.
 - No Prisma migration, no public-contract break, no Neon change, no secret.
 ```
 
 ## Next agent action
 
 1. Treat Phase I as merged and complete; do not reopen its settled architecture decisions.
-2. Optionally run `npm run places:measure-globe` on a machine with a real GPU and record the result under `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`.
+2. Phase I performance is validated on real hardware and needs no further measurement; re-run `npm run places:measure-globe` only if the globe scene or the engine version changes.
 3. The next executable infrastructure phase is Phase E — Global worker foundation.
 4. Phase H remains blocked until Phase E is complete.
 5. Keep Phase E, H and J in separate branches and PRs; do not mix worker, deep analysis, Hermes or MCP work.
