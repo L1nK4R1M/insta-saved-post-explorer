@@ -11,9 +11,10 @@ cameras, full mobile 3D with a WebGL fallback, and the measurable budgets in D6)
 architecture, dependency versions, texture licence, test inventory and every measured
 value are recorded in `docs/changes/2026-07-25-phase-i-places-3d-implementation.md`.
 
-One item from T9 is **not** closed: the D6 frame-rate budgets could not be validated
-because the CI container has no GPU. The measurement, its diagnosis and the applied
-optimization are recorded; the remaining decision belongs to the owner.
+T9 is now fully closed: the D6 frame-rate budgets, which the GPU-less CI container
+could not validate, were measured on an NVIDIA GeForce RTX 5090 on 25 July 2026 —
+240 fps and 276–326 ms first render at 100, 500 and 1000 places. All D6 budgets are
+met. Status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`.
 
 Requirements referenced here are defined in `docs/phase-i-places-3d-brief.md` §2.
 The task order below is the dependency order: each task is independently

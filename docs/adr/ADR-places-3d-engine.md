@@ -219,9 +219,11 @@ The decision was implemented as recorded; nothing in it was reopened.
   fill-rate bound. On a device with `devicePixelRatio` 3 the engine rasterizes nine
   times the pixels of a logical one, so the renderer's pixel ratio is capped at 1.5;
   measured effect on an emulated Pixel 7: **12 → 18 fps**. The D6 frame-rate budgets
-  themselves remain **unvalidated** because the CI container has no GPU. Evidence and
-  the open owner decision are in
-  `changes/2026-07-25-phase-i-places-3d-implementation.md` §6.3 and §9.
+  were then **validated on real GPU hardware** (25 July 2026, NVIDIA GeForce RTX
+  5090): 240 fps and 276–326 ms first render at 100, 500 and 1000 places. All D6
+  budgets are met, and the fill-rate diagnosis is confirmed by measurement rather
+  than expectation. Status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`; both runs are kept in
+  `changes/2026-07-25-phase-i-places-3d-implementation.md` §6.2.
 
 ## 11. Re-evaluation triggers
 

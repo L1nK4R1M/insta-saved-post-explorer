@@ -1,6 +1,6 @@
 # Phase I — Places 3D globe — entry brief
 
-**Status: IMPLEMENTED — awaiting review.** T1–T10 are built on
+**Status: COMPLETE — merged and validated.** T1–T10 are built on
 `claude/phase-i-places-3d-implementation`; what was actually delivered, with all
 measured values, is recorded in
 `changes/2026-07-25-phase-i-places-3d-implementation.md`. This document remains the
@@ -339,9 +339,15 @@ Leaflet**, and any redesign of `/places` beyond adding the view.
 1. ✅ Decisions approved and recorded (ADR §10, `ACCEPTED`). **Gate closed.**
 2. ✅ T1 → T10 implemented on `claude/phase-i-places-3d-implementation`. Leaflet is
    not replaced and no migration was introduced.
-3. ✅ Real measurements recorded. Bundle and time-to-first-render budgets are **met**;
-   the D6 **frame-rate** budgets could not be validated because the CI container has
-   no GPU, and the evidence for that conclusion is in the change record §6.3.
-4. ⏳ **Open owner decision**: accept the phase with the frame-rate budgets pending a
-   run on a GPU device, or hold it until `npm run places:measure-globe` has been run
-   on real hardware. Phase I must not be marked COMPLETE while this is open.
+3. ✅ Real measurements recorded, and **validated on real GPU hardware**
+   (25 July 2026, NVIDIA GeForce RTX 5090): 240 fps and 276–326 ms first globe
+   render at 100, 500 and 1000 places, desktop and mobile viewport. Bundle,
+   time-to-first-render and frame-rate budgets are **all met** — see the change
+   record §6.2. Status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`.
+4. ✅ Phase I merged (PR #36, squash `08be9f0`) and **COMPLETE**. No follow-up
+   remains open.
+
+One limit is recorded rather than glossed over: the "mobile" measurements come from
+a mobile **viewport** on desktop-class hardware, not from a phone GPU. Behaviour on
+a low-end phone stays a reasoned expectation, which is why the WebGL fallback and
+the pixel-ratio cap remain part of the design.

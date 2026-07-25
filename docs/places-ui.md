@@ -213,9 +213,10 @@ the list drawer remains the complete keyboard path and the globe never traps foc
 ### 10.6 Cost
 
 The 3D engine ships in its own chunk (~1.86 MiB) that a 2D-only session never
-requests; the `/places` initial 2D payload grew by 4.2 KiB (+1.08 %). Measured
-values are in `docs/changes/2026-07-25-phase-i-places-3d-implementation.md`, which
-also records which D6 budgets are met and which still need a GPU device.
+requests; the `/places` initial 2D payload grew by 4.2 KiB (+1.08 %). All performance budgets are met and validated on real GPU hardware (NVIDIA GeForce
+RTX 5090): 240 fps and 276–326 ms first globe render at up to 1000 places. The full
+measurements, including the GPU-less CI baseline kept for context, are in
+`docs/changes/2026-07-25-phase-i-places-3d-implementation.md` §6.2.
 
 ## 11. Deliberately out of scope
 

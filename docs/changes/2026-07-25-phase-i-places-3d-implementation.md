@@ -6,6 +6,9 @@
 - VibeSpec route: **Critical** — implementation stage of the route whose design and
   ADR gates are already closed.
 - Tasks: **T1 → T10** of `superpowers/plans/2026-07-25-phase-i-places-3d.md`
+- Merged: PR #36, squash `08be9f0`
+- Performance: **`FPS_BUDGET_VALIDATED_ON_REAL_GPU`** (25 July 2026) — all D6
+  budgets met on an NVIDIA GeForce RTX 5090; see §6.2
 
 ## 1. Architecture actually implemented
 
@@ -147,11 +150,50 @@ The 1.86 MiB engine is in a separate chunk that a 2D-only session never requests
 verified by the loadable manifest and by an e2e test that asserts the globe canvas
 is absent at `view=map`. **No significant regression of the 2D bundle.**
 
-### 6.2 Runtime
+### 6.2 Runtime — validated on real GPU hardware
 
 Harness: `scripts/places/measure-globe.mjs`, production build, local PostgreSQL
 seeded with synthetic places, Chromium. Frame rate sampled **while dragging**, not
 on a static globe.
+
+The budgets were measured twice: first in the GPU-less CI container, then on real
+hardware. **Both runs are kept** — the second closes the question, the first
+explains why the phase shipped with it open.
+
+#### Reference run — real GPU (25 July 2026)
+
+```text
+ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 (0x00002B85) Direct3D11 vs_5_0 ps_5_0, D3D11)
+```
+
+| Profile | Places | First globe render | fps |
+| --- | --- | --- | --- |
+| desktop | 100 | 326 ms | 240 |
+| desktop | 500 | 279 ms | 240 |
+| desktop | 1000 | **276 ms** | **240** |
+| mobile viewport | 100 | 303 ms | 240 |
+| mobile viewport | 500 | 278 ms | 240 |
+| mobile viewport | 1000 | **302 ms** | **240** |
+
+Two things this measurement does and does not say, stated plainly:
+
+- **240 fps is a floor, not a ceiling.** The harness counts
+  `requestAnimationFrame` callbacks, which the browser caps at the display refresh
+  rate. Every configuration sustained 240 Hz without dropping a frame, so the
+  renderer's real headroom is *at least* this. It is not evidence that it could not
+  go higher.
+- **The "mobile" rows are a mobile viewport, not a phone SoC.** The Playwright
+  mobile project emulates a Pixel 7 viewport and device pixel ratio on the same
+  RTX 5090. It validates the layout and the pixel-ratio cap at mobile dimensions;
+  it does **not** measure a phone GPU. The ≥ 30 fps mobile budget is therefore met
+  with a very large margin on desktop-class hardware, and remains a reasoned
+  expectation — not a measurement — for low-end phones.
+
+Scene size costs nothing measurable: 100 → 1000 places moves first render between
+276 ms and 326 ms with no frame-rate change at all, which is what the fill-rate
+analysis in §6.3 predicted.
+
+#### Baseline run — CI container, no GPU
 
 | Profile | Places | First globe render | fps (before opt.) | fps (after opt.) |
 | --- | --- | --- | --- | --- |
@@ -164,25 +206,28 @@ on a static globe.
 
 **Against the D6 budgets:**
 
-| Budget | Target | Measured | Verdict |
-| --- | --- | --- | --- |
-| First globe render | < 3 s | 907–1033 ms | ✅ **met**, at every count |
-| ~1000 places supported | yes | yes, no degradation from 100 → 1000 | ✅ **met** |
-| 2D bundle regression | none significant | +1.08 % | ✅ **met** |
-| Desktop frame rate | 50–60 fps | **20 fps** | ❌ **not met in this environment** |
-| Mobile frame rate | ≥ 30 fps | **18 fps** | ❌ **not met in this environment** |
+| Budget | Target | Real GPU | CI, no GPU | Verdict |
+| --- | --- | --- | --- | --- |
+| First globe render | < 3 s | **276–326 ms** | 907–1033 ms | ✅ **met** in both |
+| ~1000 places supported | yes | yes, no degradation | yes, no degradation | ✅ **met** in both |
+| 2D bundle regression | none significant | +1.08 % | +1.08 % | ✅ **met** |
+| Desktop frame rate | 50–60 fps | **240 fps** | 20 fps | ✅ **met** on real hardware |
+| Mobile frame rate | ≥ 30 fps | **240 fps** (emulated viewport) | 18 fps | ✅ **met** on real hardware |
 
-### 6.3 Why the frame-rate budgets could not be validated here
+**All D6 budgets are met.** Every measurable Phase I performance target is now
+backed by a run on hardware, not by expectation.
 
-The CI container has **no GPU**. Chromium reports
+### 6.3 Why the CI baseline was slow — diagnosis, confirmed
+
+The container that ran the first measurement has **no GPU**. Chromium reported
 `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)` —
 a pure CPU software rasterizer.
 
-Two measurements identify the bottleneck, rather than assuming it:
+Two measurements identified the bottleneck at the time, rather than assuming it:
 
-1. **Frame rate is flat across scene size.** 100, 500 and 1000 places all give
-   19–20 fps on desktop. If our scene were the cost, it would fall with the count.
-2. **Frame rate tracks pixel count almost exactly.** At a fixed 1000 places:
+1. **Frame rate was flat across scene size.** 100, 500 and 1000 places all gave
+   19–20 fps. Had our scene been the cost, it would have fallen with the count.
+2. **Frame rate tracked pixel count almost exactly.** At a fixed 1000 places:
 
    | Canvas | Pixels | fps |
    | --- | --- | --- |
@@ -191,33 +236,29 @@ Two measurements identify the bottleneck, rather than assuming it:
    | 720×450 @2× | 1.30 Mpx | 26 |
    | 1440×900 @1× | 1.30 Mpx | 22 |
 
-   Frame rate is governed by pixels rasterized, not by places drawn: the workload
-   is fill-rate bound on a CPU rasterizer.
+   Frame rate was governed by pixels rasterized, not by places drawn: the workload
+   was fill-rate bound on a CPU rasterizer.
 
-**The optimization applied and re-measured.** The renderer's pixel ratio is now
+**The GPU run confirms that diagnosis.** The same scene, at the same place counts,
+runs at the display refresh rate once rasterization is hardware-accelerated — a
+12× improvement that came from the renderer, not from a code change. The conclusion
+recorded here in the open state ("the residual gap is the absent GPU") was correct,
+and it is now a measurement rather than an expectation.
+
+**The optimization applied at the time stands.** The renderer's pixel ratio is
 capped at 1.5 (`MAX_PIXEL_RATIO` in `places-globe.tsx`). A phone at
 `devicePixelRatio` 3 was rasterizing nine times the pixels of a logical one, for no
-visible gain on a smooth sphere. Measured effect: **mobile 12 → 18 fps (+50 %)**;
-desktop unchanged, which is expected and confirms the diagnosis — desktop already
-ran at ratio 1, so the cap does not apply there. This is a real improvement on real
-high-DPI phones, not a CI artefact.
+visible gain on a smooth sphere. Measured effect on the CI baseline: **mobile
+12 → 18 fps (+50 %)**. It remains worthwhile for real high-DPI phones, where fill
+rate is a genuine constraint, even though the GPU run has headroom to spare.
 
-**What remains open.** The residual gap is the absent GPU. On any device with
-hardware acceleration the same scene is rasterized by the GPU and the fill-rate wall
-measured here does not apply — but that is a reasoned expectation, **not a
-measurement**, and this record does not present it as one. The D6 frame-rate budgets
-therefore remain **unvalidated** and require one run on real hardware:
+**Status: `FPS_BUDGET_VALIDATED_ON_REAL_GPU`** (was
+`FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`, closed 25 July 2026). Reproduction:
 
 ```bash
 npm run build && npm run start
-DATABASE_URL=<local> node scripts/places/measure-globe.mjs --url http://127.0.0.1:3000
+DATABASE_URL=<local> npm run places:measure-globe -- --url http://127.0.0.1:3000
 ```
-
-**Status: `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`.** The SwiftShader numbers above
-are kept as measured, no GPU value is invented, and the reproduction command is
-given. **This needs an owner decision** (see §9): accept the phase with the
-frame-rate budgets pending a run on a GPU device, or hold it until that run is
-done.
 
 ## 7. Tests — risk-based, consolidated after review
 
@@ -273,14 +314,18 @@ The whole Phase G e2e suite passes **unmodified** (FR-I-02).
 
 ## 9. Risks, limits and open points
 
-- **`FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`** — see §6.3. Requires one run on a GPU
-  device. **Owner decision needed.** The SwiftShader measurements stand as recorded
-  and no GPU figure is invented.
-- The atmospheric halo and the globe texture are the fill-rate cost centre; if a
-  real device also misses the budget, the next measured levers are disabling
-  antialiasing and lowering `atmosphereAltitude`. Neither was applied here, because
-  trading visible quality against a number produced by a software rasterizer would
-  be optimizing for the wrong target.
+- ~~`FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`~~ — **closed 25 July 2026** by a run on
+  an NVIDIA GeForce RTX 5090: 240 fps and 276–326 ms first render at every count.
+  All D6 budgets met. See §6.2.
+- The remaining honest limit: the "mobile" measurement is a mobile **viewport** on
+  desktop-class hardware, not a phone GPU. Low-end phone behaviour is still a
+  reasoned expectation. The WebGL fallback and the pixel-ratio cap exist precisely
+  because that case is not measured.
+- The atmospheric halo and the globe texture are the fill-rate cost centre. On GPU
+  hardware there is ample headroom, so nothing further was applied. Should a
+  genuinely constrained device ever miss the budget, the next measured levers are
+  disabling antialiasing and lowering `atmosphereAltitude` — in that order, and
+  measured, not assumed.
 - Aggregation thresholds (`CONTINENT_ALTITUDE_MIN`, `COUNTRY_ALTITUDE_MIN`,
   `AGGREGATION_MIN_PLACES`) are reasoned defaults tested for behaviour, not tuned
   against a real corpus; they are constants in one pure module.
