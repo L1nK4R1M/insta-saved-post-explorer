@@ -273,6 +273,20 @@ insta-post-explorer-worker
 - aucun second service backend pour le globe ;
 - comportement stable sur desktop et fallback mobile raisonnable.
 
+**Documents de préparation (Phase I) :**
+
+- `phase-i-places-3d-brief.md` — audit brownfield de la Phase G, exigences FR/NFR
+  mesurables, critères d'acceptation, architecture cible et trois concepts UX ;
+- `adr/ADR-places-3d-engine.md` — comparaison des moteurs et décision (statut
+  `PROPOSED` tant que le propriétaire n'a pas tranché) ;
+- `superpowers/plans/2026-07-25-phase-i-places-3d.md` — tâches ordonnées T0–T10 et
+  matrice de traçabilité.
+
+La Phase I reste `AWAITING_OWNER_DECISION` : aucun code de production avant que le
+moteur, le concept visuel, la source de fond de carte/terrain, le budget et le
+comportement 2D ↔ 3D ne soient explicitement décidés. La Phase I ne remplace pas
+Leaflet : la carte 2D de la Phase G est conservée.
+
 ### Phase J. MCP et Hermes
 
 **But :** exposer tous les domaines par un seul adaptateur MCP.

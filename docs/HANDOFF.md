@@ -112,27 +112,32 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E and stable worker infrastructure. |
-| I — Places 3D globe | READY | Phase G is complete and the shared Places data source is stable. |
+| I — Places 3D globe | AWAITING_OWNER_DECISION | Entry gate satisfied (Phase G complete, data source stable) and the design pack is delivered on `claude/phase-i-places-3d-design`. Implementation is held until the owner resolves `adr/ADR-places-3d-engine.md` §10. |
 | J — Unified MCP and Hermes | BLOCKED | Requires later orchestration decisions and confirmations. |
 
 ## 7. Open decisions that must not be guessed
 
-- 3D engine/provider for Phase I (`Three.js`, Cesium or another explicitly approved option);
-- terrain/building/globe tile provider and cost model;
-- final 3D visual direction and interaction contract;
-- 2D ↔ 3D switching behaviour;
-- shared selection, URL state and camera synchronization;
-- mobile and accessibility fallback for the 3D view;
-- performance budget for fewer than 1000 canonical places;
+- **Phase I decisions — the design pack is ready and waiting on these** (`adr/ADR-places-3d-engine.md` §10):
+  1. 3D engine — recommended: Three.js via `globe.gl`/`react-globe.gl`; alternatives: raw Three.js, CesiumJS, MapLibre globe;
+  2. visual concept — Concept 1 cinematic, Concept 2 sober (lowest risk, recommended), or Concept 3 travel exploration;
+  3. globe texture/basemap source and, for Cesium or MapLibre, the terrain/tile provider and its budget;
+  4. 2D ↔ 3D behaviour — independent or shared camera; does the globe ever become the default view;
+  5. mobile — full globe or 2D-only on small screens;
+  6. performance budget — acceptable added bundle weight and target frame rate;
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups and observability for Phase E;
 - final confirmation model for sensitive Phase J commands.
 
-## 8. Exact next action — Phase I preparation
+## 8. Exact next action — Phase I decision
 
-1. Start from the latest `develop`; do not reuse `claude/phase-g-places-2d-ui`.
-2. Perform a brownfield audit of the merged `/places` implementation, especially `PlacesMap`, query-state, selection, detail sheet, statistics and accessibility fallbacks.
-3. Do not write production code before the owner has explicitly chosen the 3D engine/provider and visual direction.
-4. Produce a Phase I entry brief, ADR, requirements, acceptance criteria, implementation tasks and traceability matrix.
-5. Keep the first Phase I PR limited to documentation and architecture unless the owner explicitly authorizes implementation.
-6. Do not mix Phase E, H, J, worker, Hermes, MCP, OCR, transcription or multimodal analysis into Phase I.
+The Phase I preparation is **done** (design pack on `claude/phase-i-places-3d-design`):
+brownfield audit, engine comparison, PROPOSED ADR with a weighted decision table,
+three UX concepts, target architecture, FR/NFR with measurable criteria, acceptance
+criteria, ordered tasks T0–T10, traceability matrix and test strategy. No production
+code and no dependency were added.
+
+1. Read `phase-i-places-3d-brief.md` and `adr/ADR-places-3d-engine.md`.
+2. Decide ADR §10: engine, visual concept, basemap/terrain source, budget, 2D ↔ 3D behaviour, mobile.
+3. Record the decisions in task T0 (ADR moved to `ACCEPTED`) — this is the gate; no production code before it.
+4. Then implement T1–T10 from `superpowers/plans/2026-07-25-phase-i-places-3d.md` in a dedicated branch off the latest `develop`.
+5. Keep Phase I to the 3D experience alone: no Phase E, H, J, worker, Hermes, MCP, OCR, transcription or multimodal analysis, no Prisma migration, and **do not replace Leaflet**.

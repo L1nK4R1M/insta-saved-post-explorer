@@ -927,6 +927,13 @@ Carte 2D :
 Globe 3D :
 
 - projection globe du même moteur lorsque possible ;
+  > Interprétation Phase I (25 juillet 2026) : la Phase G a livré Leaflet, qui n'offre
+  > pas de projection globe. La clause « lorsque possible » n'est donc pas satisfaite
+  > et le globe utilise un moteur dédié, chargé paresseusement, **sans remplacer la
+  > carte 2D**. L'invariant qui compte reste respecté : une seule source de données
+  > (`PlacesMapItem`), aucun second service backend, sélection et filtres partagés.
+  > Voir `phase-i-places-3d-brief.md` et `adr/ADR-places-3d-engine.md`.
+
 - rotation et zoom ;
 - marqueurs agrégés ;
 - `fly-to` continent, pays, ville et lieu ;
