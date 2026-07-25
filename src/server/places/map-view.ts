@@ -43,7 +43,30 @@ export type PlacesMapView = {
   truncated: boolean;
 };
 
+// One preview thumbnail per place in a single bounded query: PostgreSQL's
+// DISTINCT ON keeps the top-ranked link (primary first, then confidence) for each
+// place, so this never becomes an N+1 nor grows with the posts per place.
+async function loadPreviewThumbnails(ownerId: string, placeIds: string[]): Promise<Map<string, string>> {
+  if (placeIds.length === 0) return new Map();
+  const links = await prisma.postPlace.findMany({
+    where: { ownerId, placeId: { in: placeIds } },
+    orderBy: [{ placeId: "asc" }, { isPrimary: "desc" }, { confidence: "desc" }],
+    distinct: ["placeId"],
+    select: { placeId: true, post: { select: { thumbnailUrl: true } } },
+  });
+  const thumbnails = new Map<string, string>();
+  for (const link of links) {
+    if (link.post.thumbnailUrl) thumbnails.set(link.placeId, link.post.thumbnailUrl);
+  }
+  return thumbnails;
+}
+
 export async function loadPlacesMapView(ownerId: string, max: number = PLACES_MAP_MAX): Promise<PlacesMapView> {
+  // Themes must reflect EVERY linked post, otherwise the theme filter would be
+  // wrong for a place whose second theme appears late in its links. The relation
+  // is therefore selected in full but with a single tiny column (mainTheme); the
+  // preview thumbnail comes from a second bounded query below, so neither the
+  // payload nor the query count grows with the number of posts per place.
   const rows = await prisma.place.findMany({
     where: { ownerId },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -64,23 +87,21 @@ export async function loadPlacesMapView(ownerId: string, max: number = PLACES_MA
       reviewStatus: true,
       isUserConfirmed: true,
       _count: { select: { postLinks: true } },
-      postLinks: {
-        orderBy: [{ isPrimary: "desc" }, { confidence: "desc" }],
-        take: 6,
-        select: { post: { select: { mainTheme: true, thumbnailUrl: true } } },
-      },
+      postLinks: { select: { post: { select: { mainTheme: true } } } },
     },
   });
 
   const truncated = rows.length > max;
-  const items = (truncated ? rows.slice(0, max) : rows).map((row) => {
+  const visibleRows = truncated ? rows.slice(0, max) : rows;
+  const thumbnails = await loadPreviewThumbnails(ownerId, visibleRows.map((row) => row.id));
+
+  const items = visibleRows.map((row) => {
     const themes: PlacesEligibleTheme[] = [];
-    let previewThumbnailUrl: string | null = null;
     for (const link of row.postLinks) {
       const theme = canonicalPlacesTheme(link.post.mainTheme);
       if (theme && !themes.includes(theme)) themes.push(theme);
-      if (!previewThumbnailUrl && link.post.thumbnailUrl) previewThumbnailUrl = link.post.thumbnailUrl;
     }
+    const previewThumbnailUrl = thumbnails.get(row.id) ?? null;
     return {
       id: row.id,
       displayName: row.displayName,

@@ -12,9 +12,11 @@ import { cn } from "@/lib/utils";
 import {
   EMPTY_FILTERS,
   PLACE_PRECISION_VALUES,
+  collectCountries,
   countActiveFilters,
   filterPlaces,
   isMappable,
+  narrowCountries,
   serializePlacesUrlState,
   toggleValue,
   type PlacesFilters,
@@ -66,6 +68,7 @@ export function PlacesExplorer({
   const [statsOpen, setStatsOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [hover, setHover] = useState<{ place: PlacesMapItem; x: number; y: number } | null>(null);
+  const [countryQuery, setCountryQuery] = useState("");
   const [, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -78,16 +81,11 @@ export function PlacesExplorer({
   const activeFilterCount = countActiveFilters(filters);
 
   // Countries actually present, so a filter can never be empty by construction.
-  const countries = useMemo(() => {
-    const map = new Map<string, { code: string; label: string; count: number }>();
-    for (const place of mappable) {
-      if (!place.countryCode) continue;
-      const entry = map.get(place.countryCode);
-      if (entry) entry.count += 1;
-      else map.set(place.countryCode, { code: place.countryCode, label: place.country ?? place.countryCode, count: 1 });
-    }
-    return [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [mappable]);
+  const countries = useMemo(() => collectCountries(mappable), [mappable]);
+  const visibleCountries = useMemo(
+    () => narrowCountries(countries, countryQuery, filters.countryCodes),
+    [countries, countryQuery, filters.countryCodes],
+  );
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -273,15 +271,34 @@ export function PlacesExplorer({
 
               {countries.length > 0 ? (
                 <FilterGroup label="Pays">
-                  {countries.slice(0, 12).map((country) => (
-                    <FilterOption
-                      key={country.code}
-                      checked={filters.countryCodes.includes(country.code)}
-                      label={country.label}
-                      count={country.count}
-                      onToggle={() => patch({ countryCodes: toggleValue(filters.countryCodes, country.code) })}
-                    />
-                  ))}
+                  {/* Every country stays selectable: the list scrolls and can be
+                      narrowed locally instead of being cut off. */}
+                  {countries.length > 8 ? (
+                    <label className="places-country-search">
+                      <span className="sr-only">Filtrer les pays</span>
+                      <Search size={13} aria-hidden="true" />
+                      <input
+                        type="search"
+                        value={countryQuery}
+                        placeholder="Filtrer les pays…"
+                        onChange={(event) => setCountryQuery(event.target.value)}
+                      />
+                    </label>
+                  ) : null}
+                  <div className="places-country-list">
+                    {visibleCountries.map((country) => (
+                      <FilterOption
+                        key={country.code}
+                        checked={filters.countryCodes.includes(country.code)}
+                        label={country.label}
+                        count={country.count}
+                        onToggle={() => patch({ countryCodes: toggleValue(filters.countryCodes, country.code) })}
+                      />
+                    ))}
+                    {visibleCountries.length === 0 ? (
+                      <p className="places-country-empty">Aucun pays ne correspond.</p>
+                    ) : null}
+                  </div>
                 </FilterGroup>
               ) : null}
             </div>

@@ -151,3 +151,36 @@ export function filterPlaces(places: readonly PlacesMapItem[], filters: PlacesFi
 export function isMappable(place: PlacesMapItem): boolean {
   return place.reviewStatus !== "REJECTED";
 }
+
+export type CountryFacet = { code: string; label: string; count: number };
+
+// Countries actually present in the data, most represented first. The filter can
+// therefore never offer a country that would return nothing.
+export function collectCountries(places: readonly PlacesMapItem[]): CountryFacet[] {
+  const byCode = new Map<string, CountryFacet>();
+  for (const place of places) {
+    if (!place.countryCode) continue;
+    const entry = byCode.get(place.countryCode);
+    if (entry) entry.count += 1;
+    else byCode.set(place.countryCode, { code: place.countryCode, label: place.country ?? place.countryCode, count: 1 });
+  }
+  return [...byCode.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+// Narrow the country list locally. Every country stays reachable — the list is
+// never truncated — and an already selected country is always kept visible so a
+// filter can still be removed while the search is active.
+export function narrowCountries(
+  countries: readonly CountryFacet[],
+  query: string,
+  selectedCodes: readonly string[],
+): CountryFacet[] {
+  const folded = foldForSearch(query.trim());
+  if (!folded) return [...countries];
+  return countries.filter(
+    (country) =>
+      selectedCodes.includes(country.code) ||
+      foldForSearch(country.label).includes(folded) ||
+      country.code.toLowerCase().includes(folded),
+  );
+}

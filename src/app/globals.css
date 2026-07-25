@@ -726,3 +726,9 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 
 /* Places entry point in the main header (desktop and mobile). */
 .places-tab { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+
+/* Country filter: every country stays reachable in a compact, scrollable list. */
+.places-country-search { display: flex; align-items: center; gap: 7px; margin: 0 6px 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-subtle); color: var(--muted); }
+.places-country-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); outline: none; font-size: .78rem; }
+.places-country-list { max-height: 168px; overflow: auto; }
+.places-country-empty { margin: 0; padding: 8px 9px; color: var(--muted); font-size: .76rem; }

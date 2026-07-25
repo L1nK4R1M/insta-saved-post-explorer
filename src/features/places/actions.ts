@@ -10,13 +10,23 @@ import { confirmPlace, PlaceReviewError, rejectPlaceResult } from "@/server/plac
 
 // Internal Server Actions for the Places UI. Review writes go through the
 // existing owner-scoped services in src/server/places/review.ts — the external
-// /api/v1 key stays read-only and is never used for a mutation. Every action
-// re-checks the session server-side: hiding a button in the UI is not a control.
+// /api/v1 key stays read-only and is never used for a mutation.
+//
+// Every action re-checks the session server-side. A Server Action is a directly
+// invocable endpoint: neither the `/places` route nor a hidden button is a
+// control, so reads are gated too, not only writes.
 
 export type PlaceActionResult = { ok: true } | { ok: false; code: string };
 
 const REVIEW_REASON = "Revue manuelle depuis la page Places";
 
+// Any valid session may read; a resource is still owner-scoped afterwards.
+async function requireAuthenticatedOwner(): Promise<string | null> {
+  const session = await getSession().catch(() => null);
+  return session ? getConfiguredOwnerId() : null;
+}
+
+// Review mutations additionally require the admin role.
 async function requireAdmin(): Promise<string | null> {
   const session = await getSession().catch(() => null);
   return session?.role === "admin" ? getConfiguredOwnerId() : null;
@@ -63,11 +73,14 @@ export type PlacePostsResult =
   | { ok: true; posts: PlacePostSummaryDto[] }
   | { ok: false; code: string };
 
-// Load the posts of a place on demand for the detail sheet, owner-scoped. A
-// place owned by someone else behaves as absent.
+// Load the posts of a place on demand for the detail sheet. The session is
+// verified before any read; the query then stays owner-scoped, so a place owned
+// by someone else behaves as absent. Only bounded codes cross the boundary —
+// never a Prisma message or any other internal detail.
 export async function loadPlacePostsAction(placeId: string): Promise<PlacePostsResult> {
+  const ownerId = await requireAuthenticatedOwner();
+  if (!ownerId) return { ok: false, code: "FORBIDDEN" };
   try {
-    const ownerId = getConfiguredOwnerId();
     const page = await getPlacePosts(placeId, { limit: 24 }, ownerId);
     if (!page) return { ok: false, code: "NOT_FOUND" };
     return { ok: true, posts: page.items };

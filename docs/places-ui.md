@@ -39,6 +39,13 @@ it trips, the page says so rather than silently showing a partial map.
 needs: the canonical **source themes** of the linked posts and one **preview
 thumbnail** for the hover callout.
 
+Themes are computed from **every** linked post — the relation is selected in full
+but with a single tiny column (`mainTheme`) — because a place whose second theme
+appears late in its links would otherwise be invisible to the theme filter, and
+the map would disagree with the `source_theme` API filter. The preview thumbnail
+comes from a second bounded query using `DISTINCT ON (place)`, so neither the
+payload nor the query count grows with the number of posts per place (no N+1).
+
 ## 3. Map
 
 `PlacesMap` wraps **Leaflet** + `leaflet.markercluster` behind a small prop
@@ -87,7 +94,7 @@ occupy no space when closed:
 | Type de lieu | Restaurant, Café et brunch, Pâtisserie, Bar, Hôtel, Plage, Monument | `Place.category` (provider category, grouped) |
 | Précision | Exact, Probable, Approximatif | `Place.precision` |
 | Revue | À vérifier, Confirmés | `reviewStatus` + `isUserConfirmed` |
-| Pays | countries actually present | `Place.countryCode` |
+| Pays | **all** countries actually present (scrollable list + local search above 8) | `Place.countryCode` |
 
 **Theme and place type are different data.** The theme is the post's
 `mainTheme` and remains the eligibility rule; the place type comes from the
@@ -111,10 +118,18 @@ hand-edited URL can never widen a filter.
 
 ## 7. Review actions
 
-`confirmPlaceAction` and `rejectPlaceAction` wrap the audited Phase F3 services.
+A Server Action is a directly invocable endpoint, so **every** action verifies the
+session server-side before doing anything — reads included. Neither the `/places`
+route nor a hidden button is a control.
+
+- `loadPlacePostsAction` requires a valid session (`FORBIDDEN` otherwise) and then
+  queries owner-scoped, so another owner's place behaves as `NOT_FOUND`.
+- `confirmPlaceAction` and `rejectPlaceAction` additionally require the **admin**
+  role and wrap the audited Phase F3 services.
+
 Each action:
 
-- re-checks the admin session server-side (hiding a button is not a control);
+- re-checks the session (and the role for mutations) server-side;
 - asks for an explicit confirmation in the UI before running;
 - guards against double submission and shows a loading state;
 - surfaces only a **bounded error code** mapped to a readable message — never an

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMPTY_FILTERS,
+  collectCountries,
   countActiveFilters,
   filterPlaces,
   isMappable,
+  narrowCountries,
   parsePlacesUrlState,
   serializePlacesUrlState,
   toggleValue,
@@ -143,5 +145,60 @@ describe("places filtering", () => {
   it("keeps rejected places off the map and list", () => {
     expect(isMappable(place({ reviewStatus: "REJECTED" }))).toBe(false);
     expect(isMappable(nobu)).toBe(true);
+  });
+});
+
+describe("country facets", () => {
+  // More than twelve countries: the filter used to slice the list to 12, which
+  // made the remaining ones impossible to select.
+  const many = [
+    ["FR", "France"], ["IT", "Italie"], ["JP", "Japon"], ["GR", "Grèce"],
+    ["AE", "Émirats arabes unis"], ["ES", "Espagne"], ["PT", "Portugal"], ["US", "États-Unis"],
+    ["MX", "Mexique"], ["TH", "Thaïlande"], ["VN", "Viêt Nam"], ["MA", "Maroc"],
+    ["TR", "Turquie"], ["IS", "Islande"], ["NO", "Norvège"],
+  ].map(([code, country], index) =>
+    place({ id: `c${index}`, countryCode: code, country, displayName: `Lieu ${index}` }),
+  );
+
+  it("exposes every country present, not just the first twelve", () => {
+    const countries = collectCountries(many);
+    expect(countries).toHaveLength(15);
+    expect(countries.map((entry) => entry.code)).toContain("NO");
+    expect(countries.map((entry) => entry.code)).toContain("IS");
+  });
+
+  it("counts places per country and sorts the most represented first", () => {
+    const countries = collectCountries([
+      ...many,
+      place({ id: "extra-1", countryCode: "NO", country: "Norvège" }),
+      place({ id: "extra-2", countryCode: "NO", country: "Norvège" }),
+    ]);
+    expect(countries[0]).toMatchObject({ code: "NO", count: 3 });
+  });
+
+  it("ignores places without a country code", () => {
+    expect(collectCountries([place({ countryCode: null, country: null })])).toEqual([]);
+  });
+
+  it("narrows the list locally without accents or case", () => {
+    const countries = collectCountries(many);
+    expect(narrowCountries(countries, "norv", []).map((entry) => entry.code)).toEqual(["NO"]);
+    expect(narrowCountries(countries, "GRECE", []).map((entry) => entry.code)).toEqual(["GR"]);
+    expect(narrowCountries(countries, "jp", []).map((entry) => entry.code)).toEqual(["JP"]);
+  });
+
+  it("returns the whole list when the query is empty", () => {
+    const countries = collectCountries(many);
+    expect(narrowCountries(countries, "   ", [])).toHaveLength(15);
+  });
+
+  it("always keeps a selected country visible so it can be unselected", () => {
+    const countries = collectCountries(many);
+    const narrowed = narrowCountries(countries, "norv", ["JP"]);
+    expect(narrowed.map((entry) => entry.code).sort()).toEqual(["JP", "NO"]);
+  });
+
+  it("returns nothing when no country matches", () => {
+    expect(narrowCountries(collectCountries(many), "zzzz", [])).toEqual([]);
   });
 });
