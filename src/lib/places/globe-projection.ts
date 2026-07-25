@@ -132,6 +132,67 @@ export function toGlobePoints(
   return points;
 }
 
+// A closed ring of [lng, lat] pairs approximating the circle of given angular
+// radius around a centre — the honest footprint of an APPROXIMATE place.
+//
+// It is computed on the sphere, not in flat degrees, because a fixed longitude
+// offset shrinks with latitude: a naive ellipse would draw a Reykjavík zone far
+// too wide. The ring is returned in GeoJSON order (longitude first) so it can be
+// handed to a polygon layer as-is.
+export function geodesicCircleRing(
+  latitude: number,
+  longitude: number,
+  radiusDegrees: number,
+  segments = 48,
+): [number, number][] {
+  const steps = Math.max(8, Math.floor(segments));
+  const lat0 = toRadians(clampLatitude(latitude));
+  const lon0 = toRadians(normalizeLongitude(longitude));
+  const angular = toRadians(Math.max(0, radiusDegrees));
+  const sinLat0 = Math.sin(lat0);
+  const cosLat0 = Math.cos(lat0);
+  const sinR = Math.sin(angular);
+  const cosR = Math.cos(angular);
+
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= steps; i += 1) {
+    // The last point repeats the first so the ring is explicitly closed.
+    const bearing = (2 * Math.PI * (i % steps)) / steps;
+    const lat = Math.asin(sinLat0 * cosR + cosLat0 * sinR * Math.cos(bearing));
+    const lon =
+      lon0 +
+      Math.atan2(Math.sin(bearing) * sinR * cosLat0, cosR - sinLat0 * Math.sin(lat));
+    ring.push([normalizeLongitude(toDegrees(lon)), clampLatitude(toDegrees(lat))]);
+  }
+  return ring;
+}
+
+export type GlobeZone = {
+  id: string;
+  ring: [number, number][];
+  selected: boolean;
+};
+
+// APPROXIMATE places only. EXACT and PROBABLE are points and must never gain an
+// area, even when a stale radius is stored on the row (FR-I-10).
+export function toGlobeZones(
+  places: readonly PlacesMapItem[],
+  selectedId: string | null = null,
+): GlobeZone[] {
+  const zones: GlobeZone[] = [];
+  for (const place of places) {
+    if (!isRenderableOnGlobe(place) || place.precision !== "APPROXIMATE") continue;
+    const radiusDegrees = degreeRadiusForMeters(place.approximationRadiusMeters);
+    if (radiusDegrees <= 0) continue;
+    zones.push({
+      id: place.id,
+      ring: geodesicCircleRing(place.latitude, place.longitude, radiusDegrees),
+      selected: place.id === selectedId,
+    });
+  }
+  return zones;
+}
+
 // ---------------------------------------------------------------------------
 // Aggregation
 // ---------------------------------------------------------------------------

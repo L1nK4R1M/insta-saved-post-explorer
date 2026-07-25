@@ -12,11 +12,14 @@ import {
   clampLatitude,
   degreeRadiusForMeters,
   detailLevelForAltitude,
+  geodesicCircleRing,
   isRenderableOnGlobe,
   latLonToVec3,
   normalizeLongitude,
   sphericalCentroid,
+  toDegrees,
   toGlobePoints,
+  toGlobeZones,
 } from "@/lib/places/globe-projection";
 import type { PlacesMapItem } from "@/server/places/map-view";
 
@@ -243,6 +246,94 @@ describe("globe render eligibility", () => {
     const snapshot = structuredClone(input);
     toGlobePoints(input, "p1");
     expect(input).toEqual(snapshot);
+  });
+});
+
+describe("geodesic circle", () => {
+  it("closes the ring", () => {
+    const ring = geodesicCircleRing(48.85, 2.35, 1, 16);
+    expect(ring).toHaveLength(17);
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
+  });
+
+  it("keeps every vertex at the requested angular distance from the centre", () => {
+    const ring = geodesicCircleRing(48.85, 2.35, 2, 32);
+    for (const [lng, lat] of ring) {
+      expect(toDegrees(angularDistance(48.85, 2.35, lat, lng))).toBeCloseTo(2, 6);
+    }
+  });
+
+  it("widens in longitude near the poles instead of drawing a squashed ellipse", () => {
+    const spanOf = (latitude: number) => {
+      const ring = geodesicCircleRing(latitude, 0, 1, 64);
+      const longitudes = ring.map(([lng]) => lng);
+      return Math.max(...longitudes) - Math.min(...longitudes);
+    };
+    // One degree of arc costs far more longitude at 70°N than at the equator.
+    expect(spanOf(70)).toBeGreaterThan(spanOf(0) * 2);
+  });
+
+  it("emits GeoJSON order, longitude first", () => {
+    const ring = geodesicCircleRing(0, 90, 1, 8);
+    for (const [lng, lat] of ring) {
+      expect(Math.abs(lng - 90)).toBeLessThan(2);
+      expect(Math.abs(lat)).toBeLessThan(2);
+    }
+  });
+
+  it("wraps cleanly across the antimeridian", () => {
+    const ring = geodesicCircleRing(0, 179.5, 1, 32);
+    for (const [lng] of ring) {
+      expect(lng).toBeGreaterThanOrEqual(-180);
+      expect(lng).toBeLessThan(180);
+    }
+    // The ring genuinely straddles the date line.
+    expect(ring.some(([lng]) => lng > 179)).toBe(true);
+    expect(ring.some(([lng]) => lng < -179)).toBe(true);
+  });
+
+  it("enforces a minimum number of segments", () => {
+    expect(geodesicCircleRing(0, 0, 1, 2).length).toBeGreaterThanOrEqual(9);
+  });
+});
+
+describe("APPROXIMATE zones", () => {
+  it("builds a zone only for APPROXIMATE places", () => {
+    const zones = toGlobeZones([
+      place({ id: "exact", precision: "EXACT", approximationRadiusMeters: 5_000 }),
+      place({ id: "probable", precision: "PROBABLE", approximationRadiusMeters: 5_000 }),
+      place({ id: "zone", precision: "APPROXIMATE", approximationRadiusMeters: 5_000 }),
+    ]);
+    expect(zones.map((zone) => zone.id)).toEqual(["zone"]);
+  });
+
+  it("skips an APPROXIMATE place with no usable radius rather than inventing one", () => {
+    expect(toGlobeZones([place({ precision: "APPROXIMATE", approximationRadiusMeters: null })])).toEqual([]);
+    expect(toGlobeZones([place({ precision: "APPROXIMATE", approximationRadiusMeters: 0 })])).toEqual([]);
+  });
+
+  it("never builds a zone for a REJECTED place", () => {
+    expect(
+      toGlobeZones([
+        place({ precision: "APPROXIMATE", approximationRadiusMeters: 5_000, reviewStatus: "REJECTED" }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("sizes the zone from the stored radius", () => {
+    const [small] = toGlobeZones([place({ precision: "APPROXIMATE", approximationRadiusMeters: 1_000 })]);
+    const [large] = toGlobeZones([place({ precision: "APPROXIMATE", approximationRadiusMeters: 50_000 })]);
+    const spread = (ring: [number, number][]) =>
+      Math.max(...ring.map(([, lat]) => lat)) - Math.min(...ring.map(([, lat]) => lat));
+    expect(spread(large.ring)).toBeGreaterThan(spread(small.ring) * 10);
+  });
+
+  it("marks the selected zone", () => {
+    const zones = toGlobeZones(
+      [place({ id: "z", precision: "APPROXIMATE", approximationRadiusMeters: 5_000 })],
+      "z",
+    );
+    expect(zones[0].selected).toBe(true);
   });
 });
 

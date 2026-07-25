@@ -5,6 +5,8 @@ import { BarChart3, Check, ListFilter, MapPin, Search, SlidersHorizontal, X } fr
 
 import { PLACE_CATEGORY_GROUPS } from "@/lib/places/categories";
 import { PLACES_ELIGIBLE_THEMES } from "@/lib/places/eligibility";
+import { WEBGL_FALLBACK_MESSAGE, isWebGlUsable } from "@/lib/places/webgl";
+import { usePrefersReducedMotion, useWebGlSupport } from "@/features/places/capabilities";
 import type { PlacesStatsDto } from "@/contracts/api/places";
 import type { PlacesMapItem } from "@/server/places/map-view";
 import { cn } from "@/lib/utils";
@@ -16,10 +18,12 @@ import {
   filterPlaces,
   isMappable,
   narrowCountries,
+  parsePlacesUrlState,
   serializePlacesUrlState,
   toggleValue,
   type PlacesFilters,
   type PlacesUrlState,
+  type PlacesViewMode,
   type ReviewFilter,
 } from "@/features/places/query-state";
 import { PlaceDetailSheet } from "@/features/places/components/place-detail-sheet";
@@ -45,6 +49,8 @@ export type PlacesExplorerProps = {
   tileUrl: string;
   tileAttribution: string;
   tilesConfigured: boolean;
+  textureUrl: string;
+  textureAttribution: string;
 };
 
 export function PlacesExplorer({
@@ -56,6 +62,8 @@ export function PlacesExplorer({
   tileUrl,
   tileAttribution,
   tilesConfigured,
+  textureUrl,
+  textureAttribution,
 }: PlacesExplorerProps) {
   const [filters, setFilters] = useState<PlacesFilters>({ ...EMPTY_FILTERS, ...initialState });
   const [selectedId, setSelectedId] = useState<string | null>(initialState.placeId);
@@ -64,7 +72,20 @@ export function PlacesExplorer({
   const [listOpen, setListOpen] = useState(false);
   const [hover, setHover] = useState<{ place: PlacesMapItem; x: number; y: number } | null>(null);
   const [countryQuery, setCountryQuery] = useState("");
-  const view = initialState.view;
+  // The view the user asked for. What actually renders can differ when the
+  // device cannot run WebGL — see `effectiveView` below.
+  const [view, setView] = useState<PlacesViewMode>(initialState.view);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  // "unknown" until the client has answered: the globe must not be offered — nor
+  // its chunk requested — before then (FR-I-12).
+  const webgl = useWebGlSupport();
+  const reducedMotion = usePrefersReducedMotion();
+  const globeAvailable = webgl === "unknown" ? null : isWebGlUsable(webgl);
+  // Falling back is derived, never a stored copy of the view: a globe deep link
+  // opened without WebGL renders 2D while keeping filters, selection, list and
+  // detail, and the URL is rewritten to match by the sync effect below.
+  const effectiveView: PlacesViewMode = view === "globe" && globeAvailable === false ? "map" : view;
+  const showWebglNotice = view === "globe" && globeAvailable === false && !noticeDismissed;
   const [, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -92,15 +113,58 @@ export function PlacesExplorer({
     return counts;
   }, [mappable]);
 
+  const urlFor = useCallback(
+    (state: { filters: PlacesFilters; placeId: string | null; view: PlacesViewMode }) => {
+      const query = serializePlacesUrlState({ ...state.filters, placeId: state.placeId, view: state.view });
+      return query ? `/places?${query}` : "/places";
+    },
+    [],
+  );
+
   // Keep the URL in sync so filters and the selection are shareable and the
-  // browser back button works, without pushing an entry per keystroke.
+  // browser back button works, without pushing an entry per keystroke. The
+  // effective view is written, so a globe link that fell back to 2D says so.
   useEffect(() => {
-    const query = serializePlacesUrlState({ ...filters, placeId: selectedId, view });
-    const next = query ? `/places?${query}` : "/places";
+    const next = urlFor({ filters, placeId: selectedId, view: effectiveView });
     if (typeof window !== "undefined" && window.location.pathname + window.location.search !== next) {
       window.history.replaceState(null, "", next);
     }
-  }, [filters, selectedId, view]);
+  }, [filters, selectedId, effectiveView, urlFor]);
+
+  // The view is the one piece of state worth a history entry: back and forward
+  // then move between 2D and 3D instead of leaving the page.
+  const switchView = useCallback(
+    (next: PlacesViewMode) => {
+      if (next === effectiveView) return;
+      if (next === "globe" && globeAvailable !== true) {
+        setNoticeDismissed(false);
+        setView("globe");
+        return;
+      }
+      setNoticeDismissed(false);
+      setView(next);
+      if (typeof window !== "undefined") {
+        window.history.pushState(null, "", urlFor({ filters, placeId: selectedId, view: next }));
+      }
+    },
+    [effectiveView, globeAvailable, filters, selectedId, urlFor],
+  );
+
+  // Restore the whole shared state from the URL on back/forward, so history is
+  // coherent for the view, the filters and the selection alike (FR-I-08).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPopState = () => {
+      const state = parsePlacesUrlState(new URLSearchParams(window.location.search));
+      const { placeId, view: nextView, ...nextFilters } = state;
+      setFilters(nextFilters);
+      setSelectedId(placeId);
+      setView(nextView);
+      setNoticeDismissed(false);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const patch = useCallback((next: Partial<PlacesFilters>) => {
     startTransition(() => setFilters((current) => ({ ...current, ...next })));
@@ -125,7 +189,7 @@ export function PlacesExplorer({
         {/* Only the canvas depends on the active view; everything below — search,
             filters, statistics, list, detail and summary — is shared. */}
         <PlacesRenderer
-          view={view}
+          view={effectiveView}
           places={visible}
           selectedId={selectedId}
           onSelect={handleSelect}
@@ -133,6 +197,9 @@ export function PlacesExplorer({
           tileUrl={tileUrl}
           tileAttribution={tileAttribution}
           tilesConfigured={tilesConfigured}
+          textureUrl={textureUrl}
+          textureAttribution={textureAttribution}
+          reducedMotion={reducedMotion}
         />
 
         {/* Hover callout: photo + arrow pointing at the marker. Informative only. */}
@@ -197,7 +264,37 @@ export function PlacesExplorer({
             Filtres
             {activeFilterCount > 0 ? <span className="places-count-badge">{activeFilterCount}</span> : null}
           </button>
+          {/* Concept 2: the view switch sits next to the filters and uses the
+              same visual language as the rest of the chrome. */}
+          <div className="places-segmented" role="group" aria-label="Type de vue">
+            <button
+              type="button"
+              className={cn("places-segment", effectiveView === "map" && "is-active")}
+              aria-pressed={effectiveView === "map"}
+              onClick={() => switchView("map")}
+            >
+              2D
+            </button>
+            <button
+              type="button"
+              className={cn("places-segment", effectiveView === "globe" && "is-active")}
+              aria-pressed={effectiveView === "globe"}
+              disabled={globeAvailable === false}
+              onClick={() => switchView("globe")}
+            >
+              3D
+            </button>
+          </div>
         </div>
+
+        {showWebglNotice ? (
+          <p className="places-webgl-notice" role="status">
+            {WEBGL_FALLBACK_MESSAGE}
+            <button type="button" className="places-link" onClick={() => setNoticeDismissed(true)}>
+              Fermer
+            </button>
+          </p>
+        ) : null}
 
         {filtersOpen ? (
           <div className="places-panel" id="places-filters" role="dialog" aria-label="Filtres">
