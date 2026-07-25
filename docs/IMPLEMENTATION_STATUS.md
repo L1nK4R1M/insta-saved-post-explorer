@@ -31,7 +31,7 @@ Status values:
 | E — Global worker foundation | READY | Phase C | None | Separate VPS phase. Required before Phase H deep analysis. |
 | G — Places 2D UI and contextual navigation | COMPLETE | Phase F complete | PR #34, squash `2bd2098` | `/places`, Leaflet + markercluster, Geoapify raster tiles, synchronized list, complete filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. Review fixes validated: authenticated read Server Action, complete `sourceThemes`, all countries filterable. CI #107 green; 50 files / 440 tests locally; no migration. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
-| I — Places 3D globe | AWAITING_REVIEW | Phase G complete, design approved | `claude/phase-i-places-3d-implementation` | T1–T10 implemented: additive `view=map\|globe`, pure projection module, renderer seam, WebGL probe and fallback, `PlacesGlobe` on `react-globe.gl` 2.38.0 / `three` 0.185.1 (lazy, exact pins), public-domain Natural Earth texture generated locally with documented licence, segmented `2D \| 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. 466 unit tests and 92 e2e green (Phase I suites consolidated after review: 18 unit, 8 component, 7 e2e); no migration, no API change, Leaflet untouched. **Measured:** `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry, first globe render 907–1033 ms at 1000 places. **`FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`** — the CI container has no GPU (SwiftShader); owner decision required. Second review round fixed a real FR-I-12 defect (the 3D chunk could be requested before the WebGL probe answered) and consolidated the test suites. |
+| I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | T1–T10 merged: additive `view=map|globe`, pure projection module, renderer seam, WebGL probe and fallback, lazy `react-globe.gl` 2.38.0 / `three` 0.185.1, public-domain Natural Earth texture generated locally with documented licence, segmented `2D | 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. CI #115 green; 466 unit tests and 92 e2e green after risk-based consolidation. No migration, no API change, Leaflet preserved. Measured: `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry, first globe render 907–1033 ms at 1000 places. `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION` remains an operational follow-up, not a merge blocker. |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
 
 ## Current execution pointer
@@ -41,37 +41,32 @@ Current state
 - Phase F is CLOSED and COMPLETE.
 - Phase G is CLOSED and COMPLETE (PR #34, squash 2bd2098).
 - Phase I design is APPROVED and merged (PR #35, squash 3fef818); the ADR is ACCEPTED.
-- Phase I implementation (T1-T10) is AWAITING_REVIEW on
-  claude/phase-i-places-3d-implementation. It is NOT merged and NOT complete.
+- Phase I implementation is CLOSED and COMPLETE after PR #36, squash merge
+  08be9f04df60c9d8e138242fc0d7b0504e0ba51e.
+- CI #115 passed on reviewed head 7477ac3c8e7f567051d3eb86cdf2fd91ddcbf1dc.
 - Phase E remains independently READY and is still required before Phase H.
 - Phase H and Phase J remain blocked.
 
 Reference develop implementation commit
-3fef818df96f127d5ba9486650a231f6ee2629b4
+08be9f04df60c9d8e138242fc0d7b0504e0ba51e
 
-Recorded proof for the Phase I implementation
-- lint, typecheck, 466 unit tests (440 on develop, +26), build and 92 e2e tests all green.
+Recorded proof for Phase I
+- PR #36 reviewed twice and squash-merged after the WebGL lazy-load defect was fixed.
+- lint, typecheck, 466 unit tests, build and 92 e2e tests green.
+- Phase I test suites consolidated to 18 unit / 8 component / 7 e2e.
 - The Phase G e2e suite passes unmodified.
 - /places initial 2D client JS: 392.0 KiB -> 396.3 KiB (+4.2 KiB, +1.08 %).
-- The 1.86 MiB 3D chunk is absent from the /places 2D entry (loadable manifest + e2e).
-- First globe render 907-1033 ms with 1000 places, desktop and mobile: budget met.
-- Frame rate 20 fps desktop / 18 fps mobile, measured on a CPU software rasterizer
-  (SwiftShader, no GPU in the container). Evidence in the change record shows the
-  workload is fill-rate bound, not scene bound. Status:
-  FPS_BUDGET_PENDING_REAL_GPU_VALIDATION — one run on a GPU device is required.
-- Review round 2: the 3D chunk could be requested while the WebGL probe was still
-  unknown. Fixed, with a test that fails against the previous implementation.
-  Phase I test suites consolidated to 18 unit / 8 component / 7 e2e.
+- The 1.86 MiB 3D chunk is absent from the /places 2D entry.
+- First globe render 907-1033 ms with 1000 places.
+- Frame rate measured under SwiftShader: 20 fps desktop / 18 fps mobile.
+  Status: FPS_BUDGET_PENDING_REAL_GPU_VALIDATION.
 - No Prisma migration, no public-contract break, no Neon change, no secret.
 ```
 
 ## Next agent action
 
-1. Review the Phase I implementation PR. Do not merge it before review.
-2. Resolve the open owner decision recorded in
-   `changes/2026-07-25-phase-i-places-3d-implementation.md` §9: accept the phase with
-   the D6 frame-rate budgets pending a run on a GPU device, or hold it until that run
-   is done. Do not close Phase I while that decision is open.
-3. Run `npm run places:measure-globe` on real hardware to obtain the missing values.
-4. Keep Phase I limited to the 3D Places experience. Do not mix Phase E, H, J,
-   Hermes, MCP, OCR, transcription or worker work into the same PR.
+1. Treat Phase I as merged and complete; do not reopen its settled architecture decisions.
+2. Optionally run `npm run places:measure-globe` on a machine with a real GPU and record the result under `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`.
+3. The next executable infrastructure phase is Phase E — Global worker foundation.
+4. Phase H remains blocked until Phase E is complete.
+5. Keep Phase E, H and J in separate branches and PRs; do not mix worker, deep analysis, Hermes or MCP work.
