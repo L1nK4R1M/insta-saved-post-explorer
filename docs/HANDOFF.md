@@ -48,8 +48,15 @@ Phase I design is CLOSED and APPROVED (PR #35, squash 3fef818; ADR ACCEPTED).
 Phase I implementation T1-T10 is AWAITING_REVIEW.
 It is NOT merged and Phase I is NOT complete.
 
-One owner decision is open and blocks closing the phase: the D6 frame-rate
-budgets could not be validated because the CI container has no GPU. See
+Review round 1 returned REQUEST_CHANGES. All points are addressed: the 3D chunk
+could be requested before the WebGL probe answered (real FR-I-12 defect, fixed and
+locked by a test that fails against the previous code), the Phase I test suites are
+consolidated to 18 unit / 8 component / 7 e2e, and a testing-discipline rule is
+recorded in AGENTS.md section 10.
+
+One owner decision is open and blocks closing the phase:
+FPS_BUDGET_PENDING_REAL_GPU_VALIDATION — the D6 frame-rate budgets could not be
+validated because the CI container has no GPU. See
 docs/changes/2026-07-25-phase-i-places-3d-implementation.md, sections 6.3 and 9.
 ```
 
@@ -126,7 +133,7 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 
 Phase I product decisions are **all closed** (ADR `ACCEPTED`, 25 July 2026) and implemented. Remaining open items:
 
-- **Phase I, D6 frame rate.** The implementation measured 20 fps desktop and 18 fps mobile on a CPU software rasterizer (SwiftShader); the container has no GPU. Two measurements show the workload is fill-rate bound rather than scene bound, and the applied optimization (capping the render pixel ratio at 1.5) raised mobile from 12 to 18 fps. The budgets themselves remain **unvalidated**. The owner must decide: accept the phase with the frame-rate budgets pending a run on a GPU device, or hold it until `npm run places:measure-globe` has been run on real hardware. Do not close Phase I before this is answered.
+- **Phase I, D6 frame rate.** Status `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`. The implementation measured 20 fps desktop and 18 fps mobile on a CPU software rasterizer (SwiftShader); the container has no GPU. Two measurements show the workload is fill-rate bound rather than scene bound, and the applied optimization (capping the render pixel ratio at 1.5) raised mobile from 12 to 18 fps. The budgets themselves remain **unvalidated**. The owner must decide: accept the phase with the frame-rate budgets pending a run on a GPU device, or hold it until `npm run places:measure-globe` has been run on real hardware. Do not close Phase I before this is answered.
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups and observability for Phase E;
 - final confirmation model for sensitive Phase J commands.

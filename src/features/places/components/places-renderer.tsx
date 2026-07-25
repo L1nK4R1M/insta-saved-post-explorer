@@ -4,7 +4,13 @@ import dynamic from "next/dynamic";
 import { Globe2, MapPin } from "lucide-react";
 
 import type { PlacesRendererProps } from "@/features/places/renderer-contract";
-import type { PlacesViewMode } from "@/features/places/query-state";
+
+// What the shell has *resolved*, not what the URL asked for. `probing` is the
+// state where the user asked for the globe but the WebGL probe has not answered
+// yet — it renders a placeholder and, crucially, does not reference the globe
+// component at all, so the engine chunk is never requested on an unproven
+// capability (FR-I-12).
+export type ResolvedPlacesView = "map" | "globe" | "probing";
 
 // The renderer seam. The shell keeps every piece of state — filters, search,
 // selection, panels, statistics, list and detail — and delegates only the canvas
@@ -30,7 +36,7 @@ const PlacesGlobe = dynamic(() => import("@/features/places/components/places-gl
 });
 
 export type PlacesRendererShellProps = PlacesRendererProps & {
-  view: PlacesViewMode;
+  view: ResolvedPlacesView;
   tileUrl: string;
   tileAttribution: string;
   tilesConfigured: boolean;
@@ -49,6 +55,10 @@ export function PlacesRenderer({
   reducedMotion,
   ...rendererProps
 }: PlacesRendererShellProps) {
+  // Nothing 3D is referenced on this branch — not even the dynamic wrapper —
+  // so no chunk request can escape while the capability is unproven.
+  if (view === "probing") return <GlobeProbing />;
+
   if (view === "globe") {
     return (
       <PlacesGlobe
@@ -61,6 +71,15 @@ export function PlacesRenderer({
   }
   if (!tilesConfigured) return <MapNotConfigured />;
   return <PlacesMap {...rendererProps} tileUrl={tileUrl} tileAttribution={tileAttribution} />;
+}
+
+function GlobeProbing() {
+  return (
+    <div className="places-globe-canvas places-globe-loading" role="status" data-testid="places-globe-probing">
+      <Globe2 aria-hidden="true" />
+      <span>Préparation du globe…</span>
+    </div>
+  );
 }
 
 function MapNotConfigured() {

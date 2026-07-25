@@ -150,40 +150,21 @@ afterEach(() => {
 });
 
 describe("Places view switch", () => {
-  it("renders the 2D map by default and never loads the 3D engine", async () => {
+  it("renders 2D by default, never loading the engine, and offers a real segmented control", async () => {
     stubWebGl(true);
     renderExplorer();
     await waitFor(() => expect(screen.getByTestId("leaflet-canvas")).toBeDefined());
     expect(screen.queryByTestId("globe-engine")).toBeNull();
     expect(globeProps).toHaveLength(0);
-  });
 
-  it("offers a keyboard-reachable segmented control", () => {
-    stubWebGl(true);
-    renderExplorer();
-    const group = screen.getByRole("group", { name: "Type de vue" });
-    const buttons = screen.getAllByRole("button", { name: /^(2D|3D)$/ });
-    expect(group).toBeDefined();
-    expect(buttons).toHaveLength(2);
     // Real buttons, so tab order and Enter/Space come for free.
-    for (const button of buttons) expect(button.tagName).toBe("BUTTON");
+    expect(screen.getByRole("group", { name: "Type de vue" })).toBeDefined();
+    const buttons = screen.getAllByRole("button", { name: /^(2D|3D)$/ });
+    expect(buttons.map((button) => button.tagName)).toEqual(["BUTTON", "BUTTON"]);
     expect(screen.getByRole("button", { name: "2D" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("switches to the globe and back, keeping the shared state", async () => {
-    stubWebGl(true);
-    renderExplorer();
-    fireEvent.click(screen.getByRole("button", { name: "3D" }));
-    await waitFor(() => expect(screen.getByTestId("globe-engine")).toBeDefined());
-    expect(screen.queryByTestId("leaflet-canvas")).toBeNull();
-    expect(window.location.search).toContain("view=globe");
-
-    fireEvent.click(screen.getByRole("button", { name: "2D" }));
-    await waitFor(() => expect(screen.getByTestId("leaflet-canvas")).toBeDefined());
-    expect(window.location.search).not.toContain("view=globe");
-  });
-
-  it("keeps filters and search across the switch", async () => {
+  it("switches both ways, keeping filters, selection and the URL in step", async () => {
     stubWebGl(true);
     renderExplorer();
     fireEvent.change(screen.getByRole("searchbox", { name: "Rechercher un lieu" }), {
@@ -192,60 +173,44 @@ describe("Places view switch", () => {
     fireEvent.click(screen.getByRole("button", { name: "3D" }));
 
     await waitFor(() => expect(globeProps.length).toBeGreaterThan(0));
-    const last = globeProps[globeProps.length - 1];
-    // The globe receives exactly the filtered set the 2D map would have shown.
-    expect((last.pointsData as { id: string }[]).map((point) => point.id)).toEqual(["p2"]);
+    expect(screen.queryByTestId("leaflet-canvas")).toBeNull();
+    // The globe receives exactly the filtered set the 2D map would have shown,
+    // and a REJECTED place is never handed to it.
+    const points = globeProps[globeProps.length - 1].pointsData as { id: string }[];
+    expect(points.map((point) => point.id)).toEqual(["p2"]);
     expect(window.location.search).toContain("q=rome");
     expect(window.location.search).toContain("view=globe");
+
+    fireEvent.click(screen.getByRole("button", { name: "2D" }));
+    await waitFor(() => expect(screen.getByTestId("leaflet-canvas")).toBeDefined());
+    expect(window.location.search).toContain("q=rome");
+    expect(window.location.search).not.toContain("view=globe");
   });
 
-  it("never hands the globe a REJECTED place", async () => {
-    stubWebGl(true);
-    renderExplorer("globe");
-    await waitFor(() => expect(globeProps.length).toBeGreaterThan(0));
-    const ids = (globeProps[globeProps.length - 1].pointsData as { id: string }[]).map((point) => point.id);
-    expect(ids).toContain("p1");
-    expect(ids).not.toContain("p3");
-  });
-
-  it("passes the documented texture and attribution, not a provider URL", async () => {
-    stubWebGl(true);
-    renderExplorer("globe");
-    await waitFor(() => expect(globeProps.length).toBeGreaterThan(0));
-    const props = globeProps[globeProps.length - 1];
-    expect(props.globeImageUrl).toBe("/places/earth-dark.png");
-    expect(screen.getByText("Fond de carte : Natural Earth (domaine public)")).toBeDefined();
-  });
-
-  it("falls back to 2D with an explanation when WebGL is unavailable", async () => {
+  it("falls back to 2D with an explanation and a corrected URL when WebGL is refused", async () => {
     stubWebGl(false);
     renderExplorer("globe");
     await waitFor(() => expect(screen.getByTestId("leaflet-canvas")).toBeDefined());
     expect(screen.queryByTestId("globe-engine")).toBeNull();
     expect(screen.getByText(/WebGL indisponible/)).toBeDefined();
-    // The URL is corrected so the fallback is shareable and honest.
     await waitFor(() => expect(window.location.search).not.toContain("view=globe"));
-  });
 
-  it("disables the 3D button without WebGL but keeps the list and filters usable", async () => {
-    stubWebGl(false);
-    renderExplorer();
-    await waitFor(() =>
-      expect((screen.getByRole("button", { name: "3D" }) as HTMLButtonElement).disabled).toBe(true),
-    );
+    // The 3D control is refused, and everything else stays usable.
+    expect((screen.getByRole("button", { name: "3D" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Liste/ }));
     expect(screen.getByRole("complementary", { name: "Liste des lieux" })).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: /Filtres/ }));
-    expect(screen.getByRole("dialog", { name: "Filtres" })).toBeDefined();
   });
 
-  it("restores the view, filters and selection on back/forward", async () => {
+  it("restores view, filters and selection on back/forward, and honours reduced motion", async () => {
     stubWebGl(true);
-    renderExplorer();
-    fireEvent.click(screen.getByRole("button", { name: "3D" }));
-    await waitFor(() => expect(screen.getByTestId("globe-engine")).toBeDefined());
+    stubMatchMedia(true);
+    renderExplorer("globe");
+    await waitFor(() => expect(globeProps.length).toBeGreaterThan(0));
+    expect(globeProps[globeProps.length - 1].animateIn).toBe(false);
+    // The documented local texture is used, never a provider URL.
+    expect(globeProps[globeProps.length - 1].globeImageUrl).toBe("/places/earth-dark.png");
+    expect(screen.getByText("Fond de carte : Natural Earth (domaine public)")).toBeDefined();
 
-    // Simulate the browser going back to the 2D entry.
     window.history.replaceState(null, "", "/places");
     fireEvent.popState(window);
     await waitFor(() => expect(screen.getByTestId("leaflet-canvas")).toBeDefined());
@@ -254,13 +219,5 @@ describe("Places view switch", () => {
     fireEvent.popState(window);
     await waitFor(() => expect(screen.getByTestId("globe-engine")).toBeDefined());
     expect((screen.getByRole("searchbox", { name: "Rechercher un lieu" }) as HTMLInputElement).value).toBe("rome");
-  });
-
-  it("tells the globe to skip animation under prefers-reduced-motion", async () => {
-    stubWebGl(true);
-    stubMatchMedia(true);
-    renderExplorer("globe");
-    await waitFor(() => expect(globeProps.length).toBeGreaterThan(0));
-    expect(globeProps[globeProps.length - 1].animateIn).toBe(false);
   });
 });

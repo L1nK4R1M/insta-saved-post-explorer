@@ -7,13 +7,10 @@ import {
   aggregateByContinent,
   aggregateByCountry,
   angularDistance,
-  angularRadiusForMeters,
   buildGlobeScene,
-  clampLatitude,
   degreeRadiusForMeters,
   detailLevelForAltitude,
   geodesicCircleRing,
-  isRenderableOnGlobe,
   latLonToVec3,
   normalizeLongitude,
   sphericalCentroid,
@@ -22,6 +19,12 @@ import {
   toGlobeZones,
 } from "@/lib/places/globe-projection";
 import type { PlacesMapItem } from "@/server/places/map-view";
+
+// Risk-based coverage for the pure 3D view model. The cases kept here are the
+// ones that would silently produce a wrong globe: the sphere conventions, the
+// antimeridian and the poles, the honest-precision rules, and the aggregation
+// that could place a cluster on the wrong continent. Numeric variants are
+// parameterized rather than repeated as separate cases.
 
 function place(overrides: Partial<PlacesMapItem> = {}): PlacesMapItem {
   return {
@@ -47,331 +50,148 @@ function place(overrides: Partial<PlacesMapItem> = {}): PlacesMapItem {
   };
 }
 
-const CLOSE = 1e-9;
-
-describe("longitude normalization", () => {
-  it("keeps values already inside the range", () => {
-    expect(normalizeLongitude(0)).toBe(0);
-    expect(normalizeLongitude(55.1)).toBeCloseTo(55.1, 10);
-    expect(normalizeLongitude(-179.9)).toBeCloseTo(-179.9, 10);
-  });
-
-  it("wraps the antimeridian to a single representation", () => {
-    // 180 and -180 are the same meridian: both must resolve to -180 so two
-    // points there never render at opposite sides of the globe.
-    expect(normalizeLongitude(180)).toBe(-180);
-    expect(normalizeLongitude(-180)).toBe(-180);
-    expect(normalizeLongitude(181)).toBeCloseTo(-179, 10);
-    expect(normalizeLongitude(-181)).toBeCloseTo(179, 10);
-  });
-
-  it("wraps values beyond a full turn", () => {
-    expect(normalizeLongitude(370)).toBeCloseTo(10, 10);
-    expect(normalizeLongitude(-370)).toBeCloseTo(-10, 10);
-    expect(normalizeLongitude(720)).toBe(0);
-  });
-
-  it("never returns negative zero or a non-finite value", () => {
+describe("coordinate normalization", () => {
+  // 180 and -180 are the same meridian: two representations would render two
+  // points on opposite sides of the globe.
+  it("wraps longitude into a single representation and survives bad input", () => {
+    const cases: [number, number][] = [
+      [0, 0], [55.1, 55.1], [180, -180], [-180, -180], [181, -179],
+      [370, 10], [-370, -10], [720, 0], [Number.NaN, 0], [Number.POSITIVE_INFINITY, 0],
+    ];
+    for (const [input, expected] of cases) {
+      expect(normalizeLongitude(input), `longitude ${input}`).toBeCloseTo(expected, 9);
+    }
     expect(Object.is(normalizeLongitude(-360), -0)).toBe(false);
-    expect(normalizeLongitude(Number.NaN)).toBe(0);
-    expect(normalizeLongitude(Number.POSITIVE_INFINITY)).toBe(0);
   });
 });
 
-describe("latitude clamping", () => {
-  it("clamps rather than wraps, because crossing a pole would flip the longitude", () => {
-    expect(clampLatitude(91)).toBe(90);
-    expect(clampLatitude(-91)).toBe(-90);
-    expect(clampLatitude(45)).toBe(45);
-    expect(clampLatitude(Number.NaN)).toBe(0);
-  });
-});
+describe("sphere projection", () => {
+  // Fixing the conventions once: +Y through the north pole, +Z through (0, 0),
+  // +X east. Everything the globe draws depends on these holding.
+  it("honours the sphere conventions, the poles and the antimeridian", () => {
+    const cases: [string, number, number, { x: number; y: number; z: number }][] = [
+      ["north pole", 90, 0, { x: 0, y: 1, z: 0 }],
+      ["south pole", -90, 0, { x: 0, y: -1, z: 0 }],
+      ["origin meridian", 0, 0, { x: 0, y: 0, z: 1 }],
+      ["east", 0, 90, { x: 1, y: 0, z: 0 }],
+      ["west", 0, -90, { x: -1, y: 0, z: 0 }],
+      ["antimeridian", 0, 180, { x: 0, y: 0, z: -1 }],
+    ];
+    for (const [label, lat, lon, expected] of cases) {
+      const vec = latLonToVec3(lat, lon);
+      expect(vec.x, label).toBeCloseTo(expected.x, 9);
+      expect(vec.y, label).toBeCloseTo(expected.y, 9);
+      expect(vec.z, label).toBeCloseTo(expected.z, 9);
+    }
 
-describe("latLonToVec3", () => {
-  it("places the poles on the Y axis", () => {
-    const north = latLonToVec3(90, 0);
-    expect(north.x).toBeCloseTo(0, 10);
-    expect(north.y).toBeCloseTo(1, 10);
-    expect(north.z).toBeCloseTo(0, 10);
-
-    const south = latLonToVec3(-90, 0);
-    expect(south.y).toBeCloseTo(-1, 10);
-
-    // The longitude is irrelevant at a pole: every meridian meets there.
     for (const lon of [-180, -90, 0, 90, 179.99]) {
-      const vec = latLonToVec3(90, lon);
-      expect(Math.hypot(vec.x, vec.z)).toBeLessThan(1e-9);
+      expect(Math.hypot(latLonToVec3(90, lon).x, latLonToVec3(90, lon).z)).toBeLessThan(1e-9);
     }
-  });
-
-  it("places the origin meridian on +Z", () => {
-    const origin = latLonToVec3(0, 0);
-    expect(origin.x).toBeCloseTo(0, 10);
-    expect(origin.y).toBeCloseTo(0, 10);
-    expect(origin.z).toBeCloseTo(1, 10);
-  });
-
-  it("puts east on +X and the antimeridian on -Z", () => {
-    const east = latLonToVec3(0, 90);
-    expect(east.x).toBeCloseTo(1, 10);
-    expect(east.z).toBeCloseTo(0, 10);
-
-    const west = latLonToVec3(0, -90);
-    expect(west.x).toBeCloseTo(-1, 10);
-
-    const anti = latLonToVec3(0, 180);
-    expect(anti.z).toBeCloseTo(-1, 10);
-  });
-
-  it("gives 180 and -180 the exact same vector", () => {
-    const a = latLonToVec3(12, 180);
-    const b = latLonToVec3(12, -180);
-    expect(Math.abs(a.x - b.x)).toBeLessThan(CLOSE);
-    expect(Math.abs(a.y - b.y)).toBeLessThan(CLOSE);
-    expect(Math.abs(a.z - b.z)).toBeLessThan(CLOSE);
-  });
-
-  it("scales with the radius and stays on the sphere", () => {
-    for (const [lat, lon] of [
-      [0, 0],
-      [45, 12],
-      [-33.9, 151.2],
-      [78.2, -15.6],
-    ]) {
-      const vec = latLonToVec3(lat, lon, 3);
-      expect(Math.hypot(vec.x, vec.y, vec.z)).toBeCloseTo(3, 9);
+    for (const [lat, lon] of [[45, 12], [-33.9, 151.2], [78.2, -15.6]]) {
+      expect(Math.hypot(...Object.values(latLonToVec3(lat, lon, 3)))).toBeCloseTo(3, 9);
     }
-  });
-
-  it("does not mutate or depend on call order", () => {
-    const first = latLonToVec3(48.85, 2.35);
-    const second = latLonToVec3(48.85, 2.35);
-    expect(first).toEqual(second);
+    // Latitude is clamped, not wrapped: crossing a pole would flip the longitude.
+    expect(latLonToVec3(91, 0).y).toBeCloseTo(1, 9);
+    expect(latLonToVec3(12, 180)).toEqual(latLonToVec3(12, -180));
   });
 });
 
-describe("angularDistance", () => {
-  it("is zero for the same point", () => {
-    expect(angularDistance(48.85, 2.35, 48.85, 2.35)).toBeCloseTo(0, 12);
-  });
-
-  it("is a quarter turn between the equator and a pole", () => {
-    expect(angularDistance(0, 0, 90, 0)).toBeCloseTo(Math.PI / 2, 10);
-  });
-
-  it("is half a turn between antipodes", () => {
-    expect(angularDistance(0, 0, 0, 180)).toBeCloseTo(Math.PI, 9);
-    expect(angularDistance(45, 30, -45, -150)).toBeCloseTo(Math.PI, 9);
-  });
-
-  it("treats the antimeridian as continuous", () => {
-    // Two degrees apart across the date line, not 358.
-    const across = angularDistance(0, 179, 0, -179);
-    expect(across).toBeCloseTo(angularDistance(0, 1, 0, -1), 12);
-  });
-
-  it("is symmetric", () => {
-    const ab = angularDistance(35.6, 139.7, -33.8, 151.2);
-    const ba = angularDistance(-33.8, 151.2, 35.6, 139.7);
-    expect(ab).toBeCloseTo(ba, 12);
+describe("angular distance", () => {
+  it("measures great-circle distance, including across the date line", () => {
+    const cases: [string, number, number, number, number, number][] = [
+      ["same point", 48.85, 2.35, 48.85, 2.35, 0],
+      ["equator to pole", 0, 0, 90, 0, 90],
+      ["antipodes", 0, 0, 0, 180, 180],
+      ["antipodes off-axis", 45, 30, -45, -150, 180],
+      // Two degrees apart across the date line, not 358.
+      ["across the antimeridian", 0, 179, 0, -179, 2],
+    ];
+    for (const [label, aLat, aLon, bLat, bLon, expected] of cases) {
+      expect(toDegrees(angularDistance(aLat, aLon, bLat, bLon)), label).toBeCloseTo(expected, 6);
+    }
+    expect(angularDistance(35.6, 139.7, -33.8, 151.2)).toBeCloseTo(
+      angularDistance(-33.8, 151.2, 35.6, 139.7),
+      12,
+    );
   });
 });
 
 describe("APPROXIMATE radius conversion", () => {
-  it("returns zero for missing, zero or invalid radii", () => {
-    expect(angularRadiusForMeters(null)).toBe(0);
-    expect(angularRadiusForMeters(undefined)).toBe(0);
-    expect(angularRadiusForMeters(0)).toBe(0);
-    expect(angularRadiusForMeters(-500)).toBe(0);
-    expect(angularRadiusForMeters(Number.NaN)).toBe(0);
-  });
-
-  it("converts metres to the matching arc", () => {
-    // A quarter of the circumference is a quarter turn of arc.
-    const quarter = (Math.PI / 2) * EARTH_RADIUS_METERS;
-    expect(angularRadiusForMeters(quarter)).toBeCloseTo(Math.PI / 2, 9);
-    expect(degreeRadiusForMeters(quarter)).toBeCloseTo(90, 7);
-  });
-
-  it("caps a radius that would wrap around the sphere", () => {
-    expect(degreeRadiusForMeters(1e12)).toBeCloseTo(180, 7);
-  });
-
-  it("keeps a realistic 5 km zone small but non-zero", () => {
-    const degrees = degreeRadiusForMeters(5_000);
-    expect(degrees).toBeGreaterThan(0);
-    expect(degrees).toBeLessThan(0.1);
-  });
-});
-
-describe("globe render eligibility", () => {
-  it("excludes REJECTED places, exactly like the 2D map", () => {
-    expect(isRenderableOnGlobe(place({ reviewStatus: "REJECTED" }))).toBe(false);
-    expect(isRenderableOnGlobe(place({ reviewStatus: "UNREVIEWED" }))).toBe(true);
-    expect(isRenderableOnGlobe(place({ reviewStatus: "CONFIRMED" }))).toBe(true);
-    expect(isRenderableOnGlobe(place({ reviewStatus: "CONFLICT" }))).toBe(true);
-  });
-
-  it("excludes coordinates that are not usable", () => {
-    expect(isRenderableOnGlobe(place({ latitude: Number.NaN }))).toBe(false);
-    expect(isRenderableOnGlobe(place({ longitude: Number.POSITIVE_INFINITY }))).toBe(false);
-    expect(isRenderableOnGlobe(place({ latitude: 120 }))).toBe(false);
-  });
-
-  it("keeps REJECTED places out of the point list", () => {
-    const points = toGlobePoints([place({ id: "ok" }), place({ id: "no", reviewStatus: "REJECTED" })]);
-    expect(points.map((point) => point.id)).toEqual(["ok"]);
-  });
-
-  it("carries a zone radius only for APPROXIMATE places", () => {
-    const points = toGlobePoints([
-      place({ id: "exact", precision: "EXACT", approximationRadiusMeters: 5_000 }),
-      place({ id: "probable", precision: "PROBABLE", approximationRadiusMeters: 5_000 }),
-      place({ id: "zone", precision: "APPROXIMATE", approximationRadiusMeters: 5_000 }),
-    ]);
-    // A stored radius on an EXACT place must never inflate it into an area.
-    expect(points.find((point) => point.id === "exact")?.radiusDegrees).toBe(0);
-    expect(points.find((point) => point.id === "probable")?.radiusDegrees).toBe(0);
-    expect(points.find((point) => point.id === "zone")?.radiusDegrees).toBeGreaterThan(0);
-  });
-
-  it("marks the selected place and normalizes its coordinates", () => {
-    const points = toGlobePoints([place({ id: "a", longitude: 200 }), place({ id: "b" })], "a");
-    expect(points[0]).toMatchObject({ id: "a", selected: true, lng: -160 });
-    expect(points[1].selected).toBe(false);
-  });
-
-  it("does not mutate the input", () => {
-    const input = [place({ longitude: 200 })];
-    const snapshot = structuredClone(input);
-    toGlobePoints(input, "p1");
-    expect(input).toEqual(snapshot);
+  it("turns metres into an arc, refusing unusable values and capping the sphere", () => {
+    const cases: [string, number | null, number][] = [
+      ["missing", null, 0],
+      ["zero", 0, 0],
+      ["negative", -500, 0],
+      ["not a number", Number.NaN, 0],
+      ["a quarter of the circumference", (Math.PI / 2) * EARTH_RADIUS_METERS, 90],
+      // A radius larger than half the circumference would wrap around the sphere.
+      ["absurdly large", 1e12, 180],
+    ];
+    for (const [label, meters, expected] of cases) {
+      expect(degreeRadiusForMeters(meters), label).toBeCloseTo(expected, 6);
+    }
+    const realistic = degreeRadiusForMeters(5_000);
+    expect(realistic).toBeGreaterThan(0);
+    expect(realistic).toBeLessThan(0.1);
   });
 });
 
 describe("geodesic circle", () => {
-  it("closes the ring", () => {
-    const ring = geodesicCircleRing(48.85, 2.35, 1, 16);
-    expect(ring).toHaveLength(17);
-    expect(ring[0]).toEqual(ring[ring.length - 1]);
-  });
-
-  it("keeps every vertex at the requested angular distance from the centre", () => {
+  it("is closed, at a constant angular distance, and wraps the antimeridian", () => {
     const ring = geodesicCircleRing(48.85, 2.35, 2, 32);
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
     for (const [lng, lat] of ring) {
       expect(toDegrees(angularDistance(48.85, 2.35, lat, lng))).toBeCloseTo(2, 6);
     }
-  });
+    const across = geodesicCircleRing(0, 179.5, 1, 32);
+    expect(across.every(([lng]) => lng >= -180 && lng < 180)).toBe(true);
+    expect(across.some(([lng]) => lng > 179)).toBe(true);
+    expect(across.some(([lng]) => lng < -179)).toBe(true);
 
-  it("widens in longitude near the poles instead of drawing a squashed ellipse", () => {
-    const spanOf = (latitude: number) => {
-      const ring = geodesicCircleRing(latitude, 0, 1, 64);
-      const longitudes = ring.map(([lng]) => lng);
+    // One degree of arc costs far more longitude at 70°N than at the equator, so
+    // a naive flat-degree ellipse would draw a badly wrong zone up north.
+    const span = (latitude: number) => {
+      const longitudes = geodesicCircleRing(latitude, 0, 1, 64).map(([lng]) => lng);
       return Math.max(...longitudes) - Math.min(...longitudes);
     };
-    // One degree of arc costs far more longitude at 70°N than at the equator.
-    expect(spanOf(70)).toBeGreaterThan(spanOf(0) * 2);
-  });
-
-  it("emits GeoJSON order, longitude first", () => {
-    const ring = geodesicCircleRing(0, 90, 1, 8);
-    for (const [lng, lat] of ring) {
-      expect(Math.abs(lng - 90)).toBeLessThan(2);
-      expect(Math.abs(lat)).toBeLessThan(2);
-    }
-  });
-
-  it("wraps cleanly across the antimeridian", () => {
-    const ring = geodesicCircleRing(0, 179.5, 1, 32);
-    for (const [lng] of ring) {
-      expect(lng).toBeGreaterThanOrEqual(-180);
-      expect(lng).toBeLessThan(180);
-    }
-    // The ring genuinely straddles the date line.
-    expect(ring.some(([lng]) => lng > 179)).toBe(true);
-    expect(ring.some(([lng]) => lng < -179)).toBe(true);
-  });
-
-  it("enforces a minimum number of segments", () => {
-    expect(geodesicCircleRing(0, 0, 1, 2).length).toBeGreaterThanOrEqual(9);
+    expect(span(70)).toBeGreaterThan(span(0) * 2);
   });
 });
 
-describe("APPROXIMATE zones", () => {
-  it("builds a zone only for APPROXIMATE places", () => {
-    const zones = toGlobeZones([
-      place({ id: "exact", precision: "EXACT", approximationRadiusMeters: 5_000 }),
-      place({ id: "probable", precision: "PROBABLE", approximationRadiusMeters: 5_000 }),
-      place({ id: "zone", precision: "APPROXIMATE", approximationRadiusMeters: 5_000 }),
-    ]);
-    expect(zones.map((zone) => zone.id)).toEqual(["zone"]);
-  });
+describe("honest precision", () => {
+  const set = [
+    place({ id: "exact", precision: "EXACT", approximationRadiusMeters: 5_000 }),
+    place({ id: "probable", precision: "PROBABLE", approximationRadiusMeters: 5_000 }),
+    place({ id: "zone", precision: "APPROXIMATE", approximationRadiusMeters: 5_000 }),
+    place({ id: "rejected", precision: "APPROXIMATE", approximationRadiusMeters: 5_000, reviewStatus: "REJECTED" }),
+    place({ id: "broken", latitude: Number.NaN }),
+  ];
 
-  it("skips an APPROXIMATE place with no usable radius rather than inventing one", () => {
+  it("renders points and zones from the stored precision only", () => {
+    const points = toGlobePoints(set);
+    const zones = toGlobeZones(set);
+
+    // REJECTED and unusable coordinates never reach the scene. UNKNOWN cannot
+    // appear at all: it never creates a Place.
+    expect(points.map((point) => point.id)).toEqual(["exact", "probable", "zone"]);
+    // A stored radius must not widen an EXACT or PROBABLE place into an area.
+    expect(points.find((point) => point.id === "exact")?.radiusDegrees).toBe(0);
+    expect(points.find((point) => point.id === "probable")?.radiusDegrees).toBe(0);
+    expect(points.find((point) => point.id === "zone")?.radiusDegrees).toBeGreaterThan(0);
+    // Only APPROXIMATE gets a real area, sized from its own radius.
+    expect(zones.map((zone) => zone.id)).toEqual(["zone"]);
+    // …and an APPROXIMATE place with no usable radius is skipped, not invented.
     expect(toGlobeZones([place({ precision: "APPROXIMATE", approximationRadiusMeters: null })])).toEqual([]);
     expect(toGlobeZones([place({ precision: "APPROXIMATE", approximationRadiusMeters: 0 })])).toEqual([]);
   });
 
-  it("never builds a zone for a REJECTED place", () => {
-    expect(
-      toGlobeZones([
-        place({ precision: "APPROXIMATE", approximationRadiusMeters: 5_000, reviewStatus: "REJECTED" }),
-      ]),
-    ).toEqual([]);
-  });
-
-  it("sizes the zone from the stored radius", () => {
-    const [small] = toGlobeZones([place({ precision: "APPROXIMATE", approximationRadiusMeters: 1_000 })]);
-    const [large] = toGlobeZones([place({ precision: "APPROXIMATE", approximationRadiusMeters: 50_000 })]);
-    const spread = (ring: [number, number][]) =>
-      Math.max(...ring.map(([, lat]) => lat)) - Math.min(...ring.map(([, lat]) => lat));
-    expect(spread(large.ring)).toBeGreaterThan(spread(small.ring) * 10);
-  });
-
-  it("marks the selected zone", () => {
-    const zones = toGlobeZones(
-      [place({ id: "z", precision: "APPROXIMATE", approximationRadiusMeters: 5_000 })],
-      "z",
-    );
-    expect(zones[0].selected).toBe(true);
-  });
-});
-
-describe("spherical centroid", () => {
-  it("returns the point itself for a single coordinate", () => {
-    const centroid = sphericalCentroid([{ lat: 48.85, lng: 2.35 }]);
-    expect(centroid.lat).toBeCloseTo(48.85, 9);
-    expect(centroid.lng).toBeCloseTo(2.35, 9);
-  });
-
-  it("averages across the date line instead of collapsing to Africa", () => {
-    // Naive numeric averaging of 179 and -179 gives 0 — the Gulf of Guinea.
-    const centroid = sphericalCentroid([
-      { lat: 0, lng: 179 },
-      { lat: 0, lng: -179 },
-    ]);
-    expect(Math.abs(centroid.lng)).toBeGreaterThan(179);
-    expect(centroid.lat).toBeCloseTo(0, 9);
-  });
-
-  it("handles the poles", () => {
-    const centroid = sphericalCentroid([
-      { lat: 89, lng: 0 },
-      { lat: 89, lng: 180 },
-    ]);
-    expect(centroid.lat).toBeCloseTo(90, 6);
-  });
-
-  it("falls back to the first coordinate when the points cancel out", () => {
-    const centroid = sphericalCentroid([
-      { lat: 0, lng: 0 },
-      { lat: 0, lng: 180 },
-    ]);
-    expect(centroid).toEqual({ lat: 0, lng: 0 });
-  });
-
-  it("returns the origin for an empty set", () => {
-    expect(sphericalCentroid([])).toEqual({ lat: 0, lng: 0 });
+  it("marks the selection, normalizes coordinates and leaves the input untouched", () => {
+    const input = [place({ id: "a", longitude: 200 }), place({ id: "b" })];
+    const snapshot = structuredClone(input);
+    const points = toGlobePoints(input, "a");
+    expect(points[0]).toMatchObject({ id: "a", selected: true, lng: -160 });
+    expect(points[1].selected).toBe(false);
+    expect(input).toEqual(snapshot);
   });
 });
 
@@ -380,133 +200,81 @@ describe("aggregation", () => {
   const milan = place({ id: "r2", countryCode: "IT", country: "Italie", latitude: 45.5, longitude: 9.2 });
   const paris = place({ id: "f1", countryCode: "FR", country: "France", latitude: 48.9, longitude: 2.35 });
   const tokyo = place({ id: "j1", countryCode: "JP", country: "Japon", latitude: 35.7, longitude: 139.7 });
-  const nowhere = place({ id: "x1", countryCode: null, country: null });
 
-  it("groups by country and counts every place", () => {
-    const clusters = aggregateByCountry([rome, milan, paris, tokyo]);
-    expect(clusters.map((cluster) => [cluster.key, cluster.count])).toEqual([
-      ["IT", 2],
-      ["FR", 1],
-      ["JP", 1],
+  it("groups by country and continent, deterministically and without losing anyone", () => {
+    const byCountry = aggregateByCountry([rome, milan, paris, tokyo]);
+    expect(byCountry.map((cluster) => [cluster.key, cluster.count])).toEqual([["IT", 2], ["FR", 1], ["JP", 1]]);
+    expect(byCountry[0]).toMatchObject({ label: "Italie", placeIds: ["r1", "r2"] });
+
+    const byContinent = aggregateByContinent([rome, milan, paris, tokyo]);
+    expect(byContinent.map((cluster) => [cluster.key, cluster.count])).toEqual([["EU", 3], ["AS", 1]]);
+    expect(byContinent[0].label).toBe("Europe");
+
+    // Same input, same scene — the tests below could not assert otherwise.
+    expect(aggregateByCountry([tokyo, paris, rome, milan])).toEqual(byCountry);
+  });
+
+  it("keeps counts complete: unknown country bucketed, REJECTED excluded", () => {
+    const clusters = aggregateByCountry([
+      rome,
+      place({ id: "x1", countryCode: null, country: null }),
+      place({ id: "gone", countryCode: "IT", reviewStatus: "REJECTED" }),
     ]);
-    expect(clusters[0].placeIds).toEqual(["r1", "r2"]);
-    expect(clusters[0].label).toBe("Italie");
-  });
-
-  it("keeps a country with a single place", () => {
-    const clusters = aggregateByCountry([paris]);
-    expect(clusters).toHaveLength(1);
-    expect(clusters[0]).toMatchObject({ key: "FR", count: 1 });
-    expect(clusters[0].lat).toBeCloseTo(48.9, 6);
-    expect(clusters[0].lng).toBeCloseTo(2.35, 6);
-  });
-
-  it("handles a country with many places without losing any", () => {
-    const many = Array.from({ length: 200 }, (_, index) =>
-      place({ id: `m${index}`, countryCode: "IT", country: "Italie", latitude: 41 + index / 200, longitude: 12 }),
-    );
-    const clusters = aggregateByCountry(many);
-    expect(clusters).toHaveLength(1);
-    expect(clusters[0].count).toBe(200);
-    expect(clusters[0].placeIds).toHaveLength(200);
-  });
-
-  it("groups identical coordinates into one cluster at that exact point", () => {
-    const twin = place({ id: "t2", countryCode: "IT", country: "Italie", latitude: 41.9, longitude: 12.5 });
-    const clusters = aggregateByCountry([rome, twin]);
-    expect(clusters[0].count).toBe(2);
-    expect(clusters[0].lat).toBeCloseTo(41.9, 6);
-    expect(clusters[0].lng).toBeCloseTo(12.5, 6);
-  });
-
-  it("keeps places without a country in an explicit bucket so counts add up", () => {
-    const clusters = aggregateByCountry([rome, nowhere]);
-    const total = clusters.reduce((sum, cluster) => sum + cluster.count, 0);
-    expect(total).toBe(2);
+    expect(clusters.reduce((sum, cluster) => sum + cluster.count, 0)).toBe(2);
     expect(clusters.some((cluster) => cluster.key === UNKNOWN_GROUP_KEY)).toBe(true);
   });
 
-  it("never aggregates a REJECTED place", () => {
-    const clusters = aggregateByCountry([rome, place({ id: "gone", countryCode: "IT", reviewStatus: "REJECTED" })]);
-    expect(clusters[0].count).toBe(1);
-  });
+  it("centres a cluster through the sphere, not by averaging longitudes", () => {
+    // Naive numeric averaging of 179 and -179 gives 0 — the Gulf of Guinea.
+    const dateLine = sphericalCentroid([{ lat: 0, lng: 179 }, { lat: 0, lng: -179 }]);
+    expect(Math.abs(dateLine.lng)).toBeGreaterThan(179);
+    expect(dateLine.lat).toBeCloseTo(0, 9);
 
-  it("groups by continent using the existing static table", () => {
-    const clusters = aggregateByContinent([rome, milan, paris, tokyo]);
-    expect(clusters.map((cluster) => [cluster.key, cluster.count])).toEqual([
-      ["EU", 3],
-      ["AS", 1],
-    ]);
-    expect(clusters[0].label).toBe("Europe");
-  });
-
-  it("is deterministic for the same input", () => {
-    const first = aggregateByCountry([tokyo, paris, rome, milan]);
-    const second = aggregateByCountry([tokyo, paris, rome, milan]);
-    expect(first).toEqual(second);
-  });
-
-  it("does not mutate the input", () => {
-    const input = [rome, milan, paris];
-    const snapshot = structuredClone(input);
-    aggregateByCountry(input);
-    aggregateByContinent(input);
-    expect(input).toEqual(snapshot);
+    expect(sphericalCentroid([{ lat: 89, lng: 0 }, { lat: 89, lng: 180 }]).lat).toBeCloseTo(90, 6);
+    const single = sphericalCentroid([{ lat: 48.85, lng: 2.35 }]);
+    expect(single.lat).toBeCloseTo(48.85, 9);
+    expect(single.lng).toBeCloseTo(2.35, 9);
+    // Antipodal points cancel out; fall back rather than return a meaningless (0,0).
+    expect(sphericalCentroid([{ lat: 0, lng: 0 }, { lat: 0, lng: 180 }])).toEqual({ lat: 0, lng: 0 });
+    expect(sphericalCentroid([])).toEqual({ lat: 0, lng: 0 });
   });
 });
 
 describe("level of detail", () => {
-  it("maps the camera altitude to a drill-down level", () => {
-    expect(detailLevelForAltitude(2.5)).toBe("continent");
-    expect(detailLevelForAltitude(1.6)).toBe("continent");
-    expect(detailLevelForAltitude(1.2)).toBe("country");
-    expect(detailLevelForAltitude(0.75)).toBe("country");
-    expect(detailLevelForAltitude(0.3)).toBe("place");
-    expect(detailLevelForAltitude(Number.NaN)).toBe("continent");
-  });
-
   const many = (count: number, countryCode: string) =>
     Array.from({ length: count }, (_, index) =>
       place({ id: `${countryCode}${index}`, countryCode, latitude: index % 60, longitude: index % 170 }),
     );
 
-  it("aggregates by continent at world altitude", () => {
-    const scene = buildGlobeScene(many(30, "FR"), { altitude: 2.5 });
-    expect(scene.level).toBe("continent");
-    expect(scene.points).toHaveLength(0);
-    expect(scene.clusters.length).toBeGreaterThan(0);
+  it("aggregates far out, resolves to places close in, and never counts a REJECTED place", () => {
+    const levels: [number, string][] = [[2.5, "continent"], [1.0, "country"], [0.3, "place"], [Number.NaN, "continent"]];
+    for (const [altitude, expected] of levels) {
+      expect(detailLevelForAltitude(altitude), `altitude ${altitude}`).toBe(expected);
+    }
+
+    const places = [...many(20, "FR"), ...many(20, "IT"), place({ id: "gone", countryCode: "FR", reviewStatus: "REJECTED" })];
+
+    const world = buildGlobeScene(places, { altitude: 2.5 });
+    expect(world.level).toBe("continent");
+    expect(world.clusters.reduce((sum, cluster) => sum + cluster.count, 0)).toBe(40);
+
+    const country = buildGlobeScene(places, { altitude: 1.0 });
+    expect(country.clusters.map((cluster) => cluster.key).sort()).toEqual(["FR", "IT"]);
+
+    const close = buildGlobeScene(places, { altitude: 0.2 });
+    expect(close.level).toBe("place");
+    expect(close.points).toHaveLength(40);
   });
 
-  it("aggregates by country at mid altitude", () => {
-    const scene = buildGlobeScene([...many(20, "FR"), ...many(20, "IT")], { altitude: 1.0 });
-    expect(scene.level).toBe("country");
-    expect(scene.clusters.map((cluster) => cluster.key).sort()).toEqual(["FR", "IT"]);
-  });
+  it("skips aggregation for a small set and whenever a place is selected", () => {
+    const small = many(AGGREGATION_MIN_PLACES - 1, "FR");
+    expect(buildGlobeScene(small, { altitude: 2.5 }).level).toBe("place");
 
-  it("shows individual places when the camera is close", () => {
-    const scene = buildGlobeScene(many(30, "FR"), { altitude: 0.4 });
-    expect(scene.level).toBe("place");
-    expect(scene.points).toHaveLength(30);
-  });
-
-  it("skips aggregation entirely for a small set", () => {
-    const scene = buildGlobeScene(many(AGGREGATION_MIN_PLACES - 1, "FR"), { altitude: 2.5 });
-    expect(scene.level).toBe("place");
-    expect(scene.points).toHaveLength(AGGREGATION_MIN_PLACES - 1);
-  });
-
-  it("always resolves to individual places when one is selected", () => {
-    const places = many(40, "FR");
-    const scene = buildGlobeScene(places, { altitude: 2.5, selectedId: places[7].id });
-    expect(scene.level).toBe("place");
-    expect(scene.points.find((point) => point.id === places[7].id)?.selected).toBe(true);
-  });
-
-  it("never counts a REJECTED place in any scene", () => {
-    const places = [...many(20, "FR"), place({ id: "gone", countryCode: "FR", reviewStatus: "REJECTED" })];
-    const aggregated = buildGlobeScene(places, { altitude: 1.0 });
-    const detailed = buildGlobeScene(places, { altitude: 0.2 });
-    expect(aggregated.clusters.reduce((sum, cluster) => sum + cluster.count, 0)).toBe(20);
-    expect(detailed.points).toHaveLength(20);
+    // A selection must always resolve to the place the user asked for, not to
+    // the bubble that contains it.
+    const large = many(40, "FR");
+    const selected = buildGlobeScene(large, { altitude: 2.5, selectedId: large[7].id });
+    expect(selected.level).toBe("place");
+    expect(selected.points.find((point) => point.id === large[7].id)?.selected).toBe(true);
   });
 });

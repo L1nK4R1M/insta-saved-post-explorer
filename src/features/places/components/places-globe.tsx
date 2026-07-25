@@ -171,7 +171,10 @@ export function PlacesGlobe({
   }, [ready, selectedId, byId, flyTo]);
 
   const handleReady = useCallback(() => {
-    setReady(true);
+    // globe.gl fires this while it is still committing, before React considers
+    // this component mounted, so the state update is deferred by a microtask.
+    // Setting it synchronously warns and would be a render-phase update.
+    queueMicrotask(() => setReady(true));
     const globe = globeRef.current;
     const controls = globe?.controls();
     if (controls) {

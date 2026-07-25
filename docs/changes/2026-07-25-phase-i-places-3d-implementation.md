@@ -22,7 +22,7 @@ app/places/page.tsx (Server Component, unchanged data path)
 | File | Role |
 | --- | --- |
 | `src/features/places/renderer-contract.ts` (new) | The contract both renderers honour: already-filtered places, `selectedId`, `onSelect`, `onHover`. Engine-specific props stay off it. |
-| `src/features/places/components/places-renderer.tsx` (new) | The seam. Two `next/dynamic` + `ssr:false` branches; the 3D branch is the only place the globe is referenced. |
+| `src/features/places/components/places-renderer.tsx` (new) | The seam. Renders one of three **resolved** states — `map`, `globe`, `probing` — and the globe component is referenced on the `globe` branch only. |
 | `src/features/places/components/places-globe.tsx` (new) | The **only** file importing the 3D engine. Binds the pure scene to `react-globe.gl`, forwards interaction, releases the WebGL context on unmount. |
 | `src/lib/places/globe-projection.ts` (new) | Pure: projection, longitude wrapping, metres → arc, geodesic circles, spherical centroid, country/continent aggregation, level of detail. No React, no engine. |
 | `src/lib/places/webgl.ts` (new) | Capability probe: `supported` / `unsupported` / `failed`. Imports nothing 3D. |
@@ -91,6 +91,42 @@ account, no recurring cost — decision D3 and NFR-I-05 satisfied.
 - `UNKNOWN` creates no `Place`, so it cannot appear;
 - `REJECTED` is excluded from the globe exactly as from the 2D map — asserted by
   unit and component tests.
+
+## 5.1 Review fix — the engine is gated on a *proven* capability
+
+The first review found a real defect and it is fixed. The shell derived
+`effectiveView` as `view === "globe" && globeAvailable === false ? "map" : view`.
+When the probe had not answered yet, `globeAvailable` was `null`, the condition was
+false, and the view stayed `globe` — so `PlacesRenderer` rendered the dynamic globe
+and `next/dynamic` requested the 1.86 MiB chunk **before** the capability was known.
+On a device without WebGL, opening `?view=globe` downloaded the engine and then
+fell back. That violated FR-I-12, and the previous PR description claimed the
+opposite.
+
+The view is now resolved into three explicit states, and the globe branch is
+reachable **only** on a proven `true`:
+
+| Requested | Probe | Renders | URL |
+| --- | --- | --- | --- |
+| `map` | not consulted | 2D map | unchanged |
+| `globe` | `unknown` | light waiting state, **no 3D reference at all** | keeps `view=globe` — nothing is known yet, so a legitimate deep link is not downgraded |
+| `globe` | `supported` | globe | keeps `view=globe` |
+| `globe` | `unsupported` / `failed` | 2D map + message | rewritten to 2D |
+
+Only a **proven refusal** rewrites the URL. Filters, search, selection, list,
+statistics and the detail sheet are preserved in every state.
+
+The proof is direct rather than visual: `tests/unit/places-globe-lazy-load.test.tsx`
+mocks the globe module with a factory that records whether it was ever evaluated,
+which answers "was the dynamic import invoked?" — not "is a canvas visible?". It
+covers the four states the review asked for (2D view, `unknown`, `unsupported`,
+`failed`) and **fails against the previous implementation**, verified by
+re-introducing the old expression before finalizing.
+
+A second, smaller defect surfaced while re-running the browser suite:
+`onGlobeReady` fires while globe.gl is still committing, so `setReady(true)` warned
+that React state was being updated before the component had mounted. The update is
+now deferred by a microtask.
 
 ## 6. Measurements — real values, not estimates
 
@@ -177,21 +213,50 @@ npm run build && npm run start
 DATABASE_URL=<local> node scripts/places/measure-globe.mjs --url http://127.0.0.1:3000
 ```
 
-**This needs an owner decision** (see §9): accept the phase with the frame-rate
-budgets pending a run on a GPU device, or hold it until that run is done.
+**Status: `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`.** The SwiftShader numbers above
+are kept as measured, no GPU value is invented, and the reproduction command is
+given. **This needs an owner decision** (see §9): accept the phase with the
+frame-rate budgets pending a run on a GPU device, or hold it until that run is
+done.
 
-## 7. Tests
+## 7. Tests — risk-based, consolidated after review
 
-| Suite | Added | Content |
-| --- | --- | --- |
-| `places-query-state` | +7 (29 total) | `view` parse/serialize/round-trip, unknown value, Phase G URLs unchanged byte-for-byte |
-| `places-globe-projection` (new) | 58 | poles, meridian, antimeridian, longitude wrapping, angular distance, metres → arc, geodesic circles, `APPROXIMATE` zones, spherical centroid across the date line, country/continent aggregation, level of detail, `UNKNOWN`/`REJECTED` exclusion, immutability |
-| `places-webgl` (new) | 11 | webgl2/webgl/experimental fallback, unsupported, throwing `getContext` → `failed`, no engine import |
-| `places-view-switch` (new) | 10 | 2D default with the engine never loaded, keyboard-reachable control, switch both ways, filters/search preserved, `REJECTED` never handed to the globe, documented texture, WebGL fallback with message and corrected URL, disabled 3D button with list and filters still usable, back/forward, reduced motion |
-| `places-globe.spec` e2e (new) | 13 × 2 projects | historical URL, `view=map`, `view=globe`, toggle, filters across the switch, deep link, back/forward, no-WebGL fallback, keyboard, no horizontal overflow, **no provider request**, local texture < 200 KiB, reduced motion |
+The first round shipped 76 unit, 10 component and 13 e2e scenarios run on two
+projects: disproportionate for this application, and expensive in maintenance, in
+verification time and in the context every future agent has to read. The second
+round consolidated them against the rule now recorded in `AGENTS.md` §10 — cover
+risks, parameterize variants, do not replay a unit-proven rule at three levels.
 
-The 3D engine is **mocked in every automated test**. No test makes a network call to
-Geoapify, a texture CDN or any 3D provider — asserted, not assumed.
+| Level | Before | After | Change |
+| --- | --- | --- | --- |
+| Unit (Phase I) | 76 | **18** | −76 % |
+| Component | 10 | **8** | −20 % |
+| e2e scenarios | 13 | **7** | −46 % |
+| e2e **executions** (× projects) | 26 | **7** | −73 % |
+| Whole repository, unit | 526 | 466 | — |
+| Whole repository, e2e executed | 111 | 92 | — |
+| Unit suite duration | 15.3 s | **11.9 s** | −22 % |
+| e2e suite duration | ~84 s | **56.6 s** | −33 % |
+
+Nothing on the review's must-keep list was dropped. Coverage removed was
+duplication: per-value cases folded into table-driven tests, and assertions that a
+unit test already proved being replayed at component or e2e level.
+
+### 7.1 Why each new test file exists (`AGENTS.md` §10)
+
+| File | Risk it covers |
+| --- | --- |
+| `tests/unit/places-globe-projection.test.ts` (12) | The pure scene maths. A wrong sign, a mishandled antimeridian or a naive longitude average silently produces a globe that puts places in the wrong hemisphere — invisible in review, invisible in a screenshot. Also locks the honest-precision rules: `APPROXIMATE` is an area, a stale radius never widens an `EXACT` place, `REJECTED` never renders. |
+| `tests/unit/places-webgl.test.ts` (3) | The probe decides whether 1.86 MiB is downloaded. It must answer honestly in each branch and never throw, including when a hardened browser blocks `getContext`. |
+| `tests/unit/places-globe-lazy-load.test.tsx` (4) | The FR-I-12 regression this review caught. Observes the *import*, not the pixels, across the four capability states. Fails against the previous implementation. |
+| `tests/unit/places-view-switch.test.tsx` (4) | The shared-state contract across a view switch — filters, search, selection, URL, history, fallback, reduced motion — which no unit test can prove because it is the composition that matters. |
+| `tests/e2e/places-globe.spec.ts` (7) | The four things only a real browser proves: real routing and history, a real lazy chunk request, a real WebGL context and its refusal, and real layout. Six run on desktop; one mobile journey runs on the mobile project, because only the viewport genuinely differs. |
+
+The `view` contract is covered by 3 tests added to the existing
+`tests/unit/places-query-state.test.ts` rather than a new file.
+
+The 3D engine is **mocked in every automated test**. No test makes a network call
+to Geoapify, a texture CDN or any 3D provider — asserted, not assumed.
 
 ## 8. Verification (all fresh)
 
@@ -199,17 +264,18 @@ Geoapify, a texture CDN or any 3D provider — asserted, not assumed.
 npm run db:generate ... OK
 npm run lint ........... OK — 0 warning (--max-warnings=0)
 npm run typecheck ...... OK
-npm run test ........... 53 files, 526 tests passed, 0 failed  (440 on develop, +86)
+npm run test ........... 54 files, 466 tests passed, 0 failed  (440 on develop, +26)
 npm run build .......... OK
-npm run test:e2e ....... 111 passed, 13 skipped (chromium + mobile)
+npm run test:e2e ....... 92 passed, 20 skipped (chromium + mobile)
 ```
 
 The whole Phase G e2e suite passes **unmodified** (FR-I-02).
 
 ## 9. Risks, limits and open points
 
-- **D6 frame rate unvalidated** — see §6.3. Requires one run on a GPU device.
-  **Owner decision needed.**
+- **`FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`** — see §6.3. Requires one run on a GPU
+  device. **Owner decision needed.** The SwiftShader measurements stand as recorded
+  and no GPU figure is invented.
 - The atmospheric halo and the globe texture are the fill-rate cost centre; if a
   real device also misses the budget, the next measured levers are disabling
   antialiasing and lowering `atmosphereAltitude`. Neither was applied here, because

@@ -27,7 +27,7 @@ import {
   type ReviewFilter,
 } from "@/features/places/query-state";
 import { PlaceDetailSheet } from "@/features/places/components/place-detail-sheet";
-import { PlacesRenderer } from "@/features/places/components/places-renderer";
+import { PlacesRenderer, type ResolvedPlacesView } from "@/features/places/components/places-renderer";
 import type { ScreenPoint } from "@/features/places/renderer-contract";
 
 const PRECISION_LABEL: Record<string, string> = {
@@ -73,7 +73,7 @@ export function PlacesExplorer({
   const [hover, setHover] = useState<{ place: PlacesMapItem; x: number; y: number } | null>(null);
   const [countryQuery, setCountryQuery] = useState("");
   // The view the user asked for. What actually renders can differ when the
-  // device cannot run WebGL — see `effectiveView` below.
+  // device cannot run WebGL — see `resolvedView` below.
   const [view, setView] = useState<PlacesViewMode>(initialState.view);
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   // "unknown" until the client has answered: the globe must not be offered — nor
@@ -81,10 +81,24 @@ export function PlacesExplorer({
   const webgl = useWebGlSupport();
   const reducedMotion = usePrefersReducedMotion();
   const globeAvailable = webgl === "unknown" ? null : isWebGlUsable(webgl);
-  // Falling back is derived, never a stored copy of the view: a globe deep link
-  // opened without WebGL renders 2D while keeping filters, selection, list and
-  // detail, and the URL is rewritten to match by the sync effect below.
-  const effectiveView: PlacesViewMode = view === "globe" && globeAvailable === false ? "map" : view;
+
+  // What actually renders, resolved from the requested view AND the probe. The
+  // globe branch is reachable **only** on a proven `true`, so the engine chunk is
+  // never requested on an unproven capability (FR-I-12). `null` is not "probably
+  // fine": during SSR and the hydration pass the client has not answered yet, and
+  // rendering the globe there would start the 1.86 MiB import before the answer.
+  //
+  // - view=map            → the 2D map, never gated on the probe;
+  // - globe + true        → the globe;
+  // - globe + null        → a light waiting state; the URL keeps view=globe,
+  //                         because nothing is known yet and rewriting it would
+  //                         lose a legitimate deep link;
+  // - globe + false       → the 2D map, URL rewritten, message shown, everything
+  //                         else preserved.
+  const resolvedView: ResolvedPlacesView =
+    view !== "globe" ? "map" : globeAvailable === true ? "globe" : globeAvailable === false ? "map" : "probing";
+  // Only a proven refusal rewrites the URL.
+  const urlView: PlacesViewMode = view === "globe" && globeAvailable === false ? "map" : view;
   const showWebglNotice = view === "globe" && globeAvailable === false && !noticeDismissed;
   const [, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -125,17 +139,17 @@ export function PlacesExplorer({
   // browser back button works, without pushing an entry per keystroke. The
   // effective view is written, so a globe link that fell back to 2D says so.
   useEffect(() => {
-    const next = urlFor({ filters, placeId: selectedId, view: effectiveView });
+    const next = urlFor({ filters, placeId: selectedId, view: urlView });
     if (typeof window !== "undefined" && window.location.pathname + window.location.search !== next) {
       window.history.replaceState(null, "", next);
     }
-  }, [filters, selectedId, effectiveView, urlFor]);
+  }, [filters, selectedId, urlView, urlFor]);
 
   // The view is the one piece of state worth a history entry: back and forward
   // then move between 2D and 3D instead of leaving the page.
   const switchView = useCallback(
     (next: PlacesViewMode) => {
-      if (next === effectiveView) return;
+      if (next === view) return;
       if (next === "globe" && globeAvailable !== true) {
         setNoticeDismissed(false);
         setView("globe");
@@ -147,7 +161,7 @@ export function PlacesExplorer({
         window.history.pushState(null, "", urlFor({ filters, placeId: selectedId, view: next }));
       }
     },
-    [effectiveView, globeAvailable, filters, selectedId, urlFor],
+    [view, globeAvailable, filters, selectedId, urlFor],
   );
 
   // Restore the whole shared state from the URL on back/forward, so history is
@@ -189,7 +203,7 @@ export function PlacesExplorer({
         {/* Only the canvas depends on the active view; everything below — search,
             filters, statistics, list, detail and summary — is shared. */}
         <PlacesRenderer
-          view={effectiveView}
+          view={resolvedView}
           places={visible}
           selectedId={selectedId}
           onSelect={handleSelect}
@@ -269,16 +283,16 @@ export function PlacesExplorer({
           <div className="places-segmented" role="group" aria-label="Type de vue">
             <button
               type="button"
-              className={cn("places-segment", effectiveView === "map" && "is-active")}
-              aria-pressed={effectiveView === "map"}
+              className={cn("places-segment", view === "map" && "is-active")}
+              aria-pressed={view === "map"}
               onClick={() => switchView("map")}
             >
               2D
             </button>
             <button
               type="button"
-              className={cn("places-segment", effectiveView === "globe" && "is-active")}
-              aria-pressed={effectiveView === "globe"}
+              className={cn("places-segment", view === "globe" && "is-active")}
+              aria-pressed={view === "globe"}
               disabled={globeAvailable === false}
               onClick={() => switchView("globe")}
             >
