@@ -1,11 +1,12 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { BarChart3, Check, ListFilter, MapPin, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { PLACE_CATEGORY_GROUPS } from "@/lib/places/categories";
 import { PLACES_ELIGIBLE_THEMES } from "@/lib/places/eligibility";
+import { WEBGL_FALLBACK_MESSAGE, isWebGlUsable } from "@/lib/places/webgl";
+import { usePrefersReducedMotion, useWebGlSupport } from "@/features/places/capabilities";
 import type { PlacesStatsDto } from "@/contracts/api/places";
 import type { PlacesMapItem } from "@/server/places/map-view";
 import { cn } from "@/lib/utils";
@@ -17,19 +18,17 @@ import {
   filterPlaces,
   isMappable,
   narrowCountries,
+  parsePlacesUrlState,
   serializePlacesUrlState,
   toggleValue,
   type PlacesFilters,
   type PlacesUrlState,
+  type PlacesViewMode,
   type ReviewFilter,
 } from "@/features/places/query-state";
 import { PlaceDetailSheet } from "@/features/places/components/place-detail-sheet";
-
-// Leaflet must not run during SSR; the map arrives on the client only.
-const PlacesMap = dynamic(() => import("@/features/places/components/places-map"), {
-  ssr: false,
-  loading: () => <div className="places-map-canvas places-map-loading" aria-hidden="true" />,
-});
+import { PlacesRenderer, type ResolvedPlacesView } from "@/features/places/components/places-renderer";
+import type { ScreenPoint } from "@/features/places/renderer-contract";
 
 const PRECISION_LABEL: Record<string, string> = {
   EXACT: "Exact",
@@ -50,6 +49,8 @@ export type PlacesExplorerProps = {
   tileUrl: string;
   tileAttribution: string;
   tilesConfigured: boolean;
+  textureUrl: string;
+  textureAttribution: string;
 };
 
 export function PlacesExplorer({
@@ -61,6 +62,8 @@ export function PlacesExplorer({
   tileUrl,
   tileAttribution,
   tilesConfigured,
+  textureUrl,
+  textureAttribution,
 }: PlacesExplorerProps) {
   const [filters, setFilters] = useState<PlacesFilters>({ ...EMPTY_FILTERS, ...initialState });
   const [selectedId, setSelectedId] = useState<string | null>(initialState.placeId);
@@ -69,6 +72,34 @@ export function PlacesExplorer({
   const [listOpen, setListOpen] = useState(false);
   const [hover, setHover] = useState<{ place: PlacesMapItem; x: number; y: number } | null>(null);
   const [countryQuery, setCountryQuery] = useState("");
+  // The view the user asked for. What actually renders can differ when the
+  // device cannot run WebGL — see `resolvedView` below.
+  const [view, setView] = useState<PlacesViewMode>(initialState.view);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  // "unknown" until the client has answered: the globe must not be offered — nor
+  // its chunk requested — before then (FR-I-12).
+  const webgl = useWebGlSupport();
+  const reducedMotion = usePrefersReducedMotion();
+  const globeAvailable = webgl === "unknown" ? null : isWebGlUsable(webgl);
+
+  // What actually renders, resolved from the requested view AND the probe. The
+  // globe branch is reachable **only** on a proven `true`, so the engine chunk is
+  // never requested on an unproven capability (FR-I-12). `null` is not "probably
+  // fine": during SSR and the hydration pass the client has not answered yet, and
+  // rendering the globe there would start the 1.86 MiB import before the answer.
+  //
+  // - view=map            → the 2D map, never gated on the probe;
+  // - globe + true        → the globe;
+  // - globe + null        → a light waiting state; the URL keeps view=globe,
+  //                         because nothing is known yet and rewriting it would
+  //                         lose a legitimate deep link;
+  // - globe + false       → the 2D map, URL rewritten, message shown, everything
+  //                         else preserved.
+  const resolvedView: ResolvedPlacesView =
+    view !== "globe" ? "map" : globeAvailable === true ? "globe" : globeAvailable === false ? "map" : "probing";
+  // Only a proven refusal rewrites the URL.
+  const urlView: PlacesViewMode = view === "globe" && globeAvailable === false ? "map" : view;
+  const showWebglNotice = view === "globe" && globeAvailable === false && !noticeDismissed;
   const [, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -96,15 +127,58 @@ export function PlacesExplorer({
     return counts;
   }, [mappable]);
 
+  const urlFor = useCallback(
+    (state: { filters: PlacesFilters; placeId: string | null; view: PlacesViewMode }) => {
+      const query = serializePlacesUrlState({ ...state.filters, placeId: state.placeId, view: state.view });
+      return query ? `/places?${query}` : "/places";
+    },
+    [],
+  );
+
   // Keep the URL in sync so filters and the selection are shareable and the
-  // browser back button works, without pushing an entry per keystroke.
+  // browser back button works, without pushing an entry per keystroke. The
+  // effective view is written, so a globe link that fell back to 2D says so.
   useEffect(() => {
-    const query = serializePlacesUrlState({ ...filters, placeId: selectedId });
-    const next = query ? `/places?${query}` : "/places";
+    const next = urlFor({ filters, placeId: selectedId, view: urlView });
     if (typeof window !== "undefined" && window.location.pathname + window.location.search !== next) {
       window.history.replaceState(null, "", next);
     }
-  }, [filters, selectedId]);
+  }, [filters, selectedId, urlView, urlFor]);
+
+  // The view is the one piece of state worth a history entry: back and forward
+  // then move between 2D and 3D instead of leaving the page.
+  const switchView = useCallback(
+    (next: PlacesViewMode) => {
+      if (next === view) return;
+      if (next === "globe" && globeAvailable !== true) {
+        setNoticeDismissed(false);
+        setView("globe");
+        return;
+      }
+      setNoticeDismissed(false);
+      setView(next);
+      if (typeof window !== "undefined") {
+        window.history.pushState(null, "", urlFor({ filters, placeId: selectedId, view: next }));
+      }
+    },
+    [view, globeAvailable, filters, selectedId, urlFor],
+  );
+
+  // Restore the whole shared state from the URL on back/forward, so history is
+  // coherent for the view, the filters and the selection alike (FR-I-08).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPopState = () => {
+      const state = parsePlacesUrlState(new URLSearchParams(window.location.search));
+      const { placeId, view: nextView, ...nextFilters } = state;
+      setFilters(nextFilters);
+      setSelectedId(placeId);
+      setView(nextView);
+      setNoticeDismissed(false);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const patch = useCallback((next: Partial<PlacesFilters>) => {
     startTransition(() => setFilters((current) => ({ ...current, ...next })));
@@ -119,31 +193,28 @@ export function PlacesExplorer({
     setHover(null);
   }, []);
 
-  const handleHover = useCallback((place: PlacesMapItem | null, point: { x: number; y: number } | null) => {
+  const handleHover = useCallback((place: PlacesMapItem | null, point: ScreenPoint | null) => {
     setHover(place && point ? { place, x: point.x, y: point.y } : null);
   }, []);
 
   return (
     <section className="places-shell" aria-label="Lieux sauvegardés">
       <div className="places-stage">
-        {tilesConfigured ? (
-          <PlacesMap
-            places={visible}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-            onHover={handleHover}
-            tileUrl={tileUrl}
-            tileAttribution={tileAttribution}
-          />
-        ) : (
-          <div className="places-map-canvas places-map-missing">
-            <MapPin aria-hidden="true" />
-            <p>
-              La carte n’est pas configurée. Renseignez <code>NEXT_PUBLIC_PLACES_TILE_URL</code> pour afficher le fond
-              de carte ; la liste et les filtres restent utilisables.
-            </p>
-          </div>
-        )}
+        {/* Only the canvas depends on the active view; everything below — search,
+            filters, statistics, list, detail and summary — is shared. */}
+        <PlacesRenderer
+          view={resolvedView}
+          places={visible}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          onHover={handleHover}
+          tileUrl={tileUrl}
+          tileAttribution={tileAttribution}
+          tilesConfigured={tilesConfigured}
+          textureUrl={textureUrl}
+          textureAttribution={textureAttribution}
+          reducedMotion={reducedMotion}
+        />
 
         {/* Hover callout: photo + arrow pointing at the marker. Informative only. */}
         {hover ? (
@@ -207,7 +278,37 @@ export function PlacesExplorer({
             Filtres
             {activeFilterCount > 0 ? <span className="places-count-badge">{activeFilterCount}</span> : null}
           </button>
+          {/* Concept 2: the view switch sits next to the filters and uses the
+              same visual language as the rest of the chrome. */}
+          <div className="places-segmented" role="group" aria-label="Type de vue">
+            <button
+              type="button"
+              className={cn("places-segment", view === "map" && "is-active")}
+              aria-pressed={view === "map"}
+              onClick={() => switchView("map")}
+            >
+              2D
+            </button>
+            <button
+              type="button"
+              className={cn("places-segment", view === "globe" && "is-active")}
+              aria-pressed={view === "globe"}
+              disabled={globeAvailable === false}
+              onClick={() => switchView("globe")}
+            >
+              3D
+            </button>
+          </div>
         </div>
+
+        {showWebglNotice ? (
+          <p className="places-webgl-notice" role="status">
+            {WEBGL_FALLBACK_MESSAGE}
+            <button type="button" className="places-link" onClick={() => setNoticeDismissed(true)}>
+              Fermer
+            </button>
+          </p>
+        ) : null}
 
         {filtersOpen ? (
           <div className="places-panel" id="places-filters" role="dialog" aria-label="Filtres">

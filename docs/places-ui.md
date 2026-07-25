@@ -1,4 +1,4 @@
-# Places 2D UI (Phase G)
+# Places UI (Phase G 2D, Phase I 3D)
 
 The `/places` page is the first complete Places experience: a 2D map, a
 synchronized list, filters, statistics, a detail panel, navigation to the source
@@ -154,8 +154,70 @@ without changing any existing contract:
 
 The historical single `category` filter is unchanged. See `docs/places-api.md`.
 
-## 10. Deliberately out of scope
+## 10. 3D globe (Phase I)
 
-3D globe (Phase I), deep multimodal analysis (Phase H), the VPS worker, MCP and
-Hermes, viewport/bbox querying, map pagination and any optimization aimed at tens
-of thousands of points.
+Phase I adds a second renderer beside Leaflet. **It does not replace it**: the 2D
+map stays the default and is unchanged.
+
+### 10.1 View contract
+
+`view=map|globe` is additive. Absent, empty or unknown ⇒ `map`, so every URL
+written before Phase I resolves exactly as before, and only the non-default value
+is serialized — a 2D URL keeps its Phase G form byte-for-byte.
+
+The view is the one piece of state that pushes a history entry, so browser back and
+forward move between 2D and 3D; `popstate` restores view, filters and selection
+together. The camera is deliberately **not** in the URL: it is continuous and would
+pollute history, and `placeId` already restores a meaningful viewpoint. Cameras are
+independent per view in v1; switching re-frames from the shared selection.
+
+### 10.2 Renderer seam
+
+`PlacesExplorer` owns every piece of state. `PlacesRenderer` picks one renderer and
+loads it lazily; both honour `PlacesRendererProps` (already-filtered places,
+`selectedId`, `onSelect`, `onHover`). Tile props stay on the 2D renderer, texture
+props on the globe. Removing a view means deleting its component and its branch.
+
+### 10.3 Engine and rendering
+
+`react-globe.gl` (Three.js) behind `next/dynamic` with `ssr:false`, confined to
+`places-globe.tsx`. All scene maths lives in the pure `src/lib/places/globe-projection.ts`.
+
+- `EXACT` — brightest, tallest, largest point;
+- `PROBABLE` — clearly different colour, lower and smaller;
+- `APPROXIMATE` — a geodesic **area** sized from `approximationRadiusMeters`,
+  never a point, and a stored radius never widens an `EXACT`/`PROBABLE` place;
+- `UNKNOWN` never exists as a `Place`; `REJECTED` is excluded, as in 2D.
+
+Zoomed out, places aggregate by continent then country through a spherical
+centroid, so a group straddling the antimeridian does not collapse onto the wrong
+meridian. Clicking a cluster drills in. Aggregation is entirely client-side: no
+bbox query, no map pagination, no second source of truth.
+
+### 10.4 Texture
+
+A static local PNG generated from the public-domain Natural Earth 1:110m country
+polygons (`npm run places:generate-earth-texture`, 36.5 KiB). Source, licence and
+attribution are recorded in `public/places/ATTRIBUTION.md`, and the credit is shown
+in the globe view. No provider, no key, no recurring cost.
+
+### 10.5 Fallback, motion and accessibility
+
+WebGL is probed **before** the 3D chunk is requested. Without it the globe is not
+offered, a globe deep link renders 2D with an explicit message, the URL is
+corrected, and filters, selection, list and detail are all preserved. Under
+`prefers-reduced-motion` camera moves are instant. There is no auto-rotation at
+all. The segmented `2D | 3D` control is a pair of real buttons with `aria-pressed`;
+the list drawer remains the complete keyboard path and the globe never traps focus.
+
+### 10.6 Cost
+
+The 3D engine ships in its own chunk (~1.86 MiB) that a 2D-only session never
+requests; the `/places` initial 2D payload grew by 4.2 KiB (+1.08 %). Measured
+values are in `docs/changes/2026-07-25-phase-i-places-3d-implementation.md`, which
+also records which D6 budgets are met and which still need a GPU device.
+
+## 11. Deliberately out of scope
+
+Deep multimodal analysis (Phase H), the VPS worker, MCP and Hermes, viewport/bbox
+querying, map pagination and any optimization aimed at tens of thousands of points.

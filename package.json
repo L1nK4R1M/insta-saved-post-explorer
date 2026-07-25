@@ -20,7 +20,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "places:export-captions": "tsx --conditions=react-server scripts/places/export-caption-batch.ts",
-    "places:import-candidates": "tsx --conditions=react-server scripts/places/import-candidate-batch.ts"
+    "places:import-candidates": "tsx --conditions=react-server scripts/places/import-candidate-batch.ts",
+    "places:generate-earth-texture": "node scripts/places/generate-earth-texture.mjs",
+    "places:measure-globe": "node scripts/places/measure-globe.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1085.0",
@@ -42,8 +44,10 @@
     "next-themes": "^0.4.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-globe.gl": "2.38.0",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.3.1",
+    "three": "0.185.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {

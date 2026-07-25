@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getConfiguredOwnerId } from "@/auth/config";
 import { getSession } from "@/auth/session";
 import type { PlacesStatsDto } from "@/contracts/api/places";
+import { PLACES_GLOBE_ATTRIBUTION, PLACES_GLOBE_TEXTURE_URL } from "@/lib/places/globe-texture";
 import { PlacesExplorer } from "@/features/places/components/places-explorer";
 import { parsePlacesUrlState } from "@/features/places/query-state";
 import { databaseConfigured } from "@/server/db";
@@ -67,6 +68,12 @@ export default async function PlacesPage({ searchParams }: PageProps) {
     process.env.NEXT_PUBLIC_PLACES_TILE_ATTRIBUTION?.trim() ||
     'Powered by <a href="https://www.geoapify.com/">Geoapify</a> | © OpenStreetMap contributors';
 
+  // The 3D globe uses a static local texture instead of a tile provider: no key,
+  // no account, no recurring cost. Source and licence are recorded in
+  // public/places/ATTRIBUTION.md (Natural Earth, public domain).
+  const textureUrl = PLACES_GLOBE_TEXTURE_URL;
+  const textureAttribution = PLACES_GLOBE_ATTRIBUTION;
+
   return (
     <main className="places-page">
       <header className="places-page-head">
@@ -85,6 +92,8 @@ export default async function PlacesPage({ searchParams }: PageProps) {
         tileUrl={tileUrl}
         tileAttribution={tileAttribution}
         tilesConfigured={tileUrl.length > 0}
+        textureUrl={textureUrl}
+        textureAttribution={textureAttribution}
       />
     </main>
   );

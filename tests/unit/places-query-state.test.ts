@@ -7,6 +7,7 @@ import {
   filterPlaces,
   isMappable,
   narrowCountries,
+  parseViewMode,
   parsePlacesUrlState,
   serializePlacesUrlState,
   toggleValue,
@@ -51,6 +52,7 @@ describe("places URL state", () => {
       reviews: ["needs_review"],
       countryCodes: ["AE", "FR"],
       placeId: "abc",
+      view: "map",
     });
   });
 
@@ -66,11 +68,11 @@ describe("places URL state", () => {
   });
 
   it("returns an empty state for an empty query string", () => {
-    expect(parsePlacesUrlState(new URLSearchParams())).toEqual({ ...EMPTY_FILTERS, placeId: null });
+    expect(parsePlacesUrlState(new URLSearchParams())).toEqual({ ...EMPTY_FILTERS, placeId: null, view: "map" });
   });
 
   it("serializes only the non-empty parts and round-trips", () => {
-    expect(serializePlacesUrlState({ ...EMPTY_FILTERS, placeId: null })).toBe("");
+    expect(serializePlacesUrlState({ ...EMPTY_FILTERS, placeId: null, view: "map" })).toBe("");
     const state = {
       q: "rome",
       themes: ["Voyages" as const],
@@ -79,6 +81,7 @@ describe("places URL state", () => {
       reviews: ["confirmed" as const],
       countryCodes: ["IT"],
       placeId: "xyz",
+      view: "globe" as const,
     };
     const serialized = serializePlacesUrlState(state);
     expect(parsePlacesUrlState(new URLSearchParams(serialized))).toEqual(state);
@@ -94,6 +97,52 @@ describe("places URL state", () => {
   it("toggles a value in and out of a list", () => {
     expect(toggleValue(["a"], "b")).toEqual(["a", "b"]);
     expect(toggleValue(["a", "b"], "a")).toEqual(["b"]);
+  });
+});
+
+// Phase I — the view mode is additive: it must never change how a Phase G URL
+// resolves, and anything unexpected must degrade to the 2D map rather than
+// rendering an unknown view.
+describe("places view mode", () => {
+  it("resolves only the two supported modes and degrades everything else to the map", () => {
+    const cases: [string | null | undefined, string][] = [
+      ["map", "map"], ["globe", "globe"], ["  GLOBE ", "globe"], ["Map", "map"],
+      [null, "map"], [undefined, "map"], ["", "map"], ["   ", "map"],
+      ["3d", "map"], ["cesium", "map"], ["globe,map", "map"],
+    ];
+    for (const [input, expected] of cases) {
+      expect(parseViewMode(input), `view=${String(input)}`).toBe(expected);
+    }
+    expect(parsePlacesUrlState(new URLSearchParams("view=globe")).view).toBe("globe");
+    expect(parsePlacesUrlState(new URLSearchParams("view=hologram")).view).toBe("map");
+  });
+
+  it("leaves every URL written before Phase I on the 2D map, byte for byte", () => {
+    for (const query of ["", "q=rome", "theme=Voyages&categories=cafe", "precision=EXACT&review=confirmed&country=FR", "placeId=abc"]) {
+      expect(parsePlacesUrlState(new URLSearchParams(query)).view, query).toBe("map");
+    }
+    // A 2D URL must not gain a redundant parameter on the first interaction.
+    expect(
+      serializePlacesUrlState({ ...EMPTY_FILTERS, q: "rome", themes: ["Voyages"], placeId: "abc", view: "map" }),
+    ).toBe("q=rome&theme=Voyages&placeId=abc");
+  });
+
+  it("serializes and round-trips a full globe deep link", () => {
+    const base = { ...EMPTY_FILTERS, placeId: null };
+    expect(serializePlacesUrlState({ ...base, view: "map" })).toBe("");
+    expect(serializePlacesUrlState({ ...base, view: "globe" })).toBe("view=globe");
+
+    const state = {
+      q: "santorin",
+      themes: ["Voyages" as const],
+      categories: ["plage" as const],
+      precisions: ["APPROXIMATE" as const],
+      reviews: ["needs_review" as const],
+      countryCodes: ["GR"],
+      placeId: "place-1",
+      view: "globe" as const,
+    };
+    expect(parsePlacesUrlState(new URLSearchParams(serializePlacesUrlState(state)))).toEqual(state);
   });
 });
 

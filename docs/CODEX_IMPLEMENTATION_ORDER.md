@@ -291,9 +291,14 @@ caméras indépendantes en v1 ; 3D complète sur mobile compatible avec repli We
 vers la 2D ; budgets mesurables (50–60 fps desktop, ≥ 30 fps mobile, premier rendu
 du globe < 3 s, aucune régression significative du bundle 2D).
 
-La Phase I est donc `DESIGN_APPROVED` : l'implémentation peut démarrer dans une PR
-dédiée en suivant T1–T10, mais aucun code de production n'existe encore. La Phase I
-**ne remplace pas Leaflet** : la carte 2D de la Phase G est conservée.
+**État au 25 juillet 2026 :** T1–T10 sont implémentées sur
+`claude/phase-i-places-3d-implementation` et la Phase I est `AWAITING_REVIEW`. La
+carte 2D Leaflet de la Phase G est conservée intacte, aucune migration n'a été
+ajoutée et le moteur 3D n'est pas livré aux utilisateurs 2D. La gate de sortie I
+n'est **pas** encore franchie : les budgets de framerate D6 n'ont pas pu être
+validés faute de GPU dans l'environnement d'intégration, et une décision
+propriétaire reste ouverte. Voir
+`changes/2026-07-25-phase-i-places-3d-implementation.md`.
 
 ### Phase J. MCP et Hermes
 

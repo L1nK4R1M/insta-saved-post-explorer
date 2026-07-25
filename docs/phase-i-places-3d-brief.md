@@ -1,6 +1,10 @@
 # Phase I — Places 3D globe — entry brief
 
-**Status: DESIGN APPROVED — implementation may start in a separate PR.**
+**Status: IMPLEMENTED — awaiting review.** T1–T10 are built on
+`claude/phase-i-places-3d-implementation`; what was actually delivered, with all
+measured values, is recorded in
+`changes/2026-07-25-phase-i-places-3d-implementation.md`. This document remains the
+design reference and is not rewritten by the implementation.
 Last updated: 25 July 2026. Base: `develop` @ `8d5c1ee` (Phase G merged as `2bd2098`).
 
 The owner approved every open decision on 25 July 2026 and
@@ -332,10 +336,12 @@ Leaflet**, and any redesign of `/places` beyond adding the view.
 
 ## 7. Next action
 
-1. ✅ Decisions approved and recorded (ADR §10, `ACCEPTED`). **This gate is closed.**
-2. Create an implementation branch off the latest `develop` and follow
-   `docs/superpowers/plans/2026-07-25-phase-i-places-3d.md`, tasks **T1 → T10**
-   (T0 is satisfied by this documentation PR).
-3. Keep Phase I to the 3D experience alone; do not replace Leaflet; no migration.
-4. Record the real performance measurements (D6) in the final proof — the budgets are
-   measurable, not decorative.
+1. ✅ Decisions approved and recorded (ADR §10, `ACCEPTED`). **Gate closed.**
+2. ✅ T1 → T10 implemented on `claude/phase-i-places-3d-implementation`. Leaflet is
+   not replaced and no migration was introduced.
+3. ✅ Real measurements recorded. Bundle and time-to-first-render budgets are **met**;
+   the D6 **frame-rate** budgets could not be validated because the CI container has
+   no GPU, and the evidence for that conclusion is in the change record §6.3.
+4. ⏳ **Open owner decision**: accept the phase with the frame-rate budgets pending a
+   run on a GPU device, or hold it until `npm run places:measure-globe` has been run
+   on real hardware. Phase I must not be marked COMPLETE while this is open.
