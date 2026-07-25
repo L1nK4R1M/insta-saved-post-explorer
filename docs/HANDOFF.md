@@ -53,19 +53,20 @@ UNKNOWN results were handled correctly. No secret, caption, JSONL or production
 data was committed. The Phase F exit gate is explicitly accepted; PILOT_BLOCKED_BY_ENV
 no longer applies.
 
-Phase G — Places 2D UI and contextual navigation is READY. It must start in its own
-dedicated branch, reset from the latest `develop`, only after an explicit Phase G
-implementation prompt. It must not be started in this closure change.
+Phase G — Places 2D UI and contextual navigation is IMPLEMENTED and awaiting review
+on `claude/phase-g-places-2d-ui` (2D only; no 3D globe, no deep analysis).
 ```
 
-Next-phase branch (create only when Phase G implementation is authorized):
+Active branch:
 
 ```text
-claude/phase-g-places-2d-ui   (reset from the latest develop)
+claude/phase-g-places-2d-ui   (from develop 3927ddb)
 ```
 
-Do not reuse any earlier phase head. The next session must reset its branch from the
-latest `develop` and wait for an explicit Phase G prompt before writing UI code.
+Owner decisions applied in Phase G: Leaflet as the map engine, Geoapify raster tiles
+with mandatory attribution, all places loaded client-side (under ~1000 canonical
+places, so no bbox/viewport querying and no map pagination), brunch folded into the
+café group until a dedicated source exists, and multi-select filters.
 
 ## 4. Merge proof
 
@@ -195,7 +196,7 @@ not run the real import):
 | F2 — Geoapify and caption resolution | COMPLETE | PR #30, squash `7cc05e2`; hardened by PR #32, squash `216b975`. CI green, no migration required. |
 | F3 — Read API, statistics and review | COMPLETE | PR #31, squash `15356e9`; CI #94 green, Preview ready, no migration. |
 | F — Places metadata-first domain | COMPLETE | All sub-phases and the F hardening (PR #32) merged; exit gate accepted via successful real local validation (idempotent import, no expected P2002, transient-error recovery, `UNKNOWN` handled). No further migration. |
-| G — Places 2D UI | READY | Phase F complete; stable Places schema, read-only API, statistics and review services; real Places data validated. Start in a dedicated branch after an explicit Phase G prompt. See `phase-g-places-2d-ui-brief.md`. |
+| G — Places 2D UI | AWAITING_REVIEW | Implemented on `claude/phase-g-places-2d-ui`: `/places`, Leaflet map with clustering, hover callout, detail sheet, synchronized list, filters behind one button, theme/country statistics, review via internal Server Actions, deep links, responsive and accessible. Additive read-only API filters; no migration. See `places-ui.md`. |
 | H — Deep Places analysis | BLOCKED | Requires C, E and stable F. |
 | I — Places 3D globe | BLOCKED | Requires G and stable Places data. |
 | J — Unified MCP and Hermes | BLOCKED | Places tools require complete Phase F. |
@@ -207,7 +208,7 @@ key ownership (a development-only key was used for the accepted real local valid
 
 Still open (must not be guessed):
 
-- Phase G product decisions — map/rendering library, tile provider, cluster behaviour, viewport/query limits, display thresholds, and final `/places` visual design (see `phase-g-places-2d-ui-brief.md`);
+- Phase G product decisions are RESOLVED (Leaflet, Geoapify raster tiles, client-side clustering with no viewport querying, Apple-Plans-inspired minimal design). Still open for a later iteration: a dedicated source for brunch (currently folded into café);
 - distributed API rate limiting on Vercel;
 - 3D globe rendering provider for Phase I;
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;

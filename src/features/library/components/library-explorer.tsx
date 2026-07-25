@@ -1,7 +1,7 @@
 "use client";
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, Grid2X2, LayoutGrid, LogIn, LogOut, Search, Settings2, SlidersHorizontal, Sparkles, Upload, Wrench, X } from "lucide-react";
+import { ArrowUp, Grid2X2, LayoutGrid, LogIn, LogOut, MapPin, Search, Settings2, SlidersHorizontal, Sparkles, Upload, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -346,6 +346,10 @@ export function LibraryExplorer({
           <kbd>⌘ K</kbd>
         </label>
         <nav className="header-actions" aria-label="Actions principales">
+          {/* Places is a permanent destination, on desktop and mobile alike. */}
+          <Link className="header-tab places-tab" href="/places">
+            <MapPin aria-hidden="true" className="size-4" /> <span>Places</span>
+          </Link>
           <button
             className="header-tab desktop-only"
             type="button"

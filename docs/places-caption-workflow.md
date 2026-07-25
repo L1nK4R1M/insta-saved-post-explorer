@@ -236,18 +236,18 @@ and are git-ignored. Delete them after each run (`rm -rf .tmp/places`). Never
 commit captions, candidate files, API keys, OAuth credentials, or production data.
 Only aggregated pilot metrics (see below) may be reported.
 
-## 12. Controlled pilot
+## 12. Controlled validation
 
-The reviewed plan requires a controlled pilot over 30–50 eligible posts split
-between `Voyages` and `Restaurant`, run against a real Geoapify key, reporting only
-aggregate metrics (posts exported, candidate extraction success, UNKNOWN count,
-Geoapify matches, EXACT/PROBABLE/APPROXIMATE counts, provider failures, duplicates
-merged, manual corrections, average Geoapify calls per post). No result is ever
-fabricated and no caption or candidate file is committed.
+The reviewed plan called for a controlled run over eligible posts split between
+`Voyages` and `Restaurant`, executed against a real Geoapify key, reporting only
+aggregate or qualitative outcomes (never a fabricated result, a caption or a
+candidate file).
 
-**Current status: `PILOT_BLOCKED_BY_ENV`.** This session has no `GEOAPIFY_API_KEY`
-and no develop environment with one, so the operational pilot cannot run here.
-Missing configuration: `PLACES_ENABLED=1` and a valid `GEOAPIFY_API_KEY` (plus the
-resolver settings above). The pilot is a mandatory gate **before Phase G opens**;
-it may be executed after this code merges. Until it runs, Phase F is **not**
-`COMPLETE` and Phase G is **not** `READY`.
+**Current status: DONE.** Phase F is `COMPLETE` and Phase G is `READY`. The pipeline
+was validated end to end on a real development environment (real DB, a
+development-only `GEOAPIFY_API_KEY`, real local JSONL): the real import succeeded, an
+identical re-import stayed **idempotent** with no unwanted duplicates, the expected
+`P2002` no longer appears in the logs, the Geoapify retries recovered transient
+errors, and `UNKNOWN` results were handled correctly. No migration was required and
+no secret or JSONL was committed. The `PILOT_BLOCKED_BY_ENV` state no longer applies;
+see `docs/HANDOFF.md` §7 and §10 for the recorded exit-gate decision.

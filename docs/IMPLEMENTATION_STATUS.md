@@ -27,7 +27,7 @@ Status values:
 | F3 — Read API, statistics and review | COMPLETE | F2 merged | PR #31, squash `15356e9` | Seven read-only Places routes, owner-scoped cursor queries, `source_theme` statistics, durable review decisions, complete audit evidence, exact job ownership validation, conditional Geoapify preflight, CI #94 green and Preview ready. No migration. |
 | F — Places metadata-first domain | COMPLETE | Phases B and D | F1/F2/F3 + hardening PR #32, squash `216b975` | Code and robustness work complete. Exit gate accepted via a successful real local validation: real import succeeded, an identical re-import stayed idempotent with no unwanted duplicates, the expected P2002 no longer appears, transient errors recovered, and `UNKNOWN` was handled correctly. No migration; no public-contract break; no sensitive data committed. |
 | E — Global worker foundation | READY | Phase C | None | Separate VPS phase. Do not mix with Phase G. |
-| G — Places 2D UI and contextual navigation | READY | Phase F complete | None (start `claude/phase-g-places-2d-ui` from latest `develop`) | `/places`, 2D map, list, filters, clusters, review UI, statistics and post deep links. Entry gate satisfied (stable schema, read-only API, statistics and review services, real Places data validated). Source of truth: `phase-g-places-2d-ui-brief.md` → `CODEX_IMPLEMENTATION_ORDER.md` §5 Phase G + `CODEX_PLACES_EXTENSION.md` §13–§14. Must not start without an explicit Phase G prompt. |
+| G — Places 2D UI and contextual navigation | AWAITING_REVIEW | Phase F complete | `claude/phase-g-places-2d-ui` | `/places` route and header entry, Leaflet + markercluster behind a swappable `PlacesMap`, Geoapify raster tiles with mandatory attribution, EXACT/PROBABLE pins, APPROXIMATE zone + radius, UNKNOWN never mapped, hover callout with photo, detail sheet, synchronized list, search, filters behind one button (theme, place type, precision, review, country), statistics limited to theme and country, review via internal Server Actions, URL deep links, responsive and keyboard-accessible. Additive read-only API filters (`categories`, `source_theme`); no migration. Docs: `places-ui.md`. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
 | I — Places 3D globe | BLOCKED | Phase G | None | Shared 2D/3D data source, synchronized selection and accessibility. |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
@@ -40,8 +40,10 @@ Current state
 - F2 is merged, hardened by PR #32, and COMPLETE.
 - F3 is merged and COMPLETE.
 - Phase F is CLOSED (COMPLETE): the exit gate was accepted via a successful real local validation.
-- Phase G is READY (not started). It requires an explicit Phase G prompt and its own branch from develop.
-- No implementation branch is currently active.
+- Phase G is implemented and AWAITING_REVIEW on `claude/phase-g-places-2d-ui` (2D only).
+  Owner decisions applied: Leaflet + Geoapify raster tiles, all places loaded client-side
+  (no bbox, no map pagination), brunch folded into the café group for now, multi-select filters.
+- Phases H (deep analysis) and I (3D globe) remain untouched.
 
 Reference develop implementation commit
 216b97527bc091d6ffe24925ab3463f7d1f0f1c6

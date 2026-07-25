@@ -51,8 +51,13 @@ Query parameters:
 | `review_status` | UNREVIEWED / CONFIRMED / REJECTED / CONFLICT. |
 | `precision` | EXACT / PROBABLE / APPROXIMATE. |
 | `city`, `category` | Case-insensitive equality. |
+| `categories` | Comma-separated place-type groups (multi-select): `restaurant`, `cafe`, `patisserie`, `bar`, `hotel`, `plage`, `monument`. Matches provider categories by group prefix; unknown keys are dropped. |
+| `source_theme` | `Voyages` or `Restaurant` after the shared normalization; restricts to places linked to at least one post of that theme (never a collection join). |
 | `min_confidence` | 0–1 lower bound. |
 | `q` | Text search on display name, normalized name, and city. |
+
+`categories` and `source_theme` were added additively in Phase G; the historical
+single `category` filter and every existing response shape are unchanged.
 
 Response:
 
@@ -60,8 +65,10 @@ Response:
 { "items": [ { "id": "...", "displayName": "...", "postCount": 3, "precision": "EXACT", "reviewStatus": "UNREVIEWED", "updatedAt": "2026-07-24T00:00:00.000Z" } ], "nextCursor": null }
 ```
 
-`bbox`/`nearby` and a `source_theme` list filter are intentionally deferred to a
-later phase (they need a defined UX contract); F3 does not improvise them.
+`bbox`/`nearby` remain intentionally deferred: the owner capped Places at under
+~1000 canonical places, so the Phase G map loads the full owner-scoped set and
+filters it in the browser instead of querying by viewport. The `source_theme`
+list filter, deferred in F3, shipped in Phase G (see above).
 
 ### GET /api/v1/places/{id}
 
