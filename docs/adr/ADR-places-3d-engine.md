@@ -1,6 +1,7 @@
 # ADR — 3D engine for the Places globe (Phase I)
 
-- **Status: PROPOSED** — not accepted. The owner must choose the engine before any production code.
+- **Status: ACCEPTED** — decided by the owner on 25 July 2026.
+- **Decision: Option A′ — Three.js via `react-globe.gl` / `globe.gl`.**
 - Date: 25 July 2026
 - Deciders: repository owner (sole decider), Claude (analysis)
 - Scope: Phase I only — the 3D Places globe. Phase G (2D) is complete and must be preserved.
@@ -145,9 +146,9 @@ the 2D map, the data layer, the filters, the URL contract and the detail sheet a
 untouched. Option B is less reversible because of its build-level wiring; option C
 is the least reversible because its value implies migrating 2D.
 
-## 8. Recommendation
+## 8. Decision (accepted)
 
-**Option A′ — Three.js via `globe.gl` / `react-globe.gl`.**
+**Option A′ — Three.js via `react-globe.gl` / `globe.gl`.**
 
 It is the only option that satisfies every hard constraint at once: Leaflet 2D
 untouched, zero recurring cost and no new provider account, a premium-looking globe
@@ -161,7 +162,20 @@ buildings become a stated requirement. MapLibre becomes the right answer **if an
 only if** the owner decides to unify 2D and 3D on a single engine — a separate
 decision that would supersede the Phase G stack and needs its own ADR.
 
-## 9. Consequences if A′ is accepted
+### 8.1 Explicitly rejected
+
+- **raw Three.js** for the first version — the custom camera and layer code is not worth it;
+- **CesiumJS** — no realistic terrain or 3D buildings are required;
+- **MapLibre for the 3D view** — its value implies unifying the engines;
+- **replacing Leaflet** or migrating the existing 2D view — the Phase G stack stays.
+
+Rationale recorded by the owner: the application stays around 1000 positions; no
+realistic terrain or 3D building is required; priority to simplicity, fluidity,
+maintainability and the absence of recurring cost; the 3D engine must stay isolated
+behind our own rendering contract and be lazily loaded only when the 3D view is
+requested.
+
+## 9. Consequences
 
 - New client-only dependencies: `react-globe.gl` (+ `three` transitively), lazy-loaded.
 - One new component `PlacesGlobe3D`, mirroring the existing `PlacesMap` prop contract.
@@ -170,14 +184,24 @@ decision that would supersede the Phase G stack and needs its own ADR.
 - No server change, no API change, no Prisma migration.
 - Terrain and 3D buildings are explicitly **not** delivered by Phase I.
 
-## 10. Decisions still open (owner)
+## 10. Decisions — all closed
 
-1. **Engine**: A′ (recommended), A, B or C.
-2. **Visual concept**: Concept 1 (cinematic), 2 (Apple-Plans sober) or 3 (travel exploration) — see the brief.
-3. **Texture / basemap source for the globe** and, if B or C is chosen, the terrain/tile provider and its budget.
-4. **2D ↔ 3D behaviour**: shared camera or independent camera per view; does the globe become the default landing view?
-5. **Mobile**: full globe on mobile, or 2D-only on small screens with an opt-in?
-6. **Performance budget**: acceptable added bundle weight and target frame rate.
+| # | Decision | Resolution (owner, 25 July 2026) |
+| --- | --- | --- |
+| D1 | Engine | **`react-globe.gl` / `globe.gl`** (Three.js underneath). Raw Three.js, CesiumJS and MapLibre-for-3D rejected; Leaflet is not replaced and the 2D view is not migrated. |
+| D2 | Visual concept | **Concept 2 (sober)** as the UX architecture, enriched with a few restrained Concept 1 elements: dark premium globe, light atmospheric halo, luminous points, smooth centring animation on selection. No permanent animated arcs, no excessive effects, no `/places` redesign. Segmented `2D \| 3D` control next to the filters; current controls, detail panel, filters, search, statistics and list all preserved. |
+| D3 | Texture / provider | **Static, free, optimized Earth texture** showing continents, oceans and main borders. No 3D terrain, no 3D buildings, no dependency on Cesium ion, Mapbox or any paid service. Geoapify stays used **only** for the Leaflet 2D raster tiles. The exact source may be selected during implementation provided it is freely usable, repository-compatible, lightweight, served from the application assets (or an explicitly documented reliable source) and replaceable without touching the globe architecture. Its licence, source and attribution must be documented; **no texture with an unclear licence may be downloaded or committed.** |
+| D4 | 2D ↔ 3D behaviour | Additive `view=map\|globe`; absent ⇒ `map`; **2D stays the default**; the 3D engine is not loaded when `view=map`. Filters, search, `placeId` selection, list, statistics and the detail panel are shared. **Independent cameras in v1**; the free camera is **not** stored in the URL. When a `placeId` is selected the active view centres on it, in both switch directions. Historical URLs without `view` stay valid. |
+| D5 | Mobile and fallback | Full 3D allowed on capable mobiles; the globe loads only after the 3D view is explicitly selected; touch controls provided. **WebGL is detected before fully loading the engine**; if unavailable or failing, fall back cleanly to 2D with an understandable message while preserving selection, filters, list and detail. The map or globe is never the only way to reach places. `prefers-reduced-motion` respected. |
+| D6 | Performance budget | No significant regression of the initial `/places` bundle in 2D; `react-globe.gl`, Three.js and globe assets lazy-loaded; **50–60 fps** target on recent desktop, **≥ 30 fps** minimum on capable mobile; validated with ~1000 places; **first globe render < 3 s** after opening it on a normal connection; optimized texture; no terrain, building, 3D model or unnecessary asset in v1. These are **measurable budgets** and the real measurements must be recorded in the final proof. |
+
+### 10.1 Data representation (owner-confirmed)
+
+`EXACT` and `PROBABLE` render as distinct points with a **clear visual difference**;
+`APPROXIMATE` renders as a zone or halo **proportional to its radius**, never a fake
+exact point; `UNKNOWN` and `REJECTED` are **never rendered** on the globe; visual
+clustering applies when several places are close at world scale; no second source of
+truth — `PlacesMapItem` is reused until evidence justifies a new server contract.
 
 ## 11. Re-evaluation triggers
 

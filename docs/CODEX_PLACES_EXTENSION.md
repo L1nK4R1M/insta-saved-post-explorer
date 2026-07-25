@@ -927,12 +927,15 @@ Carte 2D :
 Globe 3D :
 
 - projection globe du même moteur lorsque possible ;
-  > Interprétation Phase I (25 juillet 2026) : la Phase G a livré Leaflet, qui n'offre
-  > pas de projection globe. La clause « lorsque possible » n'est donc pas satisfaite
-  > et le globe utilise un moteur dédié, chargé paresseusement, **sans remplacer la
-  > carte 2D**. L'invariant qui compte reste respecté : une seule source de données
-  > (`PlacesMapItem`), aucun second service backend, sélection et filtres partagés.
-  > Voir `phase-i-places-3d-brief.md` et `adr/ADR-places-3d-engine.md`.
+  > Décision Phase I (25 juillet 2026, ADR `ACCEPTED`) : la Phase G a livré Leaflet,
+  > qui n'offre pas de projection globe. La clause « lorsque possible » n'est donc pas
+  > satisfaite et le globe utilise **`react-globe.gl` / `globe.gl`** (Three.js), chargé
+  > paresseusement, **sans remplacer la carte 2D**. Les invariants qui comptent restent
+  > respectés : une seule source de données (`PlacesMapItem`), aucun second service
+  > backend, sélection, filtres, recherche, liste, statistiques et panneau de détail
+  > partagés. `EXACT` et `PROBABLE` sont des points visuellement distincts,
+  > `APPROXIMATE` une zone proportionnelle au rayon, `UNKNOWN` et `REJECTED` ne sont
+  > jamais rendus. Voir `phase-i-places-3d-brief.md` et `adr/ADR-places-3d-engine.md`.
 
 - rotation et zoom ;
 - marqueurs agrégés ;

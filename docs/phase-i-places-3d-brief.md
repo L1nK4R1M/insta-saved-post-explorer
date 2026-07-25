@@ -1,12 +1,24 @@
 # Phase I — Places 3D globe — entry brief
 
-**Status: `AWAITING_OWNER_DECISION`.** Last updated: 25 July 2026.
-Base: `develop` @ `8d5c1ee` (Phase G merged as `2bd2098`).
+**Status: DESIGN APPROVED — implementation may start in a separate PR.**
+Last updated: 25 July 2026. Base: `develop` @ `8d5c1ee` (Phase G merged as `2bd2098`).
 
-This is a **design and preparation** document. No 3D production code exists and none
-may be written until the owner has explicitly chosen the engine, the visual concept,
-the basemap/terrain source, the budget and the 2D ↔ 3D behaviour
-(see `docs/adr/ADR-places-3d-engine.md` §10).
+The owner approved every open decision on 25 July 2026 and
+`docs/adr/ADR-places-3d-engine.md` is **ACCEPTED**. This document remains the design
+reference; the implementation follows
+`docs/superpowers/plans/2026-07-25-phase-i-places-3d.md` (T1–T10) in its **own PR**.
+This PR stays documentation-only.
+
+### Approved decisions (summary — authoritative detail in ADR §10)
+
+| # | Decision |
+| --- | --- |
+| D1 | Engine: **`react-globe.gl` / `globe.gl`** (Three.js underneath), isolated behind our rendering contract and lazy-loaded. Raw Three.js, CesiumJS and MapLibre-for-3D rejected; **Leaflet is not replaced**, the 2D view is not migrated. |
+| D2 | Visual: **Concept 2 (sober)** enriched with restrained Concept 1 elements — dark premium globe, light atmospheric halo, luminous points, smooth centring on selection; segmented `2D \| 3D` control next to the filters; no permanent animated arcs, no `/places` redesign. |
+| D3 | Texture: **static, free, optimized** Earth texture (continents, oceans, main borders); no terrain, no 3D buildings, no Cesium ion / Mapbox / paid service. Geoapify stays **only** for the Leaflet 2D raster tiles. Licence, source and attribution must be documented; an unclear licence must not be committed. |
+| D4 | `view=map\|globe` additive; absent ⇒ `map`; **2D remains default**; engine not loaded when `view=map`; filters, search, `placeId`, list, statistics and detail shared; **independent cameras in v1**, free camera not in the URL; the active view centres on the selected `placeId` in both switch directions; historical URLs stay valid. |
+| D5 | Mobile: full 3D on capable devices, loaded only after explicit selection, touch controls; **WebGL detected before full engine load**; on failure fall back cleanly to 2D with a clear message, preserving selection/filters/list/detail; never the only path to the data; `prefers-reduced-motion` respected. |
+| D6 | Budget: no significant 2D bundle regression; engine and assets lazy-loaded; **50–60 fps** recent desktop, **≥ 30 fps** capable mobile; validated at ~1000 places; **first globe render < 3 s**; optimized texture; no terrain/building/3D model in v1. Measurements must be recorded in the final proof. |
 
 Authority order: `AGENTS.md` → `CODEX_IMPLEMENTATION_ORDER.md` §5 Phase I →
 `CODEX_PLACES_EXTENSION.md` §13.5 → this brief → repo conventions.
@@ -90,17 +102,17 @@ Identifiers are stable and used by the traceability matrix.
 | FR-I-13 | Reduced motion respected | With `prefers-reduced-motion: reduce`: no auto-rotation, no animated fly-to; camera jumps instantly |
 | FR-I-14 | Keyboard accessible | Selection reachable without a pointer via the list; the globe never traps focus; controls are real buttons |
 | FR-I-15 | Attribution displayed | The globe displays the attribution required by the chosen basemap/texture source |
-| FR-I-16 | Mobile behaviour | On small screens the globe is usable or explicitly replaced by 2D per the owner's decision (open decision D5) |
+| FR-I-16 | Mobile behaviour | Full 3D on capable mobiles, loaded only after explicit selection, with touch controls (D5) |
 
 ### 2.2 Non-functional
 
 | ID | Requirement | Measurable criterion |
 | --- | --- | --- |
 | NFR-I-01 | 2D users pay nothing | The 3D engine is absent from the initial `/places` payload; loaded only when the globe is requested — proven by a bundle report |
-| NFR-I-02 | Fluidity | ≥ 30 fps sustained (target 60) while rotating with ~1000 places on a mid-range laptop |
-| NFR-I-03 | Time to first globe | Globe interactive in < 2.5 s on a warm cache after switching views |
+| NFR-I-02 | Fluidity | **50–60 fps** on recent desktop and **≥ 30 fps** on capable mobile while rotating with ~1000 places (D6) |
+| NFR-I-03 | Time to first globe | **First globe render < 3 s** after opening the 3D view on a normal connection (D6) |
 | NFR-I-04 | No second source of truth | The globe consumes `PlacesMapItem[]` from the existing loader; no direct Prisma, no new endpoint, no extra fetch |
-| NFR-I-05 | No recurring cost without a decision | No new paid provider unless the owner explicitly approves it (ADR §10.3) |
+| NFR-I-05 | No recurring cost | No paid provider at all: static free texture, no Cesium ion / Mapbox (D3) |
 | NFR-I-06 | Reversibility | Removing the globe touches the globe component + view toggle only; 2D, data, filters, URL and detail keep working |
 | NFR-I-07 | No regression | Full unit + e2e suites green; no Prisma migration; no API contract change |
 | NFR-I-08 | Maintainability | The 3D-specific code stays confined to the globe component and one pure projection module |
@@ -146,7 +158,7 @@ selection/hover upward. Neither owns data.
 ### 3.2 Shared renderer contract
 
 ```ts
-// Proposed — extends the Phase G contract without breaking it.
+// Target contract — extends the Phase G contract without breaking it.
 type PlacesRendererProps = {
   places: readonly PlacesMapItem[];   // already filtered by the shell
   selectedId: string | null;
@@ -165,11 +177,12 @@ the globe. The shell passes what each needs.
 
 - `view=map|globe`, **additive**; absent ⇒ `map` (FR-I-09).
 - Filters, `q`, `placeId` are unchanged and shared.
-- **Camera state is deliberately not in the URL** for the first version: a globe
-  camera is continuous and would pollute history. Selection (`placeId`) already
-  restores a meaningful viewpoint. Owner decision D4 may revisit this.
-- Cameras are **independent per view**; switching re-frames from the shared
-  selection (or fits all results when nothing is selected).
+- **Camera state is deliberately not in the URL** in v1 (D4): a globe camera is
+  continuous and would pollute history. Selection (`placeId`) already restores a
+  meaningful viewpoint.
+- Cameras are **independent per view** (D4); switching re-frames from the shared
+  selection — 2D → 3D centres the globe on it, 3D → 2D centres Leaflet on it — or
+  fits all results when nothing is selected.
 
 ### 3.4 Loading strategy
 
@@ -205,7 +218,7 @@ The owner picks **one** (ADR §10.2). All three respect the same invariants
 (APPROXIMATE as an area, UNKNOWN/REJECTED absent, shared filters/selection/detail,
 attribution visible).
 
-### Concept 1 — Cinematic globe
+### Concept 1 — Cinematic globe — *not selected (elements borrowed)*
 
 Immersive, dark, full-bleed globe; luminous points; a subtle atmospheric halo;
 animated fly-to on selection; floating glass detail panel.
@@ -233,7 +246,7 @@ DESKTOP                                   MOBILE
 - **Cons**: furthest from the current sober design; animation cost; reduced-motion path removes much of its identity.
 - **Complexity**: **high**.
 
-### Concept 2 — Sober globe (Apple-Plans continuity) — *lowest risk*
+### Concept 2 — Sober globe (Apple-Plans continuity) — ✅ **SELECTED**
 
 The Phase G chrome exactly as-is; only the canvas changes.
 
@@ -258,7 +271,7 @@ DESKTOP                                   MOBILE
 - **Cons**: least spectacular.
 - **Complexity**: **low**.
 
-### Concept 3 — Travel exploration
+### Concept 3 — Travel exploration — *not selected*
 
 Discovery-oriented, progressive drill-down world → continent → country → city → place,
 with photos foregrounded.
@@ -283,8 +296,11 @@ DESKTOP                                   MOBILE
 - **Cons**: new navigation model to specify and test (breadcrumb state, its own URL semantics); the largest deviation from Phase G.
 - **Complexity**: **medium-high**.
 
-**Recommendation if the owner wants the shortest safe path**: Concept 2, optionally
-adopting one cinematic touch (atmospheric halo) without its animation budget.
+**Owner decision: Concept 2**, enriched with restrained Concept 1 elements — a dark
+premium globe, a light atmospheric halo, luminous points and a smooth centring
+animation on selection. Explicitly excluded: permanent animated arcs, excessive
+visual effects and any redesign of `/places`. The existing controls, detail panel,
+filters, search, statistics and list are all preserved.
 
 ---
 
@@ -316,7 +332,10 @@ Leaflet**, and any redesign of `/places` beyond adding the view.
 
 ## 7. Next action
 
-1. Owner decides ADR §10: engine, concept, basemap/terrain source, budget, 2D↔3D behaviour, mobile.
-2. Only then: create an implementation branch and follow
-   `docs/superpowers/plans/2026-07-25-phase-i-places-3d.md`.
-3. Keep Phase I to the 3D experience alone.
+1. ✅ Decisions approved and recorded (ADR §10, `ACCEPTED`). **This gate is closed.**
+2. Create an implementation branch off the latest `develop` and follow
+   `docs/superpowers/plans/2026-07-25-phase-i-places-3d.md`, tasks **T1 → T10**
+   (T0 is satisfied by this documentation PR).
+3. Keep Phase I to the 3D experience alone; do not replace Leaflet; no migration.
+4. Record the real performance measurements (D6) in the final proof — the budgets are
+   measurable, not decorative.

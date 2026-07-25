@@ -112,32 +112,24 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E and stable worker infrastructure. |
-| I — Places 3D globe | AWAITING_OWNER_DECISION | Entry gate satisfied (Phase G complete, data source stable) and the design pack is delivered on `claude/phase-i-places-3d-design`. Implementation is held until the owner resolves `adr/ADR-places-3d-engine.md` §10. |
+| I — Places 3D globe | DESIGN_APPROVED | Design pack approved and ADR `ACCEPTED` (25 July 2026). All six decisions closed; implementation may start at T1 in its own PR. No production code yet. |
 | J — Unified MCP and Hermes | BLOCKED | Requires later orchestration decisions and confirmations. |
 
 ## 7. Open decisions that must not be guessed
 
-- **Phase I decisions — the design pack is ready and waiting on these** (`adr/ADR-places-3d-engine.md` §10):
-  1. 3D engine — recommended: Three.js via `globe.gl`/`react-globe.gl`; alternatives: raw Three.js, CesiumJS, MapLibre globe;
-  2. visual concept — Concept 1 cinematic, Concept 2 sober (lowest risk, recommended), or Concept 3 travel exploration;
-  3. globe texture/basemap source and, for Cesium or MapLibre, the terrain/tile provider and its budget;
-  4. 2D ↔ 3D behaviour — independent or shared camera; does the globe ever become the default view;
-  5. mobile — full globe or 2D-only on small screens;
-  6. performance budget — acceptable added bundle weight and target frame rate;
+Phase I decisions are **all closed** (ADR `ACCEPTED`, 25 July 2026): engine `react-globe.gl`/`globe.gl`, Concept 2 sober with restrained Concept 1 elements, static free Earth texture with documented licence, additive `view=map|globe` with 2D default and independent cameras, full mobile 3D with a WebGL fallback, and the measurable D6 budgets. Remaining open items:
+
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups and observability for Phase E;
 - final confirmation model for sensitive Phase J commands.
 
-## 8. Exact next action — Phase I decision
+## 8. Exact next action — Phase I implementation
 
-The Phase I preparation is **done** (design pack on `claude/phase-i-places-3d-design`):
-brownfield audit, engine comparison, PROPOSED ADR with a weighted decision table,
-three UX concepts, target architecture, FR/NFR with measurable criteria, acceptance
-criteria, ordered tasks T0–T10, traceability matrix and test strategy. No production
-code and no dependency were added.
+The design pack is **approved** and the ADR is **ACCEPTED**; T0 is closed. No
+production code exists yet.
 
-1. Read `phase-i-places-3d-brief.md` and `adr/ADR-places-3d-engine.md`.
-2. Decide ADR §10: engine, visual concept, basemap/terrain source, budget, 2D ↔ 3D behaviour, mobile.
-3. Record the decisions in task T0 (ADR moved to `ACCEPTED`) — this is the gate; no production code before it.
-4. Then implement T1–T10 from `superpowers/plans/2026-07-25-phase-i-places-3d.md` in a dedicated branch off the latest `develop`.
+1. Start from the latest `develop` in a dedicated branch (for example `claude/phase-i-places-3d`).
+2. Implement **T1 → T10** from `superpowers/plans/2026-07-25-phase-i-places-3d.md`; do not re-open the settled decisions.
+3. Honour the approved contract: `react-globe.gl`/`globe.gl` lazily loaded behind our own rendering contract; Concept 2 sober (dark globe, light halo, luminous points, smooth centring, segmented `2D | 3D` control next to the filters); static free texture with **documented licence** — never commit one with an unclear licence; additive `view=map|globe` with 2D default and independent cameras; shared filters, search, selection, list, statistics and detail; full mobile 3D with a WebGL fallback to 2D; `prefers-reduced-motion` respected.
+4. Record the **real measured values** for the D6 budgets in the final proof (50–60 fps desktop, ≥ 30 fps mobile, first globe render < 3 s, no significant 2D bundle regression).
 5. Keep Phase I to the 3D experience alone: no Phase E, H, J, worker, Hermes, MCP, OCR, transcription or multimodal analysis, no Prisma migration, and **do not replace Leaflet**.

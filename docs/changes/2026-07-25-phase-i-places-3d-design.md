@@ -14,18 +14,21 @@ comparison, recommendation, UX concepts, target architecture, ADR, requirements,
 acceptance criteria, ordered tasks, traceability matrix and test strategy — so the
 owner can decide before any 3D code exists.
 
-Phase I stays **`AWAITING_OWNER_DECISION`**. It is deliberately not `IN_PROGRESS`.
+The owner reviewed the pack and **approved every open decision on 25 July 2026**;
+the ADR is now **ACCEPTED**. Phase I moves to **`DESIGN_APPROVED`** — the design gate
+is closed and implementation may start **in a separate PR**. Phase I is deliberately
+**not** `IN_PROGRESS` and **not** `COMPLETE`: no production code exists yet.
 
 ## What was produced
 
 | File | Content |
 | --- | --- |
 | `docs/phase-i-places-3d-brief.md` (new) | Brownfield audit of Phase G, contracts to preserve, six identified gaps, FR/NFR with stable IDs and measurable criteria, acceptance criteria, target architecture, three UX concepts with wireframes, test strategy, scope |
-| `docs/adr/ADR-places-3d-engine.md` (new) | **PROPOSED** ADR: context, ten constraints, four options (Three.js, Three.js via globe.gl, CesiumJS, MapLibre globe), weighted decision table, costs, risks, reversibility, recommendation, consequences, open decisions, re-evaluation triggers |
+| `docs/adr/ADR-places-3d-engine.md` (new) | **ACCEPTED** ADR (decision: `react-globe.gl`/`globe.gl`): context, ten constraints, four options (Three.js, Three.js via globe.gl, CesiumJS, MapLibre globe), weighted decision table, costs, risks, reversibility, recommendation, consequences, the six closed decisions (D1–D6), re-evaluation triggers |
 | `docs/superpowers/plans/2026-07-25-phase-i-places-3d.md` (new) | Eleven ordered tasks (T0–T10) and the requirement → architecture → task → test → proof matrix |
 | `docs/changes/2026-07-25-phase-i-places-3d-design.md` (new) | This record |
-| `docs/HANDOFF.md` | Phase I set to `AWAITING_OWNER_DECISION`; next action points at the decision list |
-| `docs/IMPLEMENTATION_STATUS.md` | Phase I row updated; the new status value documented in the legend |
+| `docs/HANDOFF.md` | Phase I set to `DESIGN_APPROVED`; approved decisions recorded; next action is implementation T1–T10 |
+| `docs/IMPLEMENTATION_STATUS.md` | Phase I row set to `DESIGN_APPROVED`; status values documented in the legend |
 | `docs/CODEX_IMPLEMENTATION_ORDER.md` | Phase I section points at the brief and the ADR |
 
 ## Audit findings that shaped the architecture
@@ -37,14 +40,22 @@ Phase I stays **`AWAITING_OWNER_DECISION`**. It is deliberately not `IN_PROGRESS
 5. `PlacesExplorer` renders Leaflet directly — a small renderer seam is needed so both views share list, filters and detail.
 6. There is no WebGL probe and reduced motion is honoured only in the 2D map.
 
-## Recommendation (not a decision)
+## Decision (approved by the owner, 25 July 2026)
 
-**Three.js via `globe.gl` / `react-globe.gl`** — the only option satisfying every
-hard constraint simultaneously: Leaflet untouched, zero recurring cost, no new
-provider account, premium globe with little custom code, lazy-loaded so 2D users
-pay nothing, fully reversible. Cesium remains correct **only** if terrain or 3D
-buildings become a requirement; MapLibre **only** if the owner decides to unify 2D
-and 3D on one engine — which would reopen the Phase G stack decision.
+**Three.js via `react-globe.gl` / `globe.gl`** — the recommendation was accepted.
+Raw Three.js, CesiumJS and MapLibre-for-3D are rejected for v1; **Leaflet is not
+replaced** and the 2D view is not migrated. Cesium would only become correct if
+terrain or 3D buildings became a requirement; MapLibre only if the owner later
+decided to unify 2D and 3D on one engine, which would reopen the Phase G stack
+decision (recorded as re-evaluation triggers in ADR §11).
+
+The five remaining decisions were closed at the same time — visual concept
+(**Concept 2 sober**, enriched with restrained Concept 1 elements), **static free
+texture** with documented licence and no paid provider, `view=map|globe` with 2D as
+the default and independent cameras in v1, **full mobile 3D** with a WebGL fallback,
+and the **measurable D6 performance budgets** (50–60 fps desktop, ≥ 30 fps mobile,
+first globe render < 3 s, no significant 2D bundle regression). Full detail in
+ADR §10.
 
 Package facts (versions, licences, weights) were read from the npm registry on
 25 July 2026. `unpackedSize` is repository weight, **not** bundle size; the real
@@ -61,6 +72,7 @@ Neon change, no secret.
 
 ## Next action
 
-The owner decides ADR §10 (engine, visual concept, basemap/terrain source, budget,
-2D ↔ 3D behaviour, mobile). Implementation may start only after T0 records those
-decisions.
+T0 is **done** — the decisions are recorded. Implementation starts at **T1** in a
+dedicated branch off the latest `develop`, following
+`docs/superpowers/plans/2026-07-25-phase-i-places-3d.md`. The real performance
+measurements required by D6 must be recorded in that PR's final proof.
