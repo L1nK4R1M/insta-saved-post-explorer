@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { BarChart3, Check, ListFilter, MapPin, Search, SlidersHorizontal, X } from "lucide-react";
 
@@ -24,12 +23,8 @@ import {
   type ReviewFilter,
 } from "@/features/places/query-state";
 import { PlaceDetailSheet } from "@/features/places/components/place-detail-sheet";
-
-// Leaflet must not run during SSR; the map arrives on the client only.
-const PlacesMap = dynamic(() => import("@/features/places/components/places-map"), {
-  ssr: false,
-  loading: () => <div className="places-map-canvas places-map-loading" aria-hidden="true" />,
-});
+import { PlacesRenderer } from "@/features/places/components/places-renderer";
+import type { ScreenPoint } from "@/features/places/renderer-contract";
 
 const PRECISION_LABEL: Record<string, string> = {
   EXACT: "Exact",
@@ -69,6 +64,7 @@ export function PlacesExplorer({
   const [listOpen, setListOpen] = useState(false);
   const [hover, setHover] = useState<{ place: PlacesMapItem; x: number; y: number } | null>(null);
   const [countryQuery, setCountryQuery] = useState("");
+  const view = initialState.view;
   const [, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -99,12 +95,12 @@ export function PlacesExplorer({
   // Keep the URL in sync so filters and the selection are shareable and the
   // browser back button works, without pushing an entry per keystroke.
   useEffect(() => {
-    const query = serializePlacesUrlState({ ...filters, placeId: selectedId });
+    const query = serializePlacesUrlState({ ...filters, placeId: selectedId, view });
     const next = query ? `/places?${query}` : "/places";
     if (typeof window !== "undefined" && window.location.pathname + window.location.search !== next) {
       window.history.replaceState(null, "", next);
     }
-  }, [filters, selectedId]);
+  }, [filters, selectedId, view]);
 
   const patch = useCallback((next: Partial<PlacesFilters>) => {
     startTransition(() => setFilters((current) => ({ ...current, ...next })));
@@ -119,31 +115,25 @@ export function PlacesExplorer({
     setHover(null);
   }, []);
 
-  const handleHover = useCallback((place: PlacesMapItem | null, point: { x: number; y: number } | null) => {
+  const handleHover = useCallback((place: PlacesMapItem | null, point: ScreenPoint | null) => {
     setHover(place && point ? { place, x: point.x, y: point.y } : null);
   }, []);
 
   return (
     <section className="places-shell" aria-label="Lieux sauvegardés">
       <div className="places-stage">
-        {tilesConfigured ? (
-          <PlacesMap
-            places={visible}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-            onHover={handleHover}
-            tileUrl={tileUrl}
-            tileAttribution={tileAttribution}
-          />
-        ) : (
-          <div className="places-map-canvas places-map-missing">
-            <MapPin aria-hidden="true" />
-            <p>
-              La carte n’est pas configurée. Renseignez <code>NEXT_PUBLIC_PLACES_TILE_URL</code> pour afficher le fond
-              de carte ; la liste et les filtres restent utilisables.
-            </p>
-          </div>
-        )}
+        {/* Only the canvas depends on the active view; everything below — search,
+            filters, statistics, list, detail and summary — is shared. */}
+        <PlacesRenderer
+          view={view}
+          places={visible}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          onHover={handleHover}
+          tileUrl={tileUrl}
+          tileAttribution={tileAttribution}
+          tilesConfigured={tilesConfigured}
+        />
 
         {/* Hover callout: photo + arrow pointing at the marker. Informative only. */}
         {hover ? (

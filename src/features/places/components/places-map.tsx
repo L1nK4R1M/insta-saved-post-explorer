@@ -4,18 +4,16 @@ import { useCallback, useEffect, useRef } from "react";
 import type { Map as LeafletMap, LayerGroup, Marker } from "leaflet";
 
 import { PLACE_CATEGORY_GROUPS } from "@/lib/places/categories";
+import type { PlacesRendererProps } from "@/features/places/renderer-contract";
 import type { PlacesMapItem } from "@/server/places/map-view";
 
 // Leaflet is loaded lazily on the client only: it touches `window` at import
 // time and must never run during SSR. Everything Leaflet-specific stays inside
-// this component — the rest of the feature talks to it through these props, so
-// swapping the engine later means rewriting this file alone.
+// this component — the rest of the feature talks to it through the shared
+// renderer contract, so swapping the engine later means rewriting this file
+// alone. The tile props are raster-specific and deliberately stay here.
 
-export type PlacesMapProps = {
-  places: readonly PlacesMapItem[];
-  selectedId: string | null;
-  onSelect: (placeId: string) => void;
-  onHover: (place: PlacesMapItem | null, point: { x: number; y: number } | null) => void;
+export type PlacesMapProps = PlacesRendererProps & {
   tileUrl: string;
   tileAttribution: string;
 };
