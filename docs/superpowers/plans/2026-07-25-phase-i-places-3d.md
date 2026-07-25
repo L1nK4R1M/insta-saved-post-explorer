@@ -6,8 +6,14 @@ decision on 25 July 2026 and `docs/adr/ADR-places-3d-engine.md` is **ACCEPTED**
 elements, static free texture, `view=map|globe` with 2D default and independent
 cameras, full mobile 3D with a WebGL fallback, and the measurable budgets in D6).
 
-**T0 is satisfied by the design PR.** Implementation starts at **T1**, in its own
-branch off the latest `develop`.
+**T0 is satisfied by the design PR.** **T1 → T10 are implemented** on
+`claude/phase-i-places-3d-implementation` and awaiting review; the delivered
+architecture, dependency versions, texture licence, test inventory and every measured
+value are recorded in `docs/changes/2026-07-25-phase-i-places-3d-implementation.md`.
+
+One item from T9 is **not** closed: the D6 frame-rate budgets could not be validated
+because the CI container has no GPU. The measurement, its diagnosis and the applied
+optimization are recorded; the remaining decision belongs to the owner.
 
 Requirements referenced here are defined in `docs/phase-i-places-3d-brief.md` §2.
 The task order below is the dependency order: each task is independently

@@ -203,6 +203,26 @@ exact point; `UNKNOWN` and `REJECTED` are **never rendered** on the globe; visua
 clustering applies when several places are close at world scale; no second source of
 truth — `PlacesMapItem` is reused until evidence justifies a new server contract.
 
+## 10.2 Implementation outcome (25 July 2026)
+
+The decision was implemented as recorded; nothing in it was reopened.
+
+- `react-globe.gl` 2.38.0 and `three` 0.185.1 are pinned exactly and reach the browser
+  only through a lazy chunk. The `/places` initial 2D payload grew by **4.2 KiB
+  (+1.08 %)** and the 1.86 MiB engine chunk is absent from the 2D entry — the
+  reversibility and no-cost-for-2D-users properties that justified this option hold
+  in practice.
+- D3 was satisfied without downloading anything: the texture is **generated** from
+  public-domain Natural Earth data by a repository script, 36.5 KiB, licence and
+  attribution documented.
+- **One consequence is now measured rather than assumed.** A full-screen globe is
+  fill-rate bound. On a device with `devicePixelRatio` 3 the engine rasterizes nine
+  times the pixels of a logical one, so the renderer's pixel ratio is capped at 1.5;
+  measured effect on an emulated Pixel 7: **12 → 18 fps**. The D6 frame-rate budgets
+  themselves remain **unvalidated** because the CI container has no GPU. Evidence and
+  the open owner decision are in
+  `changes/2026-07-25-phase-i-places-3d-implementation.md` §6.3 and §9.
+
 ## 11. Re-evaluation triggers
 
 Revisit this ADR if any of the following becomes true:

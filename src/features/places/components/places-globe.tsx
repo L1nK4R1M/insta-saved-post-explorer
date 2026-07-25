@@ -52,6 +52,9 @@ const WORLD_ALTITUDE = 2.2;
 const FOCUS_ALTITUDE = 0.45;
 const CLUSTER_FOCUS_ALTITUDE = 0.9;
 const FLY_MS = 900;
+// Rendering above this device pixel ratio costs quadratically more fill rate and
+// adds nothing on a smooth sphere; see the Phase I performance measurements.
+const MAX_PIXEL_RATIO = 1.5;
 
 type PointDatum = GlobePoint & { kind: "place" };
 type ClusterDatum = GlobeCluster & { kind: "cluster" };
@@ -169,13 +172,24 @@ export function PlacesGlobe({
 
   const handleReady = useCallback(() => {
     setReady(true);
-    const controls = globeRef.current?.controls();
+    const globe = globeRef.current;
+    const controls = globe?.controls();
     if (controls) {
       // Sober by decision: no auto-rotation at all, so nothing animates while
       // the user is reading.
       controls.autoRotate = false;
       controls.enableDamping = !reducedMotion;
       controls.minDistance = 120;
+    }
+    try {
+      // Cap the render resolution. A full-screen globe is fill-rate bound, and a
+      // modern phone at devicePixelRatio 3 would rasterize nine times the pixels
+      // of a logical one for no visible gain on a sphere with no fine detail.
+      // Measured effect is recorded in the Phase I change record.
+      globe?.renderer().setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, MAX_PIXEL_RATIO));
+    } catch {
+      // A renderer that refuses the hint still renders; this is an optimization,
+      // never a requirement.
     }
   }, [reducedMotion]);
 
