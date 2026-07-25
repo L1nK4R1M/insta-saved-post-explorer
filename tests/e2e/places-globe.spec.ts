@@ -10,18 +10,15 @@ import { expect, test } from "@playwright/test";
 // assertions meaningful without a live map or a live globe. Nothing is fetched
 // from a tile server, a texture CDN or any 3D provider.
 //
-// Most scenarios are viewport-independent and run on desktop only; the mobile
-// project runs the one journey where behaviour genuinely differs (touch layout
-// on a small screen).
-
-const desktopOnly = () => test.skip(test.info().project.name !== "chromium", "viewport-independent");
-const mobileOnly = () => test.skip(test.info().project.name !== "mobile", "mobile journey");
+// Project scoping is declarative (see playwright.config.ts): untagged scenarios
+// run on desktop only, and the single `@mobile @mobile-only` journey runs on the
+// real mobile device. Nothing is skipped at runtime, so the report shows work
+// actually done rather than a wall of skips.
 
 const PROVIDER_HOSTS = ["geoapify", "mapbox", "cesium", "openstreetmap", "unpkg", "jsdelivr", "cdn."];
 
 test.describe("page Places — vue 3D", () => {
   test("garde la 2D par défaut et ne charge pas le moteur 3D", async ({ page }) => {
-    desktopOnly();
     const chunkRequests: string[] = [];
     page.on("request", (request) => {
       if (/three|globe/i.test(request.url()) && request.url().includes("/_next/")) chunkRequests.push(request.url());
@@ -42,7 +39,6 @@ test.describe("page Places — vue 3D", () => {
   });
 
   test("rend le globe, son attribution, et n'appelle aucun fournisseur", async ({ page }) => {
-    desktopOnly();
     const offenders: string[] = [];
     page.on("request", (request) => {
       const url = request.url();
@@ -65,7 +61,6 @@ test.describe("page Places — vue 3D", () => {
   });
 
   test("bascule dans les deux sens en conservant filtres, recherche et sélection", async ({ page }) => {
-    desktopOnly();
     await page.goto("/places?theme=Voyages&categories=cafe&placeId=abc");
     await page.getByRole("searchbox", { name: "Rechercher un lieu" }).fill("rome");
     await page.getByRole("button", { name: "3D" }).click();
@@ -82,7 +77,6 @@ test.describe("page Places — vue 3D", () => {
   });
 
   test("rend précédent et suivant cohérents entre les vues", async ({ page }) => {
-    desktopOnly();
     await page.goto("/places");
     await page.getByRole("button", { name: "3D" }).click();
     await expect(page.getByTestId("places-globe")).toBeVisible();
@@ -97,7 +91,6 @@ test.describe("page Places — vue 3D", () => {
   });
 
   test("bascule proprement en 2D quand WebGL est refusé, sans demander le chunk", async ({ page }) => {
-    desktopOnly();
     // Deny every WebGL context before any application script runs — the
     // situation of a browser or device that cannot render the globe.
     await page.addInitScript(() => {
@@ -125,7 +118,6 @@ test.describe("page Places — vue 3D", () => {
   });
 
   test("reste utilisable au clavier et ne déborde pas", async ({ page }) => {
-    desktopOnly();
     await page.goto("/places");
     await page.getByRole("button", { name: "Filtres" }).focus();
     await page.keyboard.press("Tab");
@@ -144,8 +136,9 @@ test.describe("page Places — vue 3D", () => {
     expect(overflow).toBeLessThanOrEqual(1);
   });
 
-  test("parcours mobile : bascule, globe lisible, aucun débordement", async ({ page }) => {
-    mobileOnly();
+  // The only scenario that needs the real mobile device: touch input, device
+  // pixel ratio and the small-screen layout together.
+  test("parcours mobile : bascule, globe lisible, aucun débordement @mobile @mobile-only", async ({ page }) => {
     await page.goto("/places");
     await page.getByRole("button", { name: "3D" }).click();
     await expect(page.getByTestId("places-globe")).toBeVisible();

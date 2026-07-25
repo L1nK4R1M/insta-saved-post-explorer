@@ -1,9 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-// Phase G browser coverage. The e2e environment has no database and no map tile
-// key, so the page renders its empty/unconfigured states: that is exactly the
-// contract we assert here — the route, the controls, the filters, the URL state
-// and the accessibility affordances must all work without a live map. No real
+// Phase G browser coverage, reduced to the journeys only a real browser can
+// prove: routing and navigation, the URL round-trip through real history, the
+// panels, keyboard reachability and layout. Rules already proven by
+// `places-query-state` (parsing, serialization, filter counting) are not replayed
+// here.
+//
+// The e2e environment has no database and no map tile key, so the page renders
+// its empty/unconfigured states — which is exactly the contract asserted. No real
 // tile or Geoapify request is ever made.
 
 test.describe("page Places", () => {
@@ -11,15 +15,13 @@ test.describe("page Places", () => {
     await page.goto("/places");
   });
 
-  test("expose la route, le titre et la zone carte", async ({ page }) => {
+  test("expose la route, la zone carte et la navigation principale", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Places", level: 1 })).toBeVisible();
     await expect(page.getByRole("region", { name: "Lieux sauvegardés" })).toBeVisible();
     // Without NEXT_PUBLIC_PLACES_TILE_URL the map states it is unconfigured
     // instead of failing; the rest of the page stays usable.
     await expect(page.getByText("NEXT_PUBLIC_PLACES_TILE_URL")).toBeVisible();
-  });
 
-  test("est accessible depuis la navigation principale", async ({ page }) => {
     await page.goto("/");
     const placesLink = page.getByRole("link", { name: "Places" });
     await expect(placesLink).toBeVisible();
@@ -35,7 +37,7 @@ test.describe("page Places", () => {
 
     const panel = page.getByRole("dialog", { name: "Filtres" });
     await expect(panel).toBeVisible();
-    // Theme stays the contract vocabulary; place types are the new group filter.
+    // Theme stays the contract vocabulary; place types are the group filter.
     await expect(panel.getByText("Thème du post")).toBeVisible();
     await expect(panel.getByText("Type de lieu")).toBeVisible();
     await expect(panel.getByText("Café et brunch")).toBeVisible();
@@ -44,7 +46,7 @@ test.describe("page Places", () => {
     await expect(panel).toBeHidden();
   });
 
-  test("reflète les filtres sélectionnés dans l'URL et le compteur", async ({ page }) => {
+  test("synchronise filtres, recherche et lien profond avec l'URL réelle", async ({ page }) => {
     await page.getByRole("button", { name: "Filtres" }).click();
     const panel = page.getByRole("dialog", { name: "Filtres" });
 
@@ -58,23 +60,16 @@ test.describe("page Places", () => {
 
     await panel.getByRole("button", { name: "Effacer" }).click();
     await expect(page).toHaveURL(/\/places$/);
-  });
 
-  test("restaure les filtres partagés par un lien profond", async ({ page }) => {
-    await page.goto("/places?theme=Restaurant&categories=restaurant,bar&precision=EXACT");
-    await page.getByRole("button", { name: /Filtres/ }).click();
-    const panel = page.getByRole("dialog", { name: "Filtres" });
-    // 1 theme + 2 categories + 1 precision = 4 active filters restored.
-    await expect(page.getByRole("button", { name: /Filtres/ })).toContainText("4");
-    await expect(panel.getByRole("checkbox").nth(0)).toBeDefined();
-  });
-
-  test("permet la recherche et l'affichage du résumé", async ({ page }) => {
     const search = page.getByRole("searchbox", { name: "Rechercher un lieu" });
-    await expect(search).toBeVisible();
     await search.fill("santorin");
     await expect(page).toHaveURL(/q=santorin/);
     await expect(page.getByRole("status").first()).toBeVisible();
+
+    // A shared deep link restores the whole filter set on load.
+    await page.goto("/places?theme=Restaurant&categories=restaurant,bar&precision=EXACT");
+    // 1 theme + 2 categories + 1 precision = 4 active filters restored.
+    await expect(page.getByRole("button", { name: /Filtres/ })).toContainText("4");
   });
 
   test("ouvre les statistiques limitées au thème et au pays", async ({ page }) => {
@@ -96,16 +91,14 @@ test.describe("page Places", () => {
     await expect(drawer).toBeHidden();
   });
 
-  test("reste navigable au clavier", async ({ page }) => {
+  test("reste navigable au clavier sans déborder horizontalement", async ({ page }) => {
     const search = page.getByRole("searchbox", { name: "Rechercher un lieu" });
     await search.focus();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Filtres" })).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog", { name: "Filtres" })).toBeVisible();
-  });
 
-  test("ne déborde pas horizontalement", async ({ page }) => {
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );

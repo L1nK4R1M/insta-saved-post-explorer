@@ -1,6 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const mobileWidths = [360, 375, 390, 412, 420];
+// The five widths previously exercised here (360, 375, 390, 412, 420) all sit on
+// the same side of the same CSS breakpoint and produced identical assertions.
+// Only the boundaries carry information: the narrowest phone we support, and the
+// widest width before the desktop ribbon takes over.
+//
+// These scenarios set their own viewport with `test.use`, which overrides the
+// project device — so they run on the default project only. Running them on the
+// mobile project repeated byte-identical work.
+const mobileWidths = [360, 420];
 
 for (const width of mobileWidths) {
   test.describe(`toolbar mobile ${width}px`, () => {
