@@ -153,6 +153,25 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | I — Places 3D globe | COMPLETE | PR #35 design + PR #36 implementation merged. CI #115 green; WebGL lazy loading corrected; tests consolidated; no migration. |
 | J — Unified MCP and Hermes | BLOCKED | Requires later orchestration decisions and confirmations. |
 
+## 6.1 Test suite baseline (25 July 2026)
+
+The global suite was audited and consolidated in a dedicated PR (documentation:
+`changes/2026-07-25-global-test-suite-consolidation.md`). Current baseline:
+
+```text
+unit ...... 54 files, 448 tests, ~15-21 s
+e2e ....... 46 scenarios, 46 executions (45 desktop + 1 mobile), ~69 s
+```
+
+Desktop is the default Playwright project and runs everything; the mobile project
+runs only `@mobile`-tagged scenarios. Every viewport-sensitive test sets its own
+viewport, so running it on both projects duplicated identical work — that was the
+suite's largest single cost and it is removed.
+
+The 11 PostgreSQL suites (129 tests, 61 % of unit time) are deliberately untouched:
+ownership, composite FKs, idempotence, the P2002 regression, cursors, atomic
+transactions, worker isolation and audit completeness.
+
 ## 7. Open decisions and operational follow-ups
 
 - ~~**Phase I GPU measurement**~~ — **closed 25 July 2026**, status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`. Measured on an NVIDIA GeForce RTX 5090: 240 fps and 276-326 ms first render at every place count, desktop and mobile viewport. This confirmed the recorded diagnosis — the CI figures (20 fps desktop, 18 fps mobile) were fill-rate bound on a SwiftShader software rasterizer, not scene bound. Both runs are kept in the change record. One honest limit stands: the mobile figures come from a mobile **viewport** on desktop-class hardware, not from a phone GPU, so low-end phone behaviour remains a reasoned expectation rather than a measurement — which is why the WebGL fallback and the pixel-ratio cap stay in place.

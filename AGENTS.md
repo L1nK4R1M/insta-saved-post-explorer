@@ -192,7 +192,11 @@ Règles :
 - limiter les e2e aux parcours transversaux : routage réel, chargement réel,
   capacité navigateur réelle, mise en page réelle ;
 - n'exécuter un scénario e2e sur plusieurs projets (desktop et mobile) que lorsque
-  le comportement diffère réellement ;
+  le comportement diffère réellement. Le projet desktop est le projet par défaut et
+  exécute tout ; le projet mobile n'exécute que les scénarios marqués `@mobile`
+  (voir `playwright.config.ts`). Un test qui fixe lui-même son viewport avec
+  `test.use` ou `setViewportSize` n'a rien à gagner du projet mobile : il produirait
+  un run identique ;
 - aucune cible de quantité ni de couverture brute ne justifie un test ; il n'existe
   pas d'objectif de 100 % ;
 - éviter les permutations et les cas triviaux redondants ;
