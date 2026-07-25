@@ -3,7 +3,7 @@
 Last updated: 25 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `develop`  
-Reference implementation commit: `2bd2098472c65eeb24c52aa0ee893e09b8e20261`
+Reference implementation commit: `08be9f04df60c9d8e138242fc0d7b0504e0ba51e`
 
 ## 1. Purpose and authority
 
@@ -33,31 +33,28 @@ Stop and document any conflict between this handoff, an authoritative contract a
 | F3 — Read API, statistics and review | PR #31, squash `15356e9`. Read-only Places routes, statistics, durable review decisions and audit evidence. |
 | F — Places metadata-first domain | COMPLETE. Exit gate accepted after successful real local validation with idempotent re-import, recovered transient errors and correct `UNKNOWN` handling. |
 | G — Places 2D UI and contextual navigation | PR #34, squash `2bd2098`. `/places`, Leaflet clustering, Geoapify raster tiles, synchronized list, filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. |
-| I design — Places 3D globe | PR #35, squash `3fef818`. ADR `ACCEPTED`, six decisions closed, T0 satisfied. Documentation only. |
+| I design — Places 3D globe | PR #35, squash `3fef818`. ADR `ACCEPTED`, six decisions closed, T0 satisfied. |
+| I implementation — Places 3D globe | PR #36, squash `08be9f0`. T1–T10 merged after two review rounds. WebGL-gated lazy loading, risk-based test consolidation, local Natural Earth texture, shared 2D/3D state and documented performance evidence. |
 
 ## 3. Current execution pointer
 
 ```text
-Active implementation branch:
-claude/phase-i-places-3d-implementation   (from develop 3fef818)
+No implementation branch is currently active.
 
 Phase F is CLOSED and COMPLETE.
 Phase G is CLOSED and COMPLETE.
 Phase I design is CLOSED and APPROVED (PR #35, squash 3fef818; ADR ACCEPTED).
+Phase I implementation is CLOSED and COMPLETE (PR #36, squash 08be9f0).
 
-Phase I implementation T1-T10 is AWAITING_REVIEW.
-It is NOT merged and Phase I is NOT complete.
+CI #115 passed on reviewed head:
+7477ac3c8e7f567051d3eb86cdf2fd91ddcbf1dc
 
-Review round 1 returned REQUEST_CHANGES. All points are addressed: the 3D chunk
-could be requested before the WebGL probe answered (real FR-I-12 defect, fixed and
-locked by a test that fails against the previous code), the Phase I test suites are
-consolidated to 18 unit / 8 component / 7 e2e, and a testing-discipline rule is
-recorded in AGENTS.md section 10.
+Merge commit on develop:
+08be9f04df60c9d8e138242fc0d7b0504e0ba51e
 
-One owner decision is open and blocks closing the phase:
-FPS_BUDGET_PENDING_REAL_GPU_VALIDATION — the D6 frame-rate budgets could not be
-validated because the CI container has no GPU. See
-docs/changes/2026-07-25-phase-i-places-3d-implementation.md, sections 6.3 and 9.
+Operational follow-up only:
+FPS_BUDGET_PENDING_REAL_GPU_VALIDATION — the CI container used SwiftShader and no
+real GPU. This does not reopen or block the merged Phase I architecture.
 ```
 
 Phase G owner decisions remain final for the 2D implementation:
@@ -71,23 +68,48 @@ Phase G owner decisions remain final for the 2D implementation:
 - brunch provisionally folded into the café group;
 - multi-select filters enabled.
 
-Phase I owner decisions (ADR §10, `ACCEPTED`) are implemented as recorded:
-`react-globe.gl`/`globe.gl`, Concept 2 sober with restrained Concept 1 elements,
-static free texture with documented licence, additive `view=map|globe` with 2D
-default and independent cameras, full mobile 3D with a WebGL fallback, and the
-measurable D6 budgets.
+Phase I owner decisions remain final and implemented:
 
-## 4. Phase G merge proof
+- `react-globe.gl` / `globe.gl` with Three.js underneath;
+- Concept 2 sober with restrained Concept 1 elements;
+- static public-domain Natural Earth texture with documented licence;
+- additive `view=map|globe`, 2D default and independent cameras;
+- full mobile 3D where WebGL is supported;
+- accessible fallback to 2D;
+- shared filters, search, selection, list, statistics and detail;
+- no replacement of Leaflet.
+
+## 4. Merge proof
+
+### Phase G
 
 - PR: `#34 — feat(places): Phase G — Places 2D UI and contextual navigation`;
 - reviewed head: `82a9760df92b5aa58f6a411c3f90bb07fb7cb46a`;
 - squash merge on `develop`: `2bd2098472c65eeb24c52aa0ee893e09b8e20261`;
 - CI run #107 completed successfully;
-- final local proof reported in the PR: 50 files, 440 tests passed, 0 failed; build and e2e green;
-- security correction: `loadPlacePostsAction()` now verifies the session before any read and remains owner-scoped;
-- correctness correction: `sourceThemes` is derived from all linked posts instead of the first six;
-- UX correction: every country remains selectable through a searchable, scrollable local filter;
 - no migration, no Prisma schema change and no breaking API change.
+
+### Phase I design
+
+- PR: `#35 — docs(places): Phase I — 3D globe design pack`;
+- reviewed head: `d4f7cc87435de66a05d41b126294f1292413ab17`;
+- squash merge on `develop`: `3fef818df96f127d5ba9486650a231f6ee2629b4`;
+- ADR accepted and all six owner decisions closed.
+
+### Phase I implementation
+
+- PR: `#36 — feat(places): Phase I — implémentation du globe 3D (T1–T10)`;
+- reviewed head: `7477ac3c8e7f567051d3eb86cdf2fd91ddcbf1dc`;
+- squash merge on `develop`: `08be9f04df60c9d8e138242fc0d7b0504e0ba51e`;
+- CI #115 completed successfully;
+- review round 1 found a real FR-I-12 defect: the 3D chunk could be requested before the WebGL probe answered;
+- final implementation has explicit `map | probing | globe` states and does not request the 3D chunk before proven WebGL support;
+- Phase I tests consolidated to 18 unit, 8 component and 7 e2e scenarios;
+- repository verification: 466 unit tests and 92 e2e passed;
+- initial `/places` 2D JS increased by 4.2 KiB (+1.08 %);
+- the 1.86 MiB 3D chunk is absent from the initial 2D entry;
+- first globe render measured at 907–1033 ms with about 1000 places;
+- no migration, no public API break, no Neon change and no secret committed.
 
 ## 5. Environment and deployment state
 
@@ -96,7 +118,7 @@ measurable D6 budgets.
 | Environment | Git branch | State |
 | --- | --- | --- |
 | Production | `main` | Isolated from development. |
-| Preview development | `develop` | Tracks the merged Phase G implementation. |
+| Preview development | `develop` | Tracks the merged Phase I implementation. |
 
 Stable URLs:
 
@@ -112,7 +134,7 @@ Project: `fancy-mud-69762258`
 | Environment | Neon branch | Verified schema state |
 | --- | --- | --- |
 | Production | `main` / `br-super-snow-asyrmnbm` | Phase C migration applied. F1 remains intentionally unpromoted. |
-| Development | `develop` / `br-sparkling-glade-as9gow4m` | Phase C and F1 migrations applied. F2, F3 and G require no migration. |
+| Development | `develop` / `br-sparkling-glade-as9gow4m` | Phase C and F1 migrations applied. F2, F3, G and I require no migration. |
 
 Do not run `prisma migrate dev`, `prisma db push` or seeds against either deployed database.
 
@@ -122,34 +144,26 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | --- | --- | --- |
 | C — R2 media identity and worker isolation | COMPLETE | PR #24; migration applied to Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
-| E — Global worker foundation | READY, separate | Required before Phase H. Do not mix it into Phase I. |
+| E — Global worker foundation | READY, separate | Required before Phase H. This is the next executable infrastructure phase. |
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E and stable worker infrastructure. |
-| I — Places 3D globe | AWAITING_REVIEW | T1–T10 implemented on `claude/phase-i-places-3d-implementation`. All suites green; no migration; Leaflet untouched. One open owner decision on the D6 frame-rate budgets, which no GPU-less environment can validate. |
+| I — Places 3D globe | COMPLETE | PR #35 design + PR #36 implementation merged. CI #115 green; WebGL lazy loading corrected; tests consolidated; no migration. |
 | J — Unified MCP and Hermes | BLOCKED | Requires later orchestration decisions and confirmations. |
 
-## 7. Open decisions that must not be guessed
+## 7. Open decisions and operational follow-ups
 
-Phase I product decisions are **all closed** (ADR `ACCEPTED`, 25 July 2026) and implemented. Remaining open items:
-
-- **Phase I, D6 frame rate.** Status `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`. The implementation measured 20 fps desktop and 18 fps mobile on a CPU software rasterizer (SwiftShader); the container has no GPU. Two measurements show the workload is fill-rate bound rather than scene bound, and the applied optimization (capping the render pixel ratio at 1.5) raised mobile from 12 to 18 fps. The budgets themselves remain **unvalidated**. The owner must decide: accept the phase with the frame-rate budgets pending a run on a GPU device, or hold it until `npm run places:measure-globe` has been run on real hardware. Do not close Phase I before this is answered.
+- **Phase I GPU measurement:** status `FPS_BUDGET_PENDING_REAL_GPU_VALIDATION`. SwiftShader measured 20 fps desktop and 18 fps mobile. The workload evidence is fill-rate bound and the applied pixel-ratio cap improved mobile from 12 to 18 fps. A real-GPU run remains useful, but it is not a merge blocker and does not reopen Phase I.
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups and observability for Phase E;
 - final confirmation model for sensitive Phase J commands.
 
-## 8. Exact next action — review the Phase I implementation
+## 8. Exact next action
 
-1. Review `claude/phase-i-places-3d-implementation` (T1–T10). Do not merge before review.
-2. Read `changes/2026-07-25-phase-i-places-3d-implementation.md` — it records the
-   architecture actually built, the pinned dependency versions, the texture licence,
-   the full test inventory and every measured value, including the budgets that were
-   **not** met and why.
-3. Answer the open D6 frame-rate decision in §7 above. Phase I cannot be marked
-   COMPLETE while it is open.
-4. To obtain the missing numbers, run on a machine with a GPU:
+1. Start the next selected phase from the latest `develop` at `08be9f04df60c9d8e138242fc0d7b0504e0ba51e`.
+2. Phase E — Global worker foundation is READY and is required before Phase H.
+3. Optionally validate Phase I on a machine with a real GPU:
    `npm run build && npm run start`, then
    `DATABASE_URL=<local> npm run places:measure-globe -- --url http://127.0.0.1:3000`.
-5. Keep Phase I to the 3D experience alone: no Phase E, H, J, worker, Hermes, MCP,
-   OCR, transcription or multimodal analysis, no Prisma migration, and **do not
-   replace Leaflet**.
+4. Keep Phase E, H and J isolated in separate branches and PRs.
+5. Do not mix worker, Hermes, MCP, OCR, transcription or multimodal analysis into maintenance work for Phase I.
