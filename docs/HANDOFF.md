@@ -112,27 +112,24 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E and stable worker infrastructure. |
-| I — Places 3D globe | READY | Phase G is complete and the shared Places data source is stable. |
+| I — Places 3D globe | DESIGN_APPROVED | Design pack approved and ADR `ACCEPTED` (25 July 2026). All six decisions closed; implementation may start at T1 in its own PR. No production code yet. |
 | J — Unified MCP and Hermes | BLOCKED | Requires later orchestration decisions and confirmations. |
 
 ## 7. Open decisions that must not be guessed
 
-- 3D engine/provider for Phase I (`Three.js`, Cesium or another explicitly approved option);
-- terrain/building/globe tile provider and cost model;
-- final 3D visual direction and interaction contract;
-- 2D ↔ 3D switching behaviour;
-- shared selection, URL state and camera synchronization;
-- mobile and accessibility fallback for the 3D view;
-- performance budget for fewer than 1000 canonical places;
+Phase I decisions are **all closed** (ADR `ACCEPTED`, 25 July 2026): engine `react-globe.gl`/`globe.gl`, Concept 2 sober with restrained Concept 1 elements, static free Earth texture with documented licence, additive `view=map|globe` with 2D default and independent cameras, full mobile 3D with a WebGL fallback, and the measurable D6 budgets. Remaining open items:
+
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups and observability for Phase E;
 - final confirmation model for sensitive Phase J commands.
 
-## 8. Exact next action — Phase I preparation
+## 8. Exact next action — Phase I implementation
 
-1. Start from the latest `develop`; do not reuse `claude/phase-g-places-2d-ui`.
-2. Perform a brownfield audit of the merged `/places` implementation, especially `PlacesMap`, query-state, selection, detail sheet, statistics and accessibility fallbacks.
-3. Do not write production code before the owner has explicitly chosen the 3D engine/provider and visual direction.
-4. Produce a Phase I entry brief, ADR, requirements, acceptance criteria, implementation tasks and traceability matrix.
-5. Keep the first Phase I PR limited to documentation and architecture unless the owner explicitly authorizes implementation.
-6. Do not mix Phase E, H, J, worker, Hermes, MCP, OCR, transcription or multimodal analysis into Phase I.
+The design pack is **approved** and the ADR is **ACCEPTED**; T0 is closed. No
+production code exists yet.
+
+1. Start from the latest `develop` in a dedicated branch (for example `claude/phase-i-places-3d`).
+2. Implement **T1 → T10** from `superpowers/plans/2026-07-25-phase-i-places-3d.md`; do not re-open the settled decisions.
+3. Honour the approved contract: `react-globe.gl`/`globe.gl` lazily loaded behind our own rendering contract; Concept 2 sober (dark globe, light halo, luminous points, smooth centring, segmented `2D | 3D` control next to the filters); static free texture with **documented licence** — never commit one with an unclear licence; additive `view=map|globe` with 2D default and independent cameras; shared filters, search, selection, list, statistics and detail; full mobile 3D with a WebGL fallback to 2D; `prefers-reduced-motion` respected.
+4. Record the **real measured values** for the D6 budgets in the final proof (50–60 fps desktop, ≥ 30 fps mobile, first globe render < 3 s, no significant 2D bundle regression).
+5. Keep Phase I to the 3D experience alone: no Phase E, H, J, worker, Hermes, MCP, OCR, transcription or multimodal analysis, no Prisma migration, and **do not replace Leaflet**.

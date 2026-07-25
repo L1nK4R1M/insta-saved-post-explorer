@@ -10,6 +10,8 @@ Status values:
 - `READY`: entry gate is satisfied and work may start in a dedicated branch;
 - `IN_PROGRESS`: the broader phase has completed sub-phases but is not finished;
 - `AWAITING_REVIEW`: implementation proof exists but the work is not merged;
+- `AWAITING_OWNER_DECISION`: the entry gate is satisfied and the design pack exists, but implementation is held until the owner resolves the recorded product/provider decisions;
+- `DESIGN_APPROVED`: the design pack is approved and every product/provider decision is closed; implementation may start in a dedicated PR but no production code exists yet;
 - `BLOCKED`: a required predecessor or decision is incomplete;
 - `NOT_STARTED`: no work has begun and it is not the next executable phase.
 
@@ -29,7 +31,7 @@ Status values:
 | E — Global worker foundation | READY | Phase C | None | Separate VPS phase. Required before Phase H deep analysis. |
 | G — Places 2D UI and contextual navigation | COMPLETE | Phase F complete | PR #34, squash `2bd2098` | `/places`, Leaflet + markercluster, Geoapify raster tiles, synchronized list, complete filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. Review fixes validated: authenticated read Server Action, complete `sourceThemes`, all countries filterable. CI #107 green; 50 files / 440 tests locally; no migration. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
-| I — Places 3D globe | READY | Phase G complete | None | Entry gate satisfied by the merged and stable 2D Places UI/data source. Must start in a dedicated branch after product/provider decisions are explicitly resolved. |
+| I — Places 3D globe | DESIGN_APPROVED | Phase G complete | `claude/phase-i-places-3d-design` (design pack only) | Design pack approved on 25 July 2026 and ADR **ACCEPTED**: engine `react-globe.gl`/`globe.gl` (Three.js), Concept 2 sober + restrained Concept 1 elements, static free Earth texture with documented licence (no paid provider), additive `view=map|globe` with 2D default and independent cameras, full mobile 3D with a WebGL fallback, and measurable budgets (50–60 fps desktop, ≥ 30 fps mobile, first globe render < 3 s, no significant 2D bundle regression). **No production code yet** — implementation follows T1–T10 in a separate PR. Leaflet is not replaced. |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
 
 ## Current execution pointer
@@ -39,7 +41,9 @@ Current state
 - Phase F is CLOSED and COMPLETE.
 - Phase G is CLOSED and COMPLETE after PR #34, squash merge 2bd2098472c65eeb24c52aa0ee893e09b8e20261.
 - CI #107 passed on reviewed head 82a9760df92b5aa58f6a411c3f90bb07fb7cb46a.
-- Phase I — Places 3D globe is READY, but implementation must not start until the 3D provider, visual contract and synchronization rules are explicitly decided.
+- Phase I — Places 3D globe is DESIGN_APPROVED: the ADR is ACCEPTED and all six decisions are closed
+  (react-globe.gl/globe.gl, Concept 2 sober, static free texture, view=map|globe with 2D default, full mobile 3D + WebGL fallback, measurable budgets).
+  No production code exists yet; implementation starts at T1 in its own PR.
 - Phase E remains independently READY and is still required before Phase H.
 - Phase H and Phase J remain blocked.
 
@@ -58,7 +62,7 @@ Recorded proof
 ## Next agent action
 
 1. Start from the latest `develop`; do not reuse the Phase G branch.
-2. Before implementing Phase I, audit the existing 2D map, `PlacesMap` abstraction, URL state, selection model, detail sheet and accessibility fallbacks.
-3. Resolve with the owner before coding: 3D engine/provider, globe visual style, 2D↔3D switching behaviour, shared selection/camera state, mobile fallback, performance budget and tile/terrain costs.
-4. Produce a Phase I implementation brief, ADR and traceability matrix before changing production code.
+2. The Phase I design pack is **done and approved**; the ADR is `ACCEPTED` and T0 is closed — read `phase-i-places-3d-brief.md`, `adr/ADR-places-3d-engine.md` and `superpowers/plans/2026-07-25-phase-i-places-3d.md`.
+3. Implement **T1 → T10** in a dedicated branch; do not re-open the settled decisions.
+4. Record the real performance measurements required by D6 in the final proof.
 5. Keep Phase I limited to the 3D Places experience. Do not mix Phase E, H, J, Hermes, MCP, OCR, transcription or worker work into the same PR.
