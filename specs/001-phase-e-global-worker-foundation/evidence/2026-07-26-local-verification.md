@@ -19,7 +19,8 @@ No hosted database or VPS was contacted.
 | `npm run worker:smoke` | 0 | One isolated fixture claimed and completed; fixture/workdir cleanup passed. |
 | Docker runtime inspection | 0 | `10001:10001`, ports `{}`, `healthy`, running `true`. |
 | `docker compose ... down` | 0 | Worker container and private network removed after proof. |
-| VibeSpec validation/traceability | pending final metadata | Run again after PR handoff metadata is recorded. |
+| VibeSpec validation/traceability | 0 | Final validation passed and generated traceability reports zero uncovered requirements after PR #39 handoff metadata. |
+| GitHub PR #39 checks | 0 | CI lint/types/unit/build, browser tests, Vercel and Vercel Preview Comments passed on the reviewed PR head before the final metadata commit. |
 
 The recurring jsdom canvas notices in the root test output are the known baseline
 and did not fail a test. The online detailed audit was not run because it would

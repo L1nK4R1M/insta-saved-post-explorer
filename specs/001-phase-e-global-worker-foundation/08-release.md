@@ -68,9 +68,13 @@ values in logs. Hosted/VPS proof must be reported separately from local proof.
 
 | Gate | Required evidence | Approver | Status |
 |---|---|---|---|
-| Pull request ready | CI, full tests, Docker smoke, reviews, convergence PASS | Repository owner | Pending |
+| Pull request ready | CI, full tests, Docker smoke, reviews, convergence PASS | Repository owner | Ready for owner review (PR #39) |
 | Preview migration | Reviewed migration and isolated DB target | Environment approver | Pending |
 | VPS deployment | Credentials, firewall, backup, alerts and rollback rehearsal | Repository owner/operator | Not authorized |
 | Phase H handler | Separate approved specification and PR | Repository owner | Out of scope |
 
-Release gate: NOT READY
+Release gate: READY
+
+`READY` means the open, unmerged PR package is ready for owner review. Preview
+migration, hosted credentials and VPS deployment remain separate pending or
+unauthorized gates and were not performed.

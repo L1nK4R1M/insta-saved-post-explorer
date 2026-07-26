@@ -1,8 +1,8 @@
 # Specification compliance review — 2026-07-26
 
 Scope: final worktree diff versus `origin/develop`, reviewed independently from
-style/maintainability. Verdict: PASS for local implementation; PR handoff was
-still pending when this pass was written.
+style/maintainability. Verdict: PASS. PR #39 targets `develop`; its CI,
+browser and Vercel checks passed before final convergence.
 
 | Requirements | Implementation and proof |
 |---|---|

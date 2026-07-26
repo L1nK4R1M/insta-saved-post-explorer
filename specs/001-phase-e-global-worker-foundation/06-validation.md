@@ -142,4 +142,4 @@ git diff --check
 | EV-005 | Health and lifecycle integration | Health/lifecycle test output | Local pass: 18 health/runtime tests, 2026-07-26 |
 | EV-006 | Docker and smoke gates | Build, Compose, inspect and smoke logs | Local pass: image, Compose, smoke, `10001:10001`, `{}`, healthy, 2026-07-26 |
 | EV-007 | Documentation convergence | Diff and document review | Local pass: documents aligned and diff hygiene clean, 2026-07-26 |
-| EV-008 | Full completion | Quality gates, traceability and two reviews | Local gates and both reviews pass; PR handoff plus final VibeSpec metadata pending |
+| EV-008 | Full completion | Quality gates, traceability and two reviews | PASS: local gates, both reviews, PR #39 CI/build/browser checks, VibeSpec validation and zero-gap traceability; PR remains open and unmerged |

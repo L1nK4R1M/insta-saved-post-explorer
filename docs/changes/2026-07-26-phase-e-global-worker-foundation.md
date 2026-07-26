@@ -3,8 +3,9 @@
 Date: 26 July 2026  
 Branch: `claude/phase-e-global-worker-foundation`  
 Base: `develop@f79320c819e94bfdd3b66539c1178d62a201afbf`
+Pull request: [#39](https://github.com/L1nK4R1M/insta-saved-post-explorer/pull/39) (open, unmerged)
 
-## Delivered locally
+## Delivered for review
 
 - Private worker workspace with typed configuration and redacted JSON logging.
 - Owner-scoped PostgreSQL claim, lease, heartbeat, retry and stale claimant guards
@@ -31,8 +32,13 @@ Base: `develop@f79320c819e94bfdd3b66539c1178d62a201afbf`
 | Ephemeral smoke | passed; fixture and workdir removed |
 | Docker build and runtime | passed; `10001:10001`, `{}`, `healthy` |
 
-Final repository totals, VibeSpec review and PR checks are recorded only after
-they run fresh in Task 8.
+| Final repository suite | 43 files / 319 passed; 11 files / 129 PostgreSQL tests skipped without the root test DSN |
+| Repository lint / typecheck / build | passed; Next.js 16.2.10 built 32 static pages |
+| VibeSpec | validation passed; zero uncovered requirements; convergence PASS |
+| Independent reviews | specification compliance PASS; code quality/security PASS with no open HIGH/BLOCKER |
+| PR #39 | CI lint/types/unit/build, browser tests, Vercel and preview comments passed |
+
+The PR remains open and unmerged for owner review.
 
 ## Explicit limits
 
