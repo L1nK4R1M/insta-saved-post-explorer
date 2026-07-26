@@ -8,31 +8,41 @@ Pull request: [#39](https://github.com/L1nK4R1M/insta-saved-post-explorer/pull/3
 ## Delivered for review
 
 - Private worker workspace with typed configuration and redacted JSON logging.
-- Owner-scoped PostgreSQL claim, lease, heartbeat, retry and stale claimant guards
-  on the existing `place_analysis_jobs` queue.
+- Owner-scoped PostgreSQL claim, lease, sequential heartbeat, retry, exhausted
+  `PENDING` terminalization and stale claimant guards on the existing
+  `place_analysis_jobs` queue.
 - Additive timestamps/index and explicit column privileges for the existing
   `ipe_worker_reader` NOLOGIN role.
 - Empty production handler registry plus an ephemeral-only noop smoke registry.
-- Contained workdirs and GetObject-only VERIFIED-media R2 streaming with
-  owner/post/prefix/size checks and partial-file cleanup.
-- Internal health, graceful signals and a hardened Node 24 container running as
-  `10001:10001` with no published port.
+- Contained workdirs and a database-authoritative, job-scoped VERIFIED-media
+  capability. Handlers select media ids but never R2 keys; the worker enforces
+  owner/post/key/prefix/size checks before GetObject and cleans partial files.
+- True signal grace with heartbeat renewal until the deadline, timeout-only
+  abort and `WORKER_STOPPING` retry-or-lease-expiry recovery.
+- Internal health on the configured port and a hardened Node 24 container
+  running as `10001:10001` with no published port.
+
+## PR #39 review corrections
+
+The 26 July review identified seven invariants that were not strong enough at
+the previously reviewed head. The branch now makes PostgreSQL authoritative for
+R2 authorization, prevents overlapping heartbeat calls, preserves the grace
+window before abort, uses one checked-out client for smoke transactions,
+terminalizes exhausted pending jobs, rejects raw relative temp roots and aligns
+the image healthcheck with `WORKER_HEALTH_PORT`. No migration was added or
+changed by this correction round.
 
 ## Evidence before final convergence
 
 | Gate | Result |
 |---|---|
-| Foundation | 9 passed |
-| PostgreSQL leasing/recovery/retry | 9 passed on PostgreSQL 16 `_test` database |
-| Restricted role/media | 6 passed on PostgreSQL 16 `_test` database |
-| Runtime | 13 passed |
-| Filesystem/R2 | 11 passed |
-| Health plus runtime | 18 passed |
-| Worker suite with DB env | 49 passed, 0 skipped |
+| Fresh schema | 10 migrations applied on PostgreSQL 16 `ipe_phase_e_review_fix_test` |
+| PostgreSQL leasing/media authorization | 11 passed |
+| Worker suite with DB env | 6 files / 59 passed, 0 skipped |
 | Ephemeral smoke | passed; fixture and workdir removed |
-| Docker build and runtime | passed; `10001:10001`, `{}`, `healthy` |
+| Docker build, Compose and runtime | passed; port `8181`, `10001:10001`, `{}`, `healthy` |
 
-| Final repository suite | 43 files / 319 passed; 11 files / 129 PostgreSQL tests skipped without the root test DSN |
+| Final repository suite | 54 files / 448 passed with PostgreSQL enabled |
 | Repository lint / typecheck / build | passed; Next.js 16.2.10 built 32 static pages |
 | VibeSpec | validation passed; zero uncovered requirements; convergence PASS |
 | Independent reviews | specification compliance PASS; code quality/security PASS with no open HIGH/BLOCKER |

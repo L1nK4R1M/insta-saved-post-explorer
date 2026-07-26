@@ -91,6 +91,50 @@ References: FR-013, NFR-008. VibeSpec validation reports zero errors, generated
 traceability has zero uncovered requirements, docs match the final diff and
 evidence distinguishes local/CI proof from undeployed VPS work.
 
+### AT-014: PostgreSQL is the media authorization source
+
+References: FR-002, FR-005, FR-008, NFR-004, BR-007. A real PostgreSQL fixture
+proves that only a `VERIFIED`, keyed media row matching the claimed owner and
+post can cause GetObject. Foreign owner/post, `UNVERIFIED`, `REPAIRABLE` and
+missing ids fail before R2. Handler-facing types expose no arbitrary key.
+
+### AT-015: Shutdown provides a true grace period
+
+References: FR-006, FR-010, NFR-006. Stopping blocks polls/claims immediately,
+keeps heartbeat active, permits success before the deadline, sends abort only at
+the deadline, and maps a cooperative deadline abort to guarded
+`WORKER_STOPPING` retry or lease expiry, never `FAILED`.
+
+### AT-016: Heartbeat is strictly sequential
+
+References: FR-004, NFR-006. A renewal blocked longer than the interval proves
+one request in flight, no overlap, next scheduling only after settlement,
+`stop()` waiting for the active renewal, no restart and one lease-loss callback.
+
+### AT-017: Smoke fixture transaction uses one connection
+
+References: FR-003, FR-012. The transaction helper checks out one PoolClient,
+runs BEGIN, fixture writes and COMMIT on it, rolls back on error and releases it;
+the final cleanup may use the pool.
+
+### AT-018: Effective-attempt exhaustion cannot strand pending jobs
+
+References: FR-003, FR-006. PostgreSQL cases cover row and worker limits,
+claimability below the limit, terminalization at the limit, complete stage,
+safe code/timestamps/cleared lease fields and untouched other owners/states.
+
+### AT-019: Temp root must be explicitly absolute
+
+References: FR-001. Table-driven config cases reject empty, `./tmp`,
+`tmp/worker` and filesystem root without echoing the value, while accepting and
+normalizing an explicitly absolute non-root path.
+
+### AT-020: Container healthcheck follows configuration
+
+References: FR-011, NFR-007, BR-006. The built image is run with an internal
+non-8080 health port and reaches healthy without publishing a port; runtime
+inspection still reports numeric non-root user and empty port bindings.
+
 ## Quality commands
 
 Narrow first:
@@ -142,4 +186,8 @@ git diff --check
 | EV-005 | Health and lifecycle integration | Health/lifecycle test output | Local pass: 18 health/runtime tests, 2026-07-26 |
 | EV-006 | Docker and smoke gates | Build, Compose, inspect and smoke logs | Local pass: image, Compose, smoke, `10001:10001`, `{}`, healthy, 2026-07-26 |
 | EV-007 | Documentation convergence | Diff and document review | Local pass: documents aligned and diff hygiene clean, 2026-07-26 |
-| EV-008 | Full completion | Quality gates, traceability and two reviews | PASS: local gates, both reviews, PR #39 CI/build/browser checks, VibeSpec validation and zero-gap traceability; PR remains open and unmerged |
+| EV-008 | Original completion evidence | Quality gates, traceability and two reviews | Superseded by owner review on head `7c202c32f2d5ecb7e2c4155d0fe5032a62403826` |
+| EV-009 | Persisted media authorization | PostgreSQL/R2 regression output and grant proof | PASS: worker PostgreSQL 11/11 plus restricted-role root suite, 2026-07-26 |
+| EV-010 | Graceful shutdown and sequential heartbeat | Deterministic lifecycle/slow-heartbeat tests | PASS: worker suite 59/59 with DB, including 18 runtime scenarios, 2026-07-26 |
+| EV-011 | Targeted queue/config/smoke/container corrections | PostgreSQL, config, transaction and non-8080 container proof | PASS: smoke passed; image healthy at port 8181 as `10001:10001` with `ports={}`, 2026-07-26 |
+| EV-012 | Review-fix completion | Full requested gates, two reviews, updated PR and CI | Local gates PASS; independent reviews, push and refreshed PR CI pending |

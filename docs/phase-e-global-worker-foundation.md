@@ -97,31 +97,41 @@ claimant, `PROCESSING` status and an unexpired lease.
 ## Lease and heartbeat
 
 Heartbeat is strictly shorter than one third of the lease by configuration.
-Renewal is a compare-and-set update. Zero affected rows means lease loss: abort
-the handler, stop heartbeat and never finalize. An expired lease is available to
-a new claimant on its next transaction.
+Renewals run sequentially: the next timer starts only after the current database
+operation settles, so slow calls cannot overlap. Renewal is a compare-and-set
+update. Zero affected rows or a database exception means lease loss: abort the
+handler, stop scheduling renewal and never finalize. Stopping the heartbeat
+awaits its active renewal. An expired lease is available to a new claimant on
+its next transaction.
 
 ## Retry
 
 Attempts count claims. Retryable failure before the effective maximum returns to
 `PENDING` with deterministic capped exponential backoff and future
 `nextAttemptAt`; no default jitter is used so behavior is reproducible. Terminal
-errors and exhausted attempts become `FAILED`. Unknown exception text and stacks
-are not persisted.
+errors and exhausted attempts become `FAILED`. The claim transaction also
+terminalizes already-exhausted owner-scoped `PENDING` rows, including rows whose
+future `next_attempt_at` would otherwise make them permanently unclaimable.
+Unknown exception text and stacks are not persisted.
 
 ## Shutdown
 
-SIGTERM and SIGINT set a stopping flag synchronously, stop polling and refuse new
-claims. The current handler may finish within 30 seconds by default; then its
-abort signal fires. Heartbeat and janitor stop, the workdir is cleaned and DB/R2
-resources close. Lease expiry provides crash recovery when the process cannot
-finalize.
+SIGTERM and SIGINT set a stopping flag synchronously, cancel polling and refuse
+new claims. The current handler keeps running, with heartbeat renewal active,
+for up to 30 seconds by default. Its abort signal fires only when that deadline
+expires. A deadline abort is never persisted as a terminal business failure: it
+returns the job to `PENDING` with `WORKER_STOPPING` when the guarded retry can
+still prove lease ownership, or leaves recovery to lease expiry when PostgreSQL
+is unavailable. Cleanup and resource closure then run once; repeated stop calls
+share the same promise.
 
 ## Security
 
 - Static parameterized SQL only.
 - Required owner predicate on every job/post/media query.
 - Column-level grants extended on the existing NOLOGIN role only.
+- Database-authoritative media authorization scoped to the claimed job. Handlers
+  receive only media ids and safe metadata, never an object key or S3 client.
 - Canonical persisted R2 key, fixed account/bucket/prefix and GetObject-only API.
 - No URL supplied by payload and no list/put/delete operation.
 - Opaque workdir names and resolved containment checks.
@@ -136,6 +146,11 @@ Root deployment keeps `R2_WORKER_ACCESS_KEY_ID` and
 them into the worker's private `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 `R2_ACCOUNT_ID` constructs the Cloudflare S3 endpoint, avoiding an arbitrary
 endpoint. Streaming stops at the configured byte cap and removes partial files.
+The handler-facing capability exposes only `listVerified()` and
+`downloadToWorkdir(mediaId, ...)`. Both resolve through an owner/post-scoped
+repository; download repeats the `VERIFIED` and non-null canonical-key predicate
+before issuing `GetObject`. The bucket, allowed prefix and maximum size remain
+worker configuration and cannot be supplied by a handler.
 
 ## Workdir
 
@@ -187,15 +202,16 @@ database through a new direct path or broaden the Phase E worker implicitly.
 
 ## Local implementation evidence — 26 July 2026
 
-- Foundation configuration/logger: 9 tests passed.
-- PostgreSQL 16 leasing suite: 9 tests passed on `ipe_phase_e_fresh_test`.
-- Restricted-role/media suite: 6 tests passed on the same ephemeral database.
-- Runtime heartbeat/lease/shutdown: 13 tests passed.
-- Filesystem and GetObject-only R2: 11 tests passed.
-- Health plus runtime focused run: 18 tests passed.
+- Fresh PostgreSQL 16 database `ipe_phase_e_review_fix_test`: all 10 migrations
+  applied successfully.
+- Worker suite with database enabled: 6 files and 59/59 tests passed; the
+  dedicated leasing/media authorization suite passed 11/11.
+- Repository suite with database enabled: 54 files and 448/448 tests passed.
+- Lint, root and worker typechecks, Next.js build and worker build passed.
 - Ephemeral smoke: one fixture claimed, completed and removed; no workdir remained.
-- Docker image: built successfully; inspection reported `10001:10001`, health
-  `healthy` and published ports `{}`. Compose was stopped afterward.
+- Docker image: built successfully; Compose resolved; a real container configured
+  with port `8181` reported `10001:10001`, health `healthy` and published ports
+  `{}`. The task-owned container was stopped and removed afterward.
 
 These are local proofs only. No hosted migration, worker login, R2 credential,
 VPS/Coolify service, firewall, backup, alert or production deployment was

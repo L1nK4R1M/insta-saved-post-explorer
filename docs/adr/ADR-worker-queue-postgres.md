@@ -38,6 +38,15 @@ grants. Require `WORKER_OWNER_ID`. Do not add Redis or `worker_jobs`.
 The Phase E noop handler is registered only by tests/smoke against an ephemeral
 database. Normal runtime has no real handler until a later reviewed phase.
 
+Review amendment (26 July 2026): PostgreSQL is also the authority for every
+worker media read. A handler receives a job-scoped capability accepting only a
+media id; the adapter resolves owner, post, `VERIFIED` identity state and the
+canonical R2 key from the database immediately before `GetObject`. Shutdown uses
+a true grace window with sequential heartbeat renewal. Only the timeout aborts
+the handler, after which a guarded `WORKER_STOPPING` retry or lease expiry
+recovers the job. Exhausted `PENDING` rows are terminalized inside the claim
+transaction. These corrections require no additional migration.
+
 ## Consequences
 
 - Positive: one durable queue, atomic recovery, existing backup path and low VPS
@@ -46,6 +55,8 @@ database. Normal runtime has no real handler until a later reviewed phase.
 - Negative: the adapter maps a Places-specific row to the internal handler
   contract; a future second domain must revisit the queue design.
 - Negative: long handlers require reliable heartbeat and database availability.
+- Negative: each media download performs an authorization lookup, deliberately
+  preferring current database authority over a handler-supplied locator.
 
 ## Reversal or supersession
 

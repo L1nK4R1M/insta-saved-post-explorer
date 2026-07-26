@@ -53,17 +53,17 @@ supported by fresh evidence.
 
 ## Functional requirements
 
-- FR-001: The worker validates all required configuration before opening the polling loop, including a non-empty owner, positive poll interval, bounded attempts, explicit temp root, local health host by default, and heartbeat strictly shorter than lease duration.
+- FR-001: The worker validates all required configuration before opening the polling loop, including a non-empty owner, positive poll interval, bounded attempts, a raw `WORKER_TEMP_ROOT` value that is explicitly absolute and not the filesystem root, local health host by default, and heartbeat strictly shorter than lease duration.
 - FR-002: Every worker SQL statement that reads or mutates a job, post or media row binds `WORKER_OWNER_ID`; a row without a valid owner is never claimed.
 - FR-003: A transaction claims zero or one eligible job with `FOR UPDATE SKIP LOCKED` or an equivalent PostgreSQL-safe mechanism, ignores future `nextAttemptAt`, reclaims expired `PROCESSING` leases, assigns the claimant, records claim/lease times and increments attempts atomically.
-- FR-004: Heartbeat renewal succeeds only for the current claimant while the lease remains valid; loss of lease cancels execution and prevents success, retry or terminal finalization by the stale claimant.
+- FR-004: Heartbeat renewal succeeds only for the current claimant while the lease remains valid; renewals are strictly sequential with at most one request in flight, and loss of lease cancels execution exactly once and prevents success, retry or terminal finalization by the stale claimant.
 - FR-005: The dispatcher accepts only registered job kinds and schema-valid payloads and supplies job id, owner id, abort signal, workdir, authorized clients and contextual logger to the handler.
-- FR-006: Retryable failures return the job to `PENDING` with deterministic capped exponential backoff and `nextAttemptAt`; terminal failures or exhausted attempts transition to `FAILED` with bounded, sanitized error fields.
+- FR-006: Retryable failures return the job to `PENDING` with deterministic capped exponential backoff and `nextAttemptAt`; terminal failures and both `PENDING` or expired-lease `PROCESSING` jobs at the effective attempt limit transition to `FAILED` with bounded, sanitized error fields. A shutdown-timeout abort is never a terminal business failure: it schedules a bounded `WORKER_STOPPING` retry while the lease is still held, or performs no finalization so the lease can expire.
 - FR-007: Each execution receives a unique workdir beneath `WORKER_TEMP_ROOT`; it is removed in `finally` after success, failure or cancellation, and startup plus periodic janitor cleanup never delete outside the configured root or follow an escaping symlink.
-- FR-008: The R2 client can only stream `GetObject` for a canonical `VERIFIED` media key belonging to the claimed owner and post, enforces a maximum byte size, and exposes no put, delete, arbitrary URL or general list operation.
+- FR-008: The handler receives a job-scoped media capability exposing only safe media references and media-id downloads. Every download re-queries PostgreSQL for that media id under the claimed owner and post with `identity_state = 'VERIFIED'` and a non-null canonical key; only that persisted key may reach read-only `GetObject`. The capability enforces the configured bucket, prefix and maximum byte size and exposes no key input, put, delete, arbitrary URL or general object-list operation.
 - FR-009: `/health/live` reports process liveness and `/health/ready` reports configuration plus database connectivity; responses contain no job payload, database URL, credential or detailed internal metrics.
-- FR-010: SIGTERM and SIGINT stop polling immediately, refuse new claims, abort or await the current job up to a configured bound, stop heartbeat and janitor timers, clean the workdir and close database/R2 resources.
-- FR-011: The worker ships as a multi-stage Docker image running as a non-root user with an internal healthcheck, one Compose service, no published port, dropped capabilities and no-new-privileges.
+- FR-010: SIGTERM and SIGINT synchronously enter stopping state, stop polling and refuse new claims while the current handler and heartbeat continue during the configured grace period. The shutdown abort signal fires only after the deadline; its retry-or-expire policy is distinct from lease loss and handler business failure. Timers and resources then close, and the process reports non-zero only when the grace deadline was exceeded.
+- FR-011: The worker ships as a multi-stage Docker image running as a non-root user with an internal healthcheck that reads `WORKER_HEALTH_PORT` with an `8080` fallback, one Compose service, no published port, dropped capabilities and no-new-privileges.
 - FR-012: An explicit ephemeral smoke path proves claim, execution, heartbeat-capable runtime, success, retry, terminal failure and cleanup without registering a noop handler in normal runtime or completing a real shared Places job.
 - FR-013: Phase E updates worker, deployment, operations, handoff, status, ADR, change and VibeSpec documentation with recorded commands, results, limits, rollout and rollback.
 
@@ -74,7 +74,7 @@ supported by fresh evidence.
 - NFR-003: Successful, exceptional and cancelled executions leave zero job workdirs after the cleanup promise resolves; startup janitor removes only entries older than six hours by default.
 - NFR-004: Stored errors and structured logs are bounded to 1,024 characters per message field and contain none of the configured database/R2 secrets in the test corpus.
 - NFR-005: Health endpoints respond within 2 seconds locally when dependencies respond; readiness returns non-2xx within the same bound when PostgreSQL is unavailable.
-- NFR-006: Graceful shutdown defaults to 30 seconds and exits without a new claim after shutdown begins.
+- NFR-006: Graceful shutdown defaults to 30 seconds, permits the active handler to finish successfully with heartbeat renewal during that interval, sends no abort before the deadline, and accepts no new claim after stopping begins.
 - NFR-007: The image declares a numeric non-root user, and Compose publishes zero host ports.
 - NFR-008: Tests remain risk-based: PostgreSQL is used only for transactional/grant invariants, while pure config, retry, dispatcher, cleanup and health behavior use consolidated table-driven suites.
 
@@ -100,7 +100,9 @@ supported by fresh evidence.
 | Terminal/exhausted error | Job becomes `FAILED`. | Safe terminal code. | Operator creates a new idempotent input/version when appropriate. |
 | R2 key/owner mismatch | Download is refused before network transfer. | Terminal security error. | Repair persisted identity/ownership. |
 | DB unavailable | Readiness fails and polling backs off without claiming. | `/health/ready` non-2xx. | Restore DB and worker self-recovers. |
-| Shutdown timeout | Abort signal fires, cleanup runs, process exits non-zero if work cannot stop. | Liveness ends. | Expired lease permits recovery. |
+| Shutdown begins and work completes within grace | Polling stops, heartbeat continues and success may be persisted. | Clean zero exit. | None. |
+| Shutdown timeout with lease held | Abort signal fires only at the deadline; a guarded `WORKER_STOPPING` retry is attempted and cleanup runs. | Non-zero exit. | Another poll may retry later. |
+| Shutdown timeout without usable lease/DB | No business failure is persisted and cleanup proceeds; the lease is left to expire. | Non-zero exit. | Another worker reclaims the expired lease. |
 
 ## Data and privacy requirements
 

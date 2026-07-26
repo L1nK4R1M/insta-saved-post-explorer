@@ -1,5 +1,19 @@
 # Phase E Global Worker Foundation - Intake
 
+## PR #39 review correction intake — 2026-07-26
+
+Owner review of head `7c202c32f2d5ecb7e2c4155d0fe5032a62403826`
+reopened this critical feature. The review demonstrated seven gaps: handler-
+forgeable R2 authorization, immediate shutdown abort, overlapping heartbeats,
+an unpinned smoke transaction, non-terminal exhausted `PENDING` jobs, relative
+temp-root acceptance, and a fixed Docker health port. The branch remains the
+existing PR #39 branch; no new PR, hosted migration or deployment is authorized.
+
+The correction remains critical because it changes authorization, concurrency,
+retry and operational shutdown behavior. The approved architecture is unchanged:
+one owner-scoped PostgreSQL queue, one global worker, read-only R2, no production
+handler, no Phase H/J scope, no public port and one additive migration history.
+
 Feature: 001  
 Mode: critical  
 Created: 2026-07-26

@@ -34,6 +34,22 @@ type WorkerHandler<TPayload> = {
   parsePayload(input: unknown): TPayload;
   run(context: WorkerJobContext<TPayload>): Promise<WorkerJobResult>;
 };
+
+type VerifiedMediaReference = {
+  id: string;
+  position: number;
+  mimeType: string | null;
+  byteSize: number | null;
+};
+
+interface JobMediaClient {
+  listVerified(): Promise<VerifiedMediaReference[]>;
+  downloadToWorkdir(
+    mediaId: string,
+    workdir: string,
+    signal: AbortSignal,
+  ): Promise<string>;
+}
 ```
 
 `payload` is derived from selected persisted fields; Phase E does not add a
@@ -49,6 +65,8 @@ PENDING -> PROCESSING -> SUCCEEDED
                       -> FAILED
                       -> CANCELLED (external producer/admin only)
 PROCESSING with expired lease -> PROCESSING by a new claimant
+PENDING at effective attempt limit -> FAILED (ATTEMPTS_EXHAUSTED)
+PROCESSING with expired lease at effective attempt limit -> FAILED (ATTEMPTS_EXHAUSTED)
 ```
 
 `NEEDS_REVIEW`, `SUCCEEDED`, `FAILED` and `CANCELLED` are not claimable.
@@ -70,6 +88,12 @@ Required grants for `ipe_worker_reader` are explicit column-level `SELECT` on
 safe job/post/media fields and `UPDATE` only on worker-owned queue state fields.
 No `INSERT`, `DELETE`, sequence privilege, domain table write or media URL column
 grant is permitted.
+
+The handler never receives `object_key`, `identity_state`, media owner/post ids
+or declared size as authorization evidence. `downloadToWorkdir` binds the media
+id together with the claimed job owner and post in a parameterized PostgreSQL
+query. Only the returned canonical key, MIME, size and version may reach the
+private R2 adapter.
 
 ## UI contract
 
@@ -120,7 +144,8 @@ Not applicable. Phase E has no browser UI, dashboard or public endpoint.
 | `WORKER_R2_TOO_LARGE` | R2 | Persisted or streamed size exceeds cap. | no | Failed and partial file removed. | Size category only. |
 | `WORKER_R2_UNAVAILABLE` | R2 | Transient GetObject/stream failure. | yes | Retry policy applies. | Safe provider status. |
 | `WORKER_WORKDIR_UNSAFE` | filesystem | Path or symlink violates containment. | no | Execution refused. | Relative opaque name only. |
-| `WORKER_SHUTDOWN_TIMEOUT` | lifecycle | Current handler exceeded grace. | no | Abort and non-zero exit. | Duration and job id. |
+| `WORKER_STOPPING` | lifecycle | Grace deadline elapsed while the worker still held the lease. | yes | Guarded pending retry; never a terminal business failure. | Duration and job id. |
+| `WORKER_SHUTDOWN_TIMEOUT` | lifecycle | Current handler exceeded grace. | operational | Deadline abort and non-zero process exit; no `FAILED` business transition. | Duration and job id. |
 | `WORKER_UNEXPECTED` | runtime | Unknown sanitized exception. | policy-dependent, default no | Failed when lease held. | No raw stack persisted. |
 
 ## Compatibility guarantees

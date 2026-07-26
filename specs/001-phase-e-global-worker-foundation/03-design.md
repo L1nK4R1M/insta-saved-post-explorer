@@ -262,3 +262,37 @@ uses image inspection, container user/health and Compose port inspection.
 | FR-009, FR-010, NFR-005 | Loopback live/ready server, injected DB probe and deterministic resource closure. |
 | FR-011, FR-012, NFR-007 | Non-root hardened image, private Compose service and isolated noop smoke fixture only. |
 | FR-013 | Operator, deployment, handoff and status documentation converged with the implementation evidence. |
+
+## PR #39 review-fix design amendment
+
+### Persisted media capability
+
+Two designs were evaluated: validating a handler-provided media locator inside
+the R2 adapter, or resolving a media id through an owner/post-scoped PostgreSQL
+repository at download time. The first cannot establish authority because the
+handler controls every asserted field. The selected design gives handlers only
+`listVerified()` and `downloadToWorkdir(mediaId, workdir, signal)`. The latter
+re-queries `post_media` for the claimed owner, post, `VERIFIED` state and non-null
+key, then passes the returned canonical key to a private GetObject-only adapter.
+Bucket, prefix and size policy remain configuration-owned.
+
+### Graceful lifecycle and heartbeat
+
+Immediate global abort was rejected because it converts an operator signal into
+a handler failure. Stopping state now blocks polling and claims synchronously,
+while a deadline-specific signal remains inactive during grace. The active
+heartbeat uses a recursive one-shot timer scheduled only after the preceding
+renewal settles. At the deadline, abort is sent once. The runner attempts a
+guarded `WORKER_STOPPING` retry when the lease and database remain usable;
+otherwise it performs no final state mutation and recovery uses lease expiry.
+
+### Queue and operational corrections
+
+Before every claim transaction, owner-scoped exhausted `PENDING` jobs and
+expired exhausted `PROCESSING` jobs are terminalized without touching existing
+terminal states or other owners. Smoke fixture setup uses one checked-out
+`PoolClient`. Configuration validates the raw temp-root value before
+normalization. The image healthcheck reads `WORKER_HEALTH_PORT` and retains the
+8080 fallback; Compose continues to publish no port. These corrections require
+no schema or grant change because the existing additive migrations already
+provide the selected media columns and exact role privileges.

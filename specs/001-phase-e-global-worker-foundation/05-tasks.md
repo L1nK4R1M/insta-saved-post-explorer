@@ -91,3 +91,37 @@ TASK-003 + TASK-004 -> TASK-005 -> TASK-006 -> TASK-007 -> TASK-008
 
 TASK-003 and TASK-004 may proceed only after the shared data/config contracts in
 TASK-002 are stable. All later tasks depend on their public interfaces.
+
+## PR #39 review-fix tasks
+
+- [x] TASK-009: Replace forgeable media inputs with a persisted job capability
+  - Requirements: FR-002, FR-005, FR-008, NFR-004, BR-007
+  - Dependencies: TASK-008
+  - Files: `services/worker/src/db/media.ts`, `services/worker/src/r2/client.ts`, `services/worker/src/runtime/dispatcher.ts`, `services/worker/src/index.ts`, `services/worker/tests/io-security.test.ts`, `services/worker/tests/jobs-postgres.test.ts`, `tests/unit/media-identity-postgres.test.ts`
+  - Tests: AT-010, AT-014
+  - Evidence: EV-009
+  - Done: Handler API contains no locator/authorization fields, PostgreSQL supplies every GetObject key, foreign/non-verified rows are rejected before R2, and role grants remain exact.
+
+- [x] TASK-010: Separate graceful stopping, deadline abort and sequential heartbeat
+  - Requirements: FR-004, FR-006, FR-010, NFR-006
+  - Dependencies: TASK-009
+  - Files: `services/worker/src/runtime/heartbeat.ts`, `services/worker/src/runtime/shutdown.ts`, `services/worker/src/runtime/runner.ts`, `services/worker/src/index.ts`, `services/worker/tests/runtime.test.ts`
+  - Tests: AT-004, AT-011, AT-015, AT-016
+  - Evidence: EV-010
+  - Done: Grace preserves handler/heartbeat, deadline abort never writes terminal business failure, retry-or-expire is guarded, and heartbeat never overlaps or restarts after stop.
+
+- [x] TASK-011: Close queue, configuration, smoke and container review gaps
+  - Requirements: FR-001, FR-003, FR-006, FR-011, FR-012, NFR-007
+  - Dependencies: TASK-010
+  - Files: `services/worker/src/config.ts`, `services/worker/src/db/client.ts`, `services/worker/src/db/jobs.ts`, `services/worker/scripts/smoke.ts`, `services/worker/Dockerfile`, `services/worker/tests/foundation.test.ts`, `services/worker/tests/jobs-postgres.test.ts`, `services/worker/tests/container-contract.test.ts`
+  - Tests: AT-017, AT-018, AT-019, AT-020
+  - Evidence: EV-011
+  - Done: Smoke uses one PoolClient transaction, exhausted pending rows terminalize owner-safely, relative temp roots fail, and healthcheck follows the configured internal port.
+
+- [ ] TASK-012: Reverify, reconverge and update PR #39
+  - Requirements: FR-013, NFR-008
+  - Dependencies: TASK-011
+  - Files: Required Phase E docs, VibeSpec artifacts, evidence, PR body and review response
+  - Tests: AT-013 plus every requested final command
+  - Evidence: EV-012
+  - Done: Fresh PostgreSQL 16/Docker/repository gates pass, two review passes have no HIGH/BLOCKER, PR head checks pass, and no merge, hosted migration or VPS deployment occurred.

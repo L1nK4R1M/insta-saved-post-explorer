@@ -146,7 +146,7 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | --- | --- | --- |
 | C — R2 media identity and worker isolation | COMPLETE | PR #24; migration applied to Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
-| E — Global worker foundation | AWAITING REVIEW, separate | PR #39 is open against `develop`; local gates, two-pass review, VibeSpec convergence, CI, browser and Vercel checks are green. Unmerged; no hosted migration or VPS deployment. |
+| E — Global worker foundation | REVIEW FIXES IN PROGRESS, separate | PR #39 remains open against `develop`; seven review findings are corrected on its existing branch and are undergoing fresh full verification. Unmerged; no hosted migration or VPS deployment. |
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E and stable worker infrastructure. |
@@ -181,8 +181,9 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Review Phase E PR #39 against `develop`; never merge it automatically and do
-   not apply its migration to a hosted database without explicit authorization.
+1. Finish verification and re-review the Phase E corrections in PR #39 against
+   `develop`; never merge it automatically and do not apply its migration to a
+   hosted database without explicit authorization.
 2. Keep Phase H blocked until Phase E is merged and operational activation is
    separately approved.
 3. Keep Phase E, H and J isolated in separate branches and PRs.
