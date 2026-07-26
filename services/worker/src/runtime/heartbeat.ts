@@ -14,35 +14,49 @@ export function startHeartbeat(input: {
 }): HeartbeatController {
   let stopped = false;
   let lost = false;
-  let inFlight: Promise<void> = Promise.resolve();
+  let timer: NodeJS.Timeout | undefined;
+  let inFlight: Promise<void> | null = null;
 
   const loseLease = () => {
-    if (lost || stopped) return;
+    if (lost) return;
     lost = true;
     input.logger.warn("worker_lease_lost", { jobId: input.job.id });
     input.onLeaseLost();
   };
 
-  const timer = setInterval(() => {
+  const schedule = () => {
     if (stopped || lost) return;
-    inFlight = input.repository
-      .heartbeat({
-        id: input.job.id,
-        claimedBy: input.job.claimedBy,
-        leaseDurationMs: input.leaseDurationMs,
-        now: input.now?.(),
-      })
-      .then((renewed) => {
+    timer = setTimeout(runHeartbeat, input.intervalMs);
+    timer.unref();
+  };
+
+  const runHeartbeat = () => {
+    timer = undefined;
+    if (stopped || lost) return;
+    inFlight = (async () => {
+      try {
+        const renewed = await input.repository.heartbeat({
+          id: input.job.id,
+          claimedBy: input.job.claimedBy,
+          leaseDurationMs: input.leaseDurationMs,
+          now: input.now?.(),
+        });
         if (!renewed) loseLease();
-      })
-      .catch(() => loseLease());
-  }, input.intervalMs);
-  timer.unref();
+      } catch {
+        loseLease();
+      } finally {
+        inFlight = null;
+        schedule();
+      }
+    })();
+  };
+
+  schedule();
 
   return {
     async stop() {
       stopped = true;
-      clearInterval(timer);
+      if (timer) clearTimeout(timer);
       await inFlight;
     },
   };

@@ -6,7 +6,11 @@ import path from "node:path";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createReadOnlyMediaClient, type AuthorizedMedia } from "../src/r2/client.js";
+import {
+  createReadOnlyMediaClient,
+  type PersistedVerifiedMedia,
+  type VerifiedMediaRepository,
+} from "../src/r2/client.js";
 import type { JobRepository } from "../src/db/jobs.js";
 import { createRegistry, TerminalWorkerError } from "../src/runtime/dispatcher.js";
 import { createWorkerRunner } from "../src/runtime/runner.js";
@@ -108,54 +112,59 @@ describe("temporary workdirs", () => {
 
 describe("read-only R2 media", () => {
   type SendGetObject = (command: GetObjectCommand) => Promise<{ Body?: unknown; ContentLength?: number }>;
-  const media = (override: Partial<AuthorizedMedia> = {}): AuthorizedMedia => ({
-    ownerId: "owner-1",
-    postId: "post-1",
+  const persistedMedia = (override: Partial<PersistedVerifiedMedia> = {}): PersistedVerifiedMedia => ({
+    id: "media-1",
+    position: 0,
     objectKey: "originals/owner-1/post-1/image.jpg",
     byteSize: 4,
     mimeType: "image/jpeg",
-    identityState: "VERIFIED",
+    versionTag: "version-1",
     ...override,
   });
 
   it.each([
-    ["owner mismatch", { ownerId: "owner-2" }],
-    ["post mismatch", { postId: "post-2" }],
-    ["unverified", { identityState: "REPAIRABLE" as AuthorizedMedia["identityState"] }],
-    ["prefix mismatch", { objectKey: "private/image.jpg" }],
-    ["key traversal", { objectKey: "originals/../private/image.jpg" }],
-    ["declared oversize", { byteSize: 9 }],
-  ])("rejects %s before requesting R2", async (_name, override) => {
+    ["missing media", null],
+    ["prefix mismatch", persistedMedia({ objectKey: "private/image.jpg" })],
+    ["key traversal", persistedMedia({ objectKey: "originals/../private/image.jpg" })],
+    ["declared oversize", persistedMedia({ byteSize: 9 })],
+  ])("rejects %s resolved by PostgreSQL before requesting R2", async (_name, resolved) => {
     const send = vi.fn<SendGetObject>();
-    const client = mediaClient(send, 8);
+    const scope = mediaClient(send, 8, repository(resolved));
     const workdir = path.join(sandbox, "job");
     await mkdir(workdir);
 
-    await expect(client.downloadToWorkdir(media(override), workdir, new AbortController().signal)).rejects.toThrow(/WORKER_R2_/);
+    await expect(scope.client.downloadToWorkdir("handler-controlled-id", workdir, new AbortController().signal)).rejects.toThrow(/WORKER_R2_/);
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("streams only GetObject into a fixed contained file", async () => {
+  it("exposes safe references and uses only the canonical key resolved by PostgreSQL", async () => {
     const send = vi.fn<SendGetObject>(async () => ({ Body: Readable.from([Buffer.from("data")]), ContentLength: 4 }));
-    const client = mediaClient(send, 8);
+    const mediaRepository = repository(persistedMedia());
+    const scope = mediaClient(send, 8, mediaRepository);
     const workdir = path.join(sandbox, "job");
     await mkdir(workdir);
 
-    const output = await client.downloadToWorkdir(media(), workdir, new AbortController().signal);
+    await expect(scope.client.listVerified()).resolves.toEqual([
+      { id: "media-1", position: 0, mimeType: "image/jpeg", byteSize: 4 },
+    ]);
+    const output = await scope.client.downloadToWorkdir("originals/handler-forged.jpg", workdir, new AbortController().signal);
 
-    expect(send.mock.calls[0]?.[0]).toBeInstanceOf(GetObjectCommand);
+    const command = send.mock.calls[0]?.[0];
+    expect(command).toBeInstanceOf(GetObjectCommand);
+    expect(command?.input).toEqual({ Bucket: "media", Key: "originals/owner-1/post-1/image.jpg" });
     expect(path.dirname(output)).toBe(path.resolve(workdir));
     await expect(readFile(output, "utf8")).resolves.toBe("data");
-    expect(Object.keys(client).sort()).toEqual(["close", "downloadToWorkdir"]);
+    expect(Object.keys(scope.client).sort()).toEqual(["downloadToWorkdir", "listVerified"]);
+    expect(mediaRepository.findVerified).toHaveBeenCalledWith("originals/handler-forged.jpg");
   });
 
   it("aborts oversized streams and removes partial output", async () => {
     const send = vi.fn<SendGetObject>(async () => ({ Body: Readable.from([Buffer.from("1234"), Buffer.from("56789")]) }));
-    const client = mediaClient(send, 8);
+    const scope = mediaClient(send, 8, repository(persistedMedia()));
     const workdir = path.join(sandbox, "job");
     await mkdir(workdir);
 
-    await expect(client.downloadToWorkdir(media(), workdir, new AbortController().signal)).rejects.toThrow("WORKER_R2_TOO_LARGE");
+    await expect(scope.client.downloadToWorkdir("media-1", workdir, new AbortController().signal)).rejects.toThrow("WORKER_R2_TOO_LARGE");
     await expect(readdir(workdir)).resolves.toEqual([]);
   });
 });
@@ -163,6 +172,7 @@ describe("read-only R2 media", () => {
 function mediaClient(
   send: (command: GetObjectCommand) => Promise<{ Body?: unknown; ContentLength?: number }>,
   maxBytes: number,
+  mediaRepository: VerifiedMediaRepository,
 ) {
   return createReadOnlyMediaClient({
     accountId: "account-1",
@@ -170,9 +180,20 @@ function mediaClient(
     accessKeyId: "access",
     secretAccessKey: "secret",
     keyPrefix: "originals",
-    ownerId: "owner-1",
-    postId: "post-1",
     maxBytes,
+    mediaRepository,
     s3: { send },
   });
+}
+
+function repository(resolved: PersistedVerifiedMedia | null): VerifiedMediaRepository {
+  return {
+    listVerified: vi.fn(async () => resolved ? [{
+      id: resolved.id,
+      position: resolved.position,
+      mimeType: resolved.mimeType,
+      byteSize: resolved.byteSize,
+    }] : []),
+    findVerified: vi.fn(async () => resolved),
+  };
 }

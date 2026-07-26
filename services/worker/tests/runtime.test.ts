@@ -76,6 +76,34 @@ describe("worker runner", () => {
     await heartbeat.stop();
   });
 
+  it("never overlaps slow heartbeats and stop waits for the active renewal", async () => {
+    vi.useFakeTimers();
+    const repository = fakeRepository();
+    const first = deferred<boolean>();
+    repository.heartbeat.mockImplementationOnce(() => first.promise);
+    const heartbeat = startHeartbeat({
+      repository,
+      job: job(),
+      intervalMs: 100,
+      leaseDurationMs: 900,
+      onLeaseLost: vi.fn(),
+      logger: context().logger,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(repository.heartbeat).toHaveBeenCalledTimes(1);
+
+    let stopped = false;
+    const stop = heartbeat.stop().then(() => { stopped = true; });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    first.resolve(true);
+    await stop;
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(repository.heartbeat).toHaveBeenCalledTimes(1);
+  });
+
   it("does not claim when production has no registered handler", async () => {
     const repository = fakeRepository();
     const runner = createWorkerRunner(baseRunnerInput(repository, createProductionRegistry()));
@@ -119,11 +147,21 @@ describe("worker runner", () => {
     repository.claimOne.mockResolvedValue(job());
     const close = vi.fn(async () => undefined);
     const createClients = vi.fn(async (claimed: ClaimedJob) => ({
-      clients: { mediaScope: `${claimed.ownerId}:${claimed.postId}` },
+      clients: { media: {
+        listVerified: vi.fn(async () => [{
+          id: `${claimed.ownerId}:${claimed.postId}`,
+          position: 0,
+          mimeType: null,
+          byteSize: null,
+        }]),
+        downloadToWorkdir: vi.fn(async () => "C:/tmp/job/media"),
+      } },
       close,
     }));
     const run = vi.fn<WorkerHandler<{ sourceTheme: string }>["run"]>(async ({ clients }) => {
-      expect(clients).toEqual({ mediaScope: "owner-1:post-1" });
+      await expect(clients.media?.listVerified()).resolves.toEqual([
+        { id: "owner-1:post-1", position: 0, mimeType: null, byteSize: null },
+      ]);
       return { result: { ok: true } };
     });
     const runner = createWorkerRunner({
@@ -196,15 +234,139 @@ describe("worker runner", () => {
     expect(repository.claimOne).not.toHaveBeenCalled();
   });
 
-  it("aborts immediately and reports a bounded shutdown timeout", async () => {
+  it("allows the active handler to succeed during the shutdown grace period", async () => {
     vi.useFakeTimers();
+    const repository = fakeRepository();
+    repository.claimOne.mockResolvedValue(job());
+    const release = deferred<void>();
+    let handlerSignal: AbortSignal | undefined;
+    const run = vi.fn<WorkerHandler<{ sourceTheme: string }>['run']>(async ({ signal }) => {
+      handlerSignal = signal;
+      await release.promise;
+      return { result: { ok: true } };
+    });
     const shutdown = createShutdownController({ timeoutMs: 100 });
-    void shutdown.track(new Promise<void>(() => undefined));
+    const runner = createWorkerRunner({
+      ...baseRunnerInput(repository, createRegistry([handler(run)])),
+      shutdown,
+    });
+    const running = runner.runOnce();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+
+    const stopping = shutdown.stop();
+    expect(shutdown.isStopping()).toBe(true);
+    expect(handlerSignal?.aborted).toBe(false);
+    release.resolve();
+
+    await expect(running).resolves.toBe("succeeded");
+    await expect(stopping).resolves.toBe(true);
+    expect(repository.succeed).toHaveBeenCalledOnce();
+    expect(repository.retry).not.toHaveBeenCalled();
+    expect(repository.fail).not.toHaveBeenCalled();
+  });
+
+  it("continues heartbeat renewal while an active handler is inside shutdown grace", async () => {
+    vi.useFakeTimers();
+    const repository = fakeRepository();
+    repository.claimOne.mockResolvedValue(job());
+    const release = deferred<void>();
+    const run = vi.fn<WorkerHandler<{ sourceTheme: string }>['run']>(async ({ signal }) => {
+      await Promise.race([
+        release.promise,
+        new Promise<never>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+      ]);
+      return { result: { ok: true } };
+    });
+    const shutdown = createShutdownController({ timeoutMs: 500 });
+    const runner = createWorkerRunner({
+      ...baseRunnerInput(repository, createRegistry([handler(run)])),
+      heartbeatIntervalMs: 100,
+      shutdown,
+    });
+    const running = runner.runOnce();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+
+    const stopping = shutdown.stop();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(repository.heartbeat).toHaveBeenCalledOnce();
+    expect(shutdown.signal.aborted).toBe(false);
+    release.resolve();
+
+    await expect(running).resolves.toBe("succeeded");
+    await expect(stopping).resolves.toBe(true);
+  });
+
+  it("aborts only at the shutdown deadline and schedules a non-terminal stopping retry", async () => {
+    vi.useFakeTimers();
+    const repository = fakeRepository();
+    repository.claimOne.mockResolvedValue(job());
+    const run = vi.fn<WorkerHandler<{ sourceTheme: string }>['run']>(async ({ signal }) => {
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+      return { result: { ok: true } };
+    });
+    const shutdown = createShutdownController({ timeoutMs: 100 });
+    const runner = createWorkerRunner({
+      ...baseRunnerInput(repository, createRegistry([handler(run)])),
+      shutdown,
+    });
+    const running = runner.runOnce();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
 
     const stopped = shutdown.stop();
+    expect(shutdown.signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(99);
+    expect(shutdown.signal.aborted).toBe(false);
+    expect(repository.heartbeat).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
     expect(shutdown.signal.aborted).toBe(true);
+
+    await expect(running).resolves.toBe("retried");
     await vi.advanceTimersByTimeAsync(100);
     await expect(stopped).resolves.toBe(false);
+    expect(repository.retry).toHaveBeenCalledWith(expect.objectContaining({ errorCode: "WORKER_STOPPING" }));
+    expect(repository.fail).not.toHaveBeenCalled();
+  });
+
+  it("leaves the lease to expire when the stopping retry cannot reach PostgreSQL", async () => {
+    vi.useFakeTimers();
+    const repository = fakeRepository();
+    repository.claimOne.mockResolvedValue(job());
+    repository.retry.mockRejectedValue(new Error("database unavailable"));
+    const run = vi.fn<WorkerHandler<{ sourceTheme: string }>['run']>(async ({ signal }) => {
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+      return { result: { ok: true } };
+    });
+    const shutdown = createShutdownController({ timeoutMs: 100 });
+    const runner = createWorkerRunner({
+      ...baseRunnerInput(repository, createRegistry([handler(run)])),
+      shutdown,
+    });
+    const running = runner.runOnce();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+
+    const stopped = shutdown.stop();
+    await vi.advanceTimersByTimeAsync(100);
+
+    await expect(running).resolves.toBe("lease_lost");
+    await expect(stopped).resolves.toBe(false);
+    expect(repository.retry).toHaveBeenCalledWith(expect.objectContaining({ errorCode: "WORKER_STOPPING" }));
+    expect(repository.fail).not.toHaveBeenCalled();
+  });
+
+  it("keeps shutdown stop idempotent", async () => {
+    const shutdown = createShutdownController({ timeoutMs: 100 });
+
+    const first = shutdown.stop();
+    const second = shutdown.stop();
+
+    expect(second).toBe(first);
+    await expect(first).resolves.toBe(true);
   });
 });
 
@@ -247,4 +409,14 @@ function baseRunnerInput(repository: ReturnType<typeof fakeRepository>, registry
     logger,
     now: () => new Date("2026-07-26T10:00:00.000Z"),
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }

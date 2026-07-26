@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { parseWorkerConfig } from "./config.js";
 import { createDatabasePool } from "./db/client.js";
 import { createJobRepository } from "./db/jobs.js";
+import { createVerifiedMediaRepository } from "./db/media.js";
 import { createHealthServer } from "./health/server.js";
 import { createLogger } from "./logger.js";
 import { createReadOnlyMediaClient } from "./r2/client.js";
@@ -38,11 +39,13 @@ export async function startWorker(env: NodeJS.ProcessEnv = process.env): Promise
         accessKeyId: config.r2.accessKeyId,
         secretAccessKey: config.r2.secretAccessKey,
         keyPrefix: config.r2.keyPrefix,
-        ownerId: job.ownerId,
-        postId: job.postId,
         maxBytes: config.r2.maxBytes,
+        mediaRepository: createVerifiedMediaRepository(pool, {
+          ownerId: job.ownerId,
+          postId: job.postId,
+        }),
       });
-      return { clients: { media }, close: () => media.close() };
+      return { clients: { media: media.client }, close: () => media.close() };
     },
     logger,
   });
@@ -72,9 +75,10 @@ export async function startWorker(env: NodeJS.ProcessEnv = process.env): Promise
   const stop = () => {
     if (stopped) return stopped;
     stopped = (async () => {
-      const graceful = await shutdown.stop();
+      const shutdownResult = shutdown.stop();
       if (pollTimer) clearTimeout(pollTimer);
       if (janitorTimer) clearInterval(janitorTimer);
+      const graceful = await shutdownResult;
       await health.close();
       await repository.close();
       logger.info("worker_stopped", { graceful });

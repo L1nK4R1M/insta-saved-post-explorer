@@ -1,7 +1,8 @@
 import type { ClaimedJob } from "../db/jobs.js";
 import type { WorkerLogger } from "../logger.js";
+import type { JobMediaClient } from "../r2/client.js";
 
-export type AuthorizedClients = Record<string, unknown>;
+export type AuthorizedClients = { media?: JobMediaClient };
 
 export type WorkerJobContext<TPayload> = {
   jobId: string;

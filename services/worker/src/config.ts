@@ -50,8 +50,9 @@ const environmentSchema = z
     tempRoot: z
       .string()
       .min(1)
-      .transform((value) => path.resolve(value))
-      .refine((value) => path.isAbsolute(value) && value !== path.parse(value).root),
+      .refine((value) => path.isAbsolute(value))
+      .transform((value) => path.normalize(value))
+      .refine((value) => value !== path.parse(value).root),
     logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
     healthHost: z
       .string()

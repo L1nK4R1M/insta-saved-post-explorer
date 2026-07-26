@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { Readable } from "node:stream";
 
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Pool } from "pg";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createJobRepository } from "../src/db/jobs.js";
+import { createVerifiedMediaRepository } from "../src/db/media.js";
+import { createReadOnlyMediaClient } from "../src/r2/client.js";
 import { retryDelayMs } from "../src/runtime/retry.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL?.trim() ?? "";
@@ -120,6 +127,136 @@ describeWithDatabase("PostgreSQL job repository", () => {
     );
     expect(row.rows[0]).toEqual({ status: "FAILED", error_code: "ATTEMPTS_EXHAUSTED" });
   });
+
+  it("terminalizes exhausted pending jobs at row or worker limits without crossing owner or terminal boundaries", async () => {
+    const now = new Date("2026-07-26T10:00:00.000Z");
+    await seedJob(OWNER_A, "pending-row-limit", "post-worker-a", { attemptCount: 2, maxAttempts: 2 });
+    await seedJob(OWNER_A, "pending-worker-limit", "post-worker-a", {
+      attemptCount: 2,
+      maxAttempts: 5,
+      inputHash: randomUUID(),
+      nextAttemptAt: new Date(now.getTime() + 60_000),
+    });
+    await seedJob(OWNER_A, "pending-under-limit", "post-worker-a", {
+      attemptCount: 1,
+      maxAttempts: 3,
+      inputHash: randomUUID(),
+      priority: 10,
+    });
+    await seedJob(OWNER_B, "pending-other-owner", "post-worker-b", {
+      attemptCount: 2,
+      maxAttempts: 2,
+    });
+    await seedJob(OWNER_A, "terminal-existing", "post-worker-a", {
+      status: "FAILED",
+      stage: "COMPLETE",
+      attemptCount: 2,
+      maxAttempts: 2,
+      inputHash: randomUUID(),
+    });
+    const repository = createJobRepository(pool, { ownerId: OWNER_A });
+
+    await expect(
+      repository.claimOne({ workerId: "worker-1", leaseDurationMs: 90_000, maxAttempts: 2, now }),
+    ).resolves.toMatchObject({ id: "pending-under-limit", attempt: 2 });
+
+    const rows = await pool.query<{
+      id: string;
+      owner_id: string;
+      status: string;
+      stage: string;
+      error_code: string | null;
+      completed_at: Date | null;
+      lease_owner: string | null;
+      lease_expires_at: Date | null;
+      heartbeat_at: Date | null;
+      next_attempt_at: Date | null;
+    }>(
+      `SELECT id, owner_id, status, stage, error_code, completed_at,
+              lease_owner, lease_expires_at, heartbeat_at, next_attempt_at
+       FROM place_analysis_jobs
+       WHERE id = ANY($1::text[])
+       ORDER BY id`,
+      [["pending-row-limit", "pending-worker-limit", "pending-under-limit", "pending-other-owner", "terminal-existing"]],
+    );
+    const byId = new Map(rows.rows.map((row) => [row.id, row]));
+
+    for (const id of ["pending-row-limit", "pending-worker-limit"]) {
+      expect(byId.get(id)).toMatchObject({
+        owner_id: OWNER_A,
+        status: "FAILED",
+        stage: "COMPLETE",
+        error_code: "ATTEMPTS_EXHAUSTED",
+        lease_owner: null,
+        lease_expires_at: null,
+        heartbeat_at: null,
+        next_attempt_at: null,
+      });
+      expect(byId.get(id)?.completed_at).toEqual(now);
+    }
+    expect(byId.get("pending-under-limit")?.status).toBe("PROCESSING");
+    expect(byId.get("pending-other-owner")?.status).toBe("PENDING");
+    expect(byId.get("terminal-existing")).toMatchObject({ status: "FAILED", error_code: null });
+  });
+
+  it("authorizes GetObject only from the persisted owner-post media identity", async () => {
+    await seedPost(OWNER_A, "post-worker-a-other");
+    await seedMedia("media-verified", OWNER_A, "post-worker-a", "VERIFIED", "originals/persisted/canonical.jpg", 0);
+    await seedMedia("media-other-post", OWNER_A, "post-worker-a-other", "VERIFIED", "originals/persisted/other-post.jpg", 0);
+    await seedMedia("media-other-owner", OWNER_B, "post-worker-b", "VERIFIED", "originals/persisted/other-owner.jpg", 0);
+    await seedMedia("media-unverified", OWNER_A, "post-worker-a", "UNVERIFIED", null, 1);
+    await seedMedia("media-repairable", OWNER_A, "post-worker-a", "REPAIRABLE", "originals/persisted/repairable.jpg", 2);
+    const send = vi.fn(async (command: GetObjectCommand) => {
+      expect(command).toBeInstanceOf(GetObjectCommand);
+      return {
+        Body: Readable.from([Buffer.from("persisted-media")]),
+        ContentLength: 15,
+      };
+    });
+    const scope = createReadOnlyMediaClient({
+      accountId: "account-1",
+      bucket: "media-bucket",
+      accessKeyId: "access",
+      secretAccessKey: "secret",
+      keyPrefix: "originals",
+      maxBytes: 1_024,
+      mediaRepository: createVerifiedMediaRepository(pool, { ownerId: OWNER_A, postId: "post-worker-a" }),
+      s3: { send },
+    });
+
+    await expect(scope.client.listVerified()).resolves.toEqual([
+      { id: "media-verified", position: 0, mimeType: "image/jpeg", byteSize: 15 },
+    ]);
+    for (const mediaId of [
+      "media-other-post",
+      "media-other-owner",
+      "media-unverified",
+      "media-repairable",
+      "media-missing",
+    ]) {
+      await expect(
+        scope.client.downloadToWorkdir(mediaId, "unused-before-authorization", new AbortController().signal),
+      ).rejects.toMatchObject({ code: "WORKER_R2_NOT_AUTHORIZED" });
+    }
+    expect(send).not.toHaveBeenCalled();
+
+    const workdir = await mkdtemp(path.join(os.tmpdir(), "ipe-worker-media-pg-"));
+    try {
+      const output = await scope.client.downloadToWorkdir(
+        "media-verified",
+        workdir,
+        new AbortController().signal,
+      );
+      await expect(readFile(output, "utf8")).resolves.toBe("persisted-media");
+      expect(send.mock.calls[0]?.[0].input).toEqual({
+        Bucket: "media-bucket",
+        Key: "originals/persisted/canonical.jpg",
+      });
+    } finally {
+      await scope.close();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("retryDelayMs", () => {
@@ -146,8 +283,26 @@ async function seedPost(ownerId: string, id: string): Promise<void> {
   );
 }
 
+async function seedMedia(
+  id: string,
+  ownerId: string,
+  postId: string,
+  identityState: "UNVERIFIED" | "REPAIRABLE" | "VERIFIED",
+  objectKey: string | null,
+  position: number,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO post_media (
+       id, post_id, type, url, position, owner_id, object_key, mime_type,
+       byte_size, version_tag, identity_state, checked_at
+     ) VALUES ($1, $2, 'IMAGE', $3, $4, $5, $6, 'image/jpeg', $7, 'version-1', $8, now())`,
+    [id, postId, `https://example.test/${id}.jpg`, position, ownerId, objectKey, objectKey ? 15 : null, identityState],
+  );
+}
+
 type SeedJobOptions = {
-  status?: "PENDING" | "PROCESSING";
+  status?: "PENDING" | "PROCESSING" | "FAILED";
+  stage?: "QUEUED" | "COMPLETE";
   leaseOwner?: string;
   leaseExpiresAt?: Date;
   nextAttemptAt?: Date;
@@ -163,12 +318,13 @@ async function seedJob(ownerId: string, id: string, postId: string, options: See
        id, owner_id, post_id, source_theme, depth, status, stage, priority,
        analysis_version, input_hash, attempt_count, max_attempts, lease_owner,
        lease_expires_at, next_attempt_at, created_at, updated_at
-     ) VALUES ($1, $2, $3, 'travel', 'METADATA_ONLY', $4, 'QUEUED', $5, 'phase-e', $6, $7, $8, $9, $10, $11, now(), now())`,
+     ) VALUES ($1, $2, $3, 'travel', 'METADATA_ONLY', $4, $5, $6, 'phase-e', $7, $8, $9, $10, $11, $12, now(), now())`,
     [
       id,
       ownerId,
       postId,
       options.status ?? "PENDING",
+      options.stage ?? "QUEUED",
       options.priority ?? 0,
       options.inputHash ?? id,
       options.attemptCount ?? 0,

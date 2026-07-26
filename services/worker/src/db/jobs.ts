@@ -1,4 +1,6 @@
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
+
+import { withTransaction } from "./client.js";
 
 export type ClaimedJob = {
   id: string;
@@ -83,7 +85,7 @@ export function createJobRepository(pool: Pool, options: { ownerId: string }): J
 
   return {
     async claimOne(input) {
-      return inTransaction(pool, async (client) => {
+      return withTransaction(pool, async (client) => {
         const now = input.now ?? new Date();
         await client.query(
           `UPDATE place_analysis_jobs
@@ -91,10 +93,13 @@ export function createJobRepository(pool: Pool, options: { ownerId: string }): J
                error_code = 'ATTEMPTS_EXHAUSTED',
                error_message = 'Worker attempts exhausted', completed_at = $2,
                lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
-               updated_at = $2
-           WHERE owner_id = $1 AND status = 'PROCESSING'
-             AND lease_expires_at < $2
-             AND attempt_count >= LEAST(max_attempts, $3)`,
+               next_attempt_at = NULL, updated_at = $2
+           WHERE owner_id = $1
+             AND attempt_count >= LEAST(max_attempts, $3)
+             AND (
+               status = 'PENDING'
+               OR (status = 'PROCESSING' AND lease_expires_at < $2)
+             )`,
           [ownerId, now, input.maxAttempts],
         );
         const result = await client.query<ClaimRow>(CLAIM_SQL, [
@@ -212,21 +217,6 @@ async function withAbort<T>(operation: Promise<T>, signal?: AbortSignal): Promis
       },
     );
   });
-}
-
-async function inTransaction<T>(pool: Pool, operation: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const result = await operation(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
 }
 
 function safeFailure(input: SafeFailure): SafeFailure {

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readdir } from "node:fs/promises";
 
 import { parseWorkerConfig } from "../src/config.js";
-import { createDatabasePool } from "../src/db/client.js";
+import { createDatabasePool, withTransaction } from "../src/db/client.js";
 import { createJobRepository } from "../src/db/jobs.js";
 import { createSmokeRegistry } from "../src/handlers/noop-handler.js";
 import { createLogger } from "../src/logger.js";
@@ -24,20 +24,20 @@ async function main(): Promise<void> {
   const workdirs = createTempWorkdirManager({ root: config.tempRoot, maxAgeMs: config.janitorMaxAgeMs });
 
   try {
-    await pool.query("BEGIN");
-    await pool.query(
-      `INSERT INTO posts (id, owner_id, post_url, thumbnail_url, author_username, author_sort_key, caption, search_text, content_type, metadata, created_at, updated_at)
-       VALUES ($1, $2, $3, 'https://example.test/smoke.jpg', 'smoke', 'smoke', '', 'smoke', 'OTHER', '{}', now(), now())`,
-      [postId, config.ownerId, `https://instagram.test/p/${postId}`],
-    );
-    await pool.query(
-      `INSERT INTO place_analysis_jobs (
-         id, owner_id, post_id, source_theme, depth, status, stage, priority,
-         analysis_version, input_hash, attempt_count, max_attempts, created_at, updated_at
-       ) VALUES ($1, $2, $3, 'smoke', 'METADATA_ONLY', 'PENDING', 'QUEUED', 0, 'phase-e-smoke', $4, 0, 1, now(), now())`,
-      [jobId, config.ownerId, postId, randomUUID()],
-    );
-    await pool.query("COMMIT");
+    await withTransaction(pool, async (client) => {
+      await client.query(
+        `INSERT INTO posts (id, owner_id, post_url, thumbnail_url, author_username, author_sort_key, caption, search_text, content_type, metadata, created_at, updated_at)
+         VALUES ($1, $2, $3, 'https://example.test/smoke.jpg', 'smoke', 'smoke', '', 'smoke', 'OTHER', '{}', now(), now())`,
+        [postId, config.ownerId, `https://instagram.test/p/${postId}`],
+      );
+      await client.query(
+        `INSERT INTO place_analysis_jobs (
+           id, owner_id, post_id, source_theme, depth, status, stage, priority,
+           analysis_version, input_hash, attempt_count, max_attempts, created_at, updated_at
+         ) VALUES ($1, $2, $3, 'smoke', 'METADATA_ONLY', 'PENDING', 'QUEUED', 0, 'phase-e-smoke', $4, 0, 1, now(), now())`,
+        [jobId, config.ownerId, postId, randomUUID()],
+      );
+    });
 
     const runner = createWorkerRunner({
       repository,

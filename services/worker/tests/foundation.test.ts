@@ -51,6 +51,9 @@ describe("parseWorkerConfig", () => {
     ["owner", { WORKER_OWNER_ID: "" }],
     ["poll interval", { WORKER_POLL_INTERVAL_MS: "99" }],
     ["attempt count", { WORKER_MAX_ATTEMPTS: "21" }],
+    ["empty temporary root", { WORKER_TEMP_ROOT: "" }],
+    ["dot-relative temporary root", { WORKER_TEMP_ROOT: "./tmp" }],
+    ["relative temporary root", { WORKER_TEMP_ROOT: "tmp/worker" }],
     ["temporary root", { WORKER_TEMP_ROOT: path.parse(process.cwd()).root }],
     ["heartbeat relation", { WORKER_HEARTBEAT_INTERVAL_MS: "30001" }],
     ["health host", { WORKER_HEALTH_HOST: "0.0.0.0" }],
@@ -64,6 +67,49 @@ describe("parseWorkerConfig", () => {
     } catch (error) {
       if (invalidValue) expect(String(error)).not.toContain(invalidValue);
     }
+  });
+
+  it("runs a transaction on one checked-out client and always releases it", async () => {
+    const dbModule = await import("../src/db/client.js");
+    expect(dbModule).toHaveProperty("withTransaction");
+    const withTransaction = (dbModule as unknown as {
+      withTransaction<T>(pool: { connect(): Promise<unknown> }, operation: (client: unknown) => Promise<T>): Promise<T>;
+    }).withTransaction;
+    const events: string[] = [];
+    const client = {
+      query: vi.fn(async (sql: string) => { events.push(sql); }),
+      release: vi.fn(() => { events.push("RELEASE"); }),
+    };
+    const pool = { connect: vi.fn(async () => client) };
+
+    await expect(withTransaction(pool, async (connected) => {
+      expect(connected).toBe(client);
+      events.push("WRITE");
+      return "committed";
+    })).resolves.toBe("committed");
+
+    expect(events).toEqual(["BEGIN", "WRITE", "COMMIT", "RELEASE"]);
+  });
+
+  it("rolls back the checked-out client before releasing it when a transaction fails", async () => {
+    const dbModule = await import("../src/db/client.js");
+    expect(dbModule).toHaveProperty("withTransaction");
+    const withTransaction = (dbModule as unknown as {
+      withTransaction<T>(pool: { connect(): Promise<unknown> }, operation: (client: unknown) => Promise<T>): Promise<T>;
+    }).withTransaction;
+    const events: string[] = [];
+    const client = {
+      query: vi.fn(async (sql: string) => { events.push(sql); }),
+      release: vi.fn(() => { events.push("RELEASE"); }),
+    };
+    const pool = { connect: vi.fn(async () => client) };
+
+    await expect(withTransaction(pool, async () => {
+      events.push("WRITE");
+      throw new Error("fixture write failed");
+    })).rejects.toThrow("fixture write failed");
+
+    expect(events).toEqual(["BEGIN", "WRITE", "ROLLBACK", "RELEASE"]);
   });
 });
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -6,24 +7,30 @@ import { pipeline } from "node:stream/promises";
 
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
+import type {
+  PersistedVerifiedMedia,
+  VerifiedMediaReference,
+  VerifiedMediaRepository,
+} from "../db/media.js";
 import { RetryableWorkerError, TerminalWorkerError } from "../runtime/dispatcher.js";
 
-export type AuthorizedMedia = {
-  ownerId: string;
-  postId: string;
-  objectKey: string;
-  byteSize: number;
-  mimeType: string | null;
-  identityState: "VERIFIED";
-};
+export type { PersistedVerifiedMedia, VerifiedMediaReference, VerifiedMediaRepository } from "../db/media.js";
 
-export interface ReadOnlyMediaClient {
-  downloadToWorkdir(media: AuthorizedMedia, workdir: string, signal: AbortSignal): Promise<string>;
-  close(): Promise<void>;
+export interface JobMediaClient {
+  listVerified(): Promise<VerifiedMediaReference[]>;
+  downloadToWorkdir(mediaId: string, workdir: string, signal: AbortSignal): Promise<string>;
 }
 
+export type JobMediaClientScope = {
+  client: JobMediaClient;
+  close(): Promise<void>;
+};
+
 type GetObjectOutput = { Body?: unknown; ContentLength?: number };
-type GetObjectSender = { send(command: GetObjectCommand): Promise<GetObjectOutput>; destroy?: () => void };
+type GetObjectSender = {
+  send(command: GetObjectCommand, options?: { abortSignal?: AbortSignal }): Promise<GetObjectOutput>;
+  destroy?: () => void;
+};
 
 export function createReadOnlyMediaClient(options: {
   accountId: string;
@@ -31,11 +38,10 @@ export function createReadOnlyMediaClient(options: {
   accessKeyId: string;
   secretAccessKey: string;
   keyPrefix: string;
-  ownerId: string;
-  postId: string;
   maxBytes: number;
+  mediaRepository: VerifiedMediaRepository;
   s3?: GetObjectSender;
-}): ReadOnlyMediaClient {
+}): JobMediaClientScope {
   const prefix = options.keyPrefix.replace(/^\/+|\/+$/g, "");
   const ownedClient = options.s3
     ? null
@@ -49,15 +55,33 @@ export function createReadOnlyMediaClient(options: {
     destroy: () => ownedClient!.destroy(),
   };
 
-  return {
-    async downloadToWorkdir(media, workdir, signal) {
-      validateMedia(media, options.ownerId, options.postId, prefix, options.maxBytes);
+  const client: JobMediaClient = {
+    async listVerified() {
+      try {
+        return await options.mediaRepository.listVerified();
+      } catch {
+        throw new RetryableWorkerError("WORKER_DB_UNAVAILABLE", "WORKER_DB_UNAVAILABLE");
+      }
+    },
+
+    async downloadToWorkdir(mediaId, workdir, signal) {
+      let media: PersistedVerifiedMedia | null;
+      try {
+        media = await options.mediaRepository.findVerified(mediaId);
+      } catch {
+        throw new RetryableWorkerError("WORKER_DB_UNAVAILABLE", "WORKER_DB_UNAVAILABLE");
+      }
+      if (!media) throw new TerminalWorkerError("WORKER_R2_NOT_AUTHORIZED", "WORKER_R2_NOT_AUTHORIZED");
+      validateMedia(media, prefix, options.maxBytes);
       const resolvedWorkdir = path.resolve(workdir);
-      const output = path.resolve(resolvedWorkdir, "media-input");
+      const output = path.resolve(resolvedWorkdir, `media-${randomUUID()}`);
       if (path.dirname(output) !== resolvedWorkdir) throw new TerminalWorkerError("WORKER_WORKDIR_UNSAFE", "WORKER_WORKDIR_UNSAFE");
 
       try {
-        const response = await sender.send(new GetObjectCommand({ Bucket: options.bucket, Key: media.objectKey }));
+        const response = await sender.send(
+          new GetObjectCommand({ Bucket: options.bucket, Key: media.objectKey }),
+          { abortSignal: signal },
+        );
         if (typeof response.ContentLength === "number" && response.ContentLength > options.maxBytes) {
           throw new TerminalWorkerError("WORKER_R2_TOO_LARGE", "WORKER_R2_TOO_LARGE");
         }
@@ -81,25 +105,27 @@ export function createReadOnlyMediaClient(options: {
         throw new RetryableWorkerError("WORKER_R2_UNAVAILABLE", "WORKER_R2_UNAVAILABLE");
       }
     },
+  };
 
+  return {
+    client,
     async close() {
       sender.destroy?.();
     },
   };
 }
 
-function validateMedia(media: AuthorizedMedia, ownerId: string, postId: string, prefix: string, maxBytes: number): void {
+function validateMedia(media: PersistedVerifiedMedia, prefix: string, maxBytes: number): void {
   const segments = media.objectKey.split("/");
   const authorized =
-    media.ownerId === ownerId &&
-    media.postId === postId &&
-    media.identityState === "VERIFIED" &&
     media.objectKey.startsWith(`${prefix}/`) &&
     !media.objectKey.includes("\\") &&
     !segments.includes("..") &&
-    media.byteSize >= 0;
+    (media.byteSize === null || media.byteSize >= 0);
   if (!authorized) throw new TerminalWorkerError("WORKER_R2_NOT_AUTHORIZED", "WORKER_R2_NOT_AUTHORIZED");
-  if (media.byteSize > maxBytes) throw new TerminalWorkerError("WORKER_R2_TOO_LARGE", "WORKER_R2_TOO_LARGE");
+  if (media.byteSize !== null && media.byteSize > maxBytes) {
+    throw new TerminalWorkerError("WORKER_R2_TOO_LARGE", "WORKER_R2_TOO_LARGE");
+  }
 }
 
 function toReadable(body: unknown): Readable {

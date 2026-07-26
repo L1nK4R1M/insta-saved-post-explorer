@@ -81,6 +81,7 @@ export function createWorkerRunner(input: {
       return succeeded ? "succeeded" : "lease_lost";
     } catch (error) {
       if (leaseLost) return "lease_lost";
+      if (input.shutdown.signal.aborted) return finalizeStopping(job);
       return finalizeFailure(job, error);
     } finally {
       try {
@@ -120,6 +121,23 @@ export function createWorkerRunner(input: {
       errorMessage: failure.message,
     });
     return failed ? "failed" : "lease_lost";
+  }
+
+  async function finalizeStopping(job: ClaimedJob): Promise<RunResult> {
+    const timestamp = now();
+    try {
+      const retried = await input.repository.retry({
+        id: job.id,
+        claimedBy: job.claimedBy,
+        now: timestamp,
+        nextAttemptAt: new Date(timestamp.getTime() + retryDelayMs(job.attempt)),
+        errorCode: "WORKER_STOPPING",
+        errorMessage: "Worker stopping",
+      });
+      return retried ? "retried" : "lease_lost";
+    } catch {
+      return "lease_lost";
+    }
   }
 }
 
