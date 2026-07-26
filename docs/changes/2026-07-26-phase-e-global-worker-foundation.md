@@ -1,0 +1,41 @@
+# Phase E global worker foundation
+
+Date: 26 July 2026  
+Branch: `claude/phase-e-global-worker-foundation`  
+Base: `develop@f79320c819e94bfdd3b66539c1178d62a201afbf`
+
+## Delivered locally
+
+- Private worker workspace with typed configuration and redacted JSON logging.
+- Owner-scoped PostgreSQL claim, lease, heartbeat, retry and stale claimant guards
+  on the existing `place_analysis_jobs` queue.
+- Additive timestamps/index and explicit column privileges for the existing
+  `ipe_worker_reader` NOLOGIN role.
+- Empty production handler registry plus an ephemeral-only noop smoke registry.
+- Contained workdirs and GetObject-only VERIFIED-media R2 streaming with
+  owner/post/prefix/size checks and partial-file cleanup.
+- Internal health, graceful signals and a hardened Node 24 container running as
+  `10001:10001` with no published port.
+
+## Evidence before final convergence
+
+| Gate | Result |
+|---|---|
+| Foundation | 8 passed |
+| PostgreSQL leasing/recovery/retry | 8 passed on PostgreSQL 16 `_test` database |
+| Restricted role/media | 6 passed on PostgreSQL 16 `_test` database |
+| Runtime | 9 passed |
+| Filesystem/R2 | 10 passed |
+| Health plus runtime | 14 passed |
+| Worker suite without DB env | 38 passed, 4 skipped |
+| Ephemeral smoke | passed; fixture and workdir removed |
+| Docker build and runtime | passed; `10001:10001`, `{}`, `healthy` |
+
+Final repository totals, VibeSpec review and PR checks are recorded only after
+they run fresh in Task 8.
+
+## Explicit limits
+
+No hosted migration, login/credential provisioning, VPS/Coolify deployment,
+firewall, backup, alerting, real Places handler, OCR, transcription, multimodal
+processing, AI, MCP or Hermes was performed. The PR must not be merged automatically.

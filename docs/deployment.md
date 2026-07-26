@@ -147,6 +147,29 @@ L'état `identity_state` est backfillable de façon idempotente
 passe à `VERIFIED`, un objet absent passe à `REPAIRABLE`, un média sans
 `source_path` reste `UNVERIFIED` — signalé, jamais inventé.
 
+### Fondation worker Phase E
+
+La migration additive `20260726131000_phase_e_worker_queue` ajoute uniquement
+`claimed_at`, `next_attempt_at`, l'index partiel de disponibilité et les grants
+de colonnes nécessaires. Elle ne crée ni table de queue, ni enum, ni rôle de
+connexion. `ipe_worker_reader` reste `NOLOGIN` et reçoit :
+
+- `SELECT` sur les colonnes de queue, post et identité média explicitement
+  listées dans les migrations ;
+- `UPDATE` uniquement sur l'état de queue possédé par le worker ;
+- aucun `INSERT`, `DELETE`, droit de séquence, accès aux URL média ou écriture
+  dans les tables métier.
+
+Avant un futur déploiement autorisé, appliquer la migration dans une branche
+Preview, vérifier les grants par catalogue, créer le login héritant du rôle,
+puis injecter les variables de `services/worker/.env.example`. Le service
+Compose publie zéro port ; health reste interne sur `127.0.0.1:8080`. Le registre
+de production est vide en Phase E et ne revendique aucun job Places réel.
+
+Rollback : arrêter le worker, révoquer le login/credential si nécessaire et
+revenir à la révision applicative précédente. Conserver les colonnes additives ;
+corriger par une nouvelle migration plutôt que modifier une migration appliquée.
+
 ## Import et limite de 4,5 Mo
 
 Vercel impose 4,5 Mo maximum au corps d'une requête **et** d'une réponse de
