@@ -21,13 +21,13 @@ Base: `develop@f79320c819e94bfdd3b66539c1178d62a201afbf`
 
 | Gate | Result |
 |---|---|
-| Foundation | 8 passed |
-| PostgreSQL leasing/recovery/retry | 8 passed on PostgreSQL 16 `_test` database |
+| Foundation | 9 passed |
+| PostgreSQL leasing/recovery/retry | 9 passed on PostgreSQL 16 `_test` database |
 | Restricted role/media | 6 passed on PostgreSQL 16 `_test` database |
-| Runtime | 9 passed |
-| Filesystem/R2 | 10 passed |
-| Health plus runtime | 14 passed |
-| Worker suite without DB env | 38 passed, 4 skipped |
+| Runtime | 13 passed |
+| Filesystem/R2 | 11 passed |
+| Health plus runtime | 18 passed |
+| Worker suite with DB env | 49 passed, 0 skipped |
 | Ephemeral smoke | passed; fixture and workdir removed |
 | Docker build and runtime | passed; `10001:10001`, `{}`, `healthy` |
 

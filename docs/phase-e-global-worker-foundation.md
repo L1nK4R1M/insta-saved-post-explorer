@@ -187,12 +187,12 @@ database through a new direct path or broaden the Phase E worker implicitly.
 
 ## Local implementation evidence — 26 July 2026
 
-- Foundation configuration/logger: 8 tests passed.
-- PostgreSQL 16 leasing suite: 8 tests passed on `ipe_worker_test`.
+- Foundation configuration/logger: 9 tests passed.
+- PostgreSQL 16 leasing suite: 9 tests passed on `ipe_phase_e_fresh_test`.
 - Restricted-role/media suite: 6 tests passed on the same ephemeral database.
-- Runtime heartbeat/lease/shutdown: 9 tests passed.
-- Filesystem and GetObject-only R2: 10 tests passed.
-- Health plus runtime focused run: 14 tests passed.
+- Runtime heartbeat/lease/shutdown: 13 tests passed.
+- Filesystem and GetObject-only R2: 11 tests passed.
+- Health plus runtime focused run: 18 tests passed.
 - Ephemeral smoke: one fixture claimed, completed and removed; no workdir remained.
 - Docker image: built successfully; inspection reported `10001:10001`, health
   `healthy` and published ports `{}`. Compose was stopped afterward.

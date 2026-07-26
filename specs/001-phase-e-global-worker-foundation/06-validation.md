@@ -135,11 +135,11 @@ git diff --check
 
 | Evidence ID | Claim | Planned source | Status |
 |---|---|---|---|
-| EV-001 | Workspace/config/logger contracts | Focused unit output and typecheck | Local pass: 8 tests plus typecheck, 2026-07-26 |
-| EV-002 | Migration, claim, lease, retry and grants | PostgreSQL 16 test output and catalog queries | Local pass: 8 queue + 6 role/media tests on `_test`, 2026-07-26 |
-| EV-003 | Dispatcher/runner/heartbeat/shutdown | Focused runtime test output | Local pass: 9 tests, 2026-07-26 |
-| EV-004 | Cleanup and R2 least privilege | Filesystem/R2 contract tests | Local pass: 10 tests, 2026-07-26 |
-| EV-005 | Health and lifecycle integration | Health/lifecycle test output | Local pass: 14 health/runtime tests, 2026-07-26 |
+| EV-001 | Workspace/config/logger contracts | Focused unit output and typecheck | Local pass: 9 tests plus typecheck, 2026-07-26 |
+| EV-002 | Migration, claim, lease, retry and grants | PostgreSQL 16 test output and catalog queries | Local pass: 9 queue + 6 role/media tests on `_test`, 2026-07-26 |
+| EV-003 | Dispatcher/runner/heartbeat/shutdown | Focused runtime test output | Local pass: 13 tests, 2026-07-26 |
+| EV-004 | Cleanup and R2 least privilege | Filesystem/R2 contract tests | Local pass: 11 tests, 2026-07-26 |
+| EV-005 | Health and lifecycle integration | Health/lifecycle test output | Local pass: 18 health/runtime tests, 2026-07-26 |
 | EV-006 | Docker and smoke gates | Build, Compose, inspect and smoke logs | Local pass: image, Compose, smoke, `10001:10001`, `{}`, healthy, 2026-07-26 |
 | EV-007 | Documentation convergence | Diff and document review | Local pass: documents aligned and diff hygiene clean, 2026-07-26 |
-| EV-008 | Full completion | Quality gates, traceability and two reviews | Pending fresh full gates and reviews |
+| EV-008 | Full completion | Quality gates, traceability and two reviews | Local gates and both reviews pass; PR handoff plus final VibeSpec metadata pending |
