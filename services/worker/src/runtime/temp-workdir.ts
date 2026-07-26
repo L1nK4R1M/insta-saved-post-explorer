@@ -19,7 +19,7 @@ export function createTempWorkdirManager(options: { root: string; maxAgeMs: numb
   };
 
   return {
-    async create(_jobId) {
+    async create() {
       await mkdir(root, { recursive: true, mode: 0o700 });
       const workdir = assertDirectChild(path.join(root, randomUUID()));
       await mkdir(workdir, { mode: 0o700 });

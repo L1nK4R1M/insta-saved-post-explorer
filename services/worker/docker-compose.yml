@@ -26,3 +26,4 @@ services:
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:?required}
       R2_ACCESS_KEY_ID: ${R2_WORKER_ACCESS_KEY_ID:?required}
       R2_SECRET_ACCESS_KEY: ${R2_WORKER_SECRET_ACCESS_KEY:?required}
+      MEDIA_PATH_PREFIX: ${MEDIA_PATH_PREFIX:-originals}

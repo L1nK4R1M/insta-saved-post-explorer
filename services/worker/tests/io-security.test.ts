@@ -7,6 +7,10 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createReadOnlyMediaClient, type AuthorizedMedia } from "../src/r2/client.js";
+import type { JobRepository } from "../src/db/jobs.js";
+import { createRegistry, TerminalWorkerError } from "../src/runtime/dispatcher.js";
+import { createWorkerRunner } from "../src/runtime/runner.js";
+import { createShutdownController } from "../src/runtime/shutdown.js";
 import { createTempWorkdirManager } from "../src/runtime/temp-workdir.js";
 
 let sandbox: string;
@@ -55,6 +59,50 @@ describe("temporary workdirs", () => {
     await expect(manager.cleanupStale(now)).resolves.toBe(2);
     expect(await readdir(root)).toEqual(["recent"]);
     await expect(readFile(path.join(outside, "sentinel"), "utf8")).resolves.toBe("keep");
+  });
+
+  it("leaves no real workdir after a terminal handler exception", async () => {
+    const root = path.join(sandbox, "worker-root");
+    const workdirs = createTempWorkdirManager({ root, maxAgeMs: 1_000 });
+    const repository = {
+      claimOne: vi.fn<JobRepository["claimOne"]>(async () => ({
+        id: "job-failure",
+        ownerId: "owner-1",
+        type: "places.metadata",
+        postId: "post-1",
+        payload: {},
+        attempt: 1,
+        maxAttempts: 1,
+        claimedBy: "worker-1",
+        leaseExpiresAt: new Date(Date.now() + 90_000),
+      })),
+      heartbeat: vi.fn<JobRepository["heartbeat"]>(async () => true),
+      succeed: vi.fn<JobRepository["succeed"]>(async () => true),
+      retry: vi.fn<JobRepository["retry"]>(async () => true),
+      fail: vi.fn<JobRepository["fail"]>(async () => true),
+      ping: vi.fn<JobRepository["ping"]>(async () => undefined),
+      close: vi.fn<JobRepository["close"]>(async () => undefined),
+    };
+    const logger = { child: () => logger, debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const runner = createWorkerRunner({
+      repository,
+      registry: createRegistry([{
+        type: "places.metadata",
+        parsePayload: () => ({}),
+        run: async () => { throw new TerminalWorkerError("EXPECTED", "not persisted"); },
+      }]),
+      workerId: "worker-1",
+      maxAttempts: 1,
+      leaseDurationMs: 90_000,
+      heartbeatIntervalMs: 30_000,
+      shutdown: createShutdownController({ timeoutMs: 1_000 }),
+      workdirs,
+      clients: {},
+      logger,
+    });
+
+    await expect(runner.runOnce()).resolves.toBe("failed");
+    await expect(readdir(root)).resolves.toEqual([]);
   });
 });
 

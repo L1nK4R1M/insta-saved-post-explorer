@@ -85,6 +85,18 @@ export function createJobRepository(pool: Pool, options: { ownerId: string }): J
     async claimOne(input) {
       return inTransaction(pool, async (client) => {
         const now = input.now ?? new Date();
+        await client.query(
+          `UPDATE place_analysis_jobs
+           SET status = 'FAILED', stage = 'COMPLETE',
+               error_code = 'ATTEMPTS_EXHAUSTED',
+               error_message = 'Worker attempts exhausted', completed_at = $2,
+               lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+               updated_at = $2
+           WHERE owner_id = $1 AND status = 'PROCESSING'
+             AND lease_expires_at < $2
+             AND attempt_count >= LEAST(max_attempts, $3)`,
+          [ownerId, now, input.maxAttempts],
+        );
         const result = await client.query<ClaimRow>(CLAIM_SQL, [
           ownerId,
           now,

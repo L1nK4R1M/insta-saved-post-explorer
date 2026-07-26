@@ -18,7 +18,8 @@ export function createWorkerRunner(input: {
   heartbeatIntervalMs: number;
   shutdown: ShutdownController;
   workdirs: Workdirs;
-  clients: AuthorizedClients;
+  clients?: AuthorizedClients;
+  createClients?: (job: ClaimedJob) => Promise<{ clients: AuthorizedClients; close(): Promise<void> }>;
   logger: WorkerLogger;
   now?: () => Date;
   startHeartbeat?: (input: Parameters<typeof startHeartbeatDefault>[0]) => HeartbeatController;
@@ -49,9 +50,13 @@ export function createWorkerRunner(input: {
     let leaseLost = false;
     let workdir: string | undefined;
     let heartbeat: HeartbeatController | undefined;
+    let clientScope: { clients: AuthorizedClients; close(): Promise<void> } | undefined;
 
     try {
       workdir = await input.workdirs.create(job.id);
+      clientScope = input.createClients
+        ? await input.createClients(job)
+        : { clients: input.clients ?? {}, close: async () => undefined };
       heartbeat = heartbeatFactory({
         repository: input.repository,
         job,
@@ -65,7 +70,7 @@ export function createWorkerRunner(input: {
         },
       });
 
-      const output = await dispatchJob(job, input.registry, { signal, workdir, clients: input.clients, logger });
+      const output = await dispatchJob(job, input.registry, { signal, workdir, clients: clientScope.clients, logger });
       if (leaseLost) return "lease_lost";
       const succeeded = await input.repository.succeed({
         id: job.id,
@@ -78,7 +83,16 @@ export function createWorkerRunner(input: {
       if (leaseLost) return "lease_lost";
       return finalizeFailure(job, error);
     } finally {
-      await heartbeat?.stop();
+      try {
+        await heartbeat?.stop();
+      } catch {
+        logger.error("worker_heartbeat_stop_failed");
+      }
+      try {
+        await clientScope?.close();
+      } catch {
+        logger.error("worker_client_close_failed");
+      }
       if (workdir) await input.workdirs.remove(workdir);
     }
   }
@@ -111,7 +125,7 @@ export function createWorkerRunner(input: {
 
 function classifyFailure(error: unknown): { code: string; message: string; retryable: boolean } {
   if (error instanceof RetryableWorkerError || error instanceof TerminalWorkerError) {
-    return { code: error.code, message: error.message.slice(0, 1_024), retryable: error.retryable };
+    return { code: error.code, message: "Worker operation failed", retryable: error.retryable };
   }
   if (typeof error === "object" && error !== null && "retryable" in error && "code" in error) {
     return {

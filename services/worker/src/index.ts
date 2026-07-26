@@ -5,6 +5,7 @@ import { createDatabasePool } from "./db/client.js";
 import { createJobRepository } from "./db/jobs.js";
 import { createHealthServer } from "./health/server.js";
 import { createLogger } from "./logger.js";
+import { createReadOnlyMediaClient } from "./r2/client.js";
 import { createProductionRegistry } from "./runtime/dispatcher.js";
 import { createWorkerRunner } from "./runtime/runner.js";
 import { createShutdownController } from "./runtime/shutdown.js";
@@ -30,7 +31,19 @@ export async function startWorker(env: NodeJS.ProcessEnv = process.env): Promise
     heartbeatIntervalMs: config.heartbeatIntervalMs,
     shutdown,
     workdirs,
-    clients: {},
+    createClients: async (job) => {
+      const media = createReadOnlyMediaClient({
+        accountId: config.r2.accountId,
+        bucket: config.r2.bucket,
+        accessKeyId: config.r2.accessKeyId,
+        secretAccessKey: config.r2.secretAccessKey,
+        keyPrefix: config.r2.keyPrefix,
+        ownerId: job.ownerId,
+        postId: job.postId,
+        maxBytes: config.r2.maxBytes,
+      });
+      return { clients: { media }, close: () => media.close() };
+    },
     logger,
   });
   const health = createHealthServer({

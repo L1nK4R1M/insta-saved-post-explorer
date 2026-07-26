@@ -114,6 +114,43 @@ describe("worker runner", () => {
     await expect(runner.runOnce()).resolves.toBe("lease_lost");
   });
 
+  it("scopes authorized clients to the claimed job and closes them in finally", async () => {
+    const repository = fakeRepository();
+    repository.claimOne.mockResolvedValue(job());
+    const close = vi.fn(async () => undefined);
+    const createClients = vi.fn(async (claimed: ClaimedJob) => ({
+      clients: { mediaScope: `${claimed.ownerId}:${claimed.postId}` },
+      close,
+    }));
+    const run = vi.fn<WorkerHandler<{ sourceTheme: string }>["run"]>(async ({ clients }) => {
+      expect(clients).toEqual({ mediaScope: "owner-1:post-1" });
+      return { result: { ok: true } };
+    });
+    const runner = createWorkerRunner({
+      ...baseRunnerInput(repository, createRegistry([handler(run)])),
+      createClients,
+    });
+
+    await expect(runner.runOnce()).resolves.toBe("succeeded");
+    expect(createClients).toHaveBeenCalledWith(expect.objectContaining({ id: "job-1" }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("still removes the workdir when client cleanup fails", async () => {
+    const repository = fakeRepository();
+    repository.claimOne.mockResolvedValue(job());
+    const input = {
+      ...baseRunnerInput(repository, createRegistry([handler()])),
+      createClients: async () => ({
+        clients: {},
+        close: async () => { throw new Error("close failed"); },
+      }),
+    };
+
+    await expect(createWorkerRunner(input).runOnce()).resolves.toBe("succeeded");
+    expect(input.workdirs.remove).toHaveBeenCalledWith("C:/tmp/job");
+  });
+
   it("retries transient errors and fails terminal or exhausted jobs", async () => {
     const retryRepository = fakeRepository();
     retryRepository.claimOne.mockResolvedValue(job());
@@ -133,6 +170,21 @@ describe("worker runner", () => {
     }
   });
 
+  it("never persists a handler-provided error message", async () => {
+    const repository = fakeRepository();
+    repository.claimOne.mockResolvedValue(job());
+    const secret = "database-password-secret";
+    const failingHandler = handler(vi.fn(async () => {
+      throw new TerminalWorkerError("INVALID_MEDIA", secret);
+    }));
+
+    await createWorkerRunner(baseRunnerInput(repository, createRegistry([failingHandler]))).runOnce();
+
+    const failure = repository.fail.mock.calls[0]?.[0];
+    expect(failure?.errorCode).toBe("INVALID_MEDIA");
+    expect(failure?.errorMessage).not.toContain(secret);
+  });
+
   it("never claims after shutdown begins", async () => {
     const repository = fakeRepository();
     const shutdown = createShutdownController({ timeoutMs: 1_000 });
@@ -142,6 +194,17 @@ describe("worker runner", () => {
     await expect(runner.runOnce()).resolves.toBe("stopping");
     await expect(stopPromise).resolves.toBe(true);
     expect(repository.claimOne).not.toHaveBeenCalled();
+  });
+
+  it("aborts immediately and reports a bounded shutdown timeout", async () => {
+    vi.useFakeTimers();
+    const shutdown = createShutdownController({ timeoutMs: 100 });
+    void shutdown.track(new Promise<void>(() => undefined));
+
+    const stopped = shutdown.stop();
+    expect(shutdown.signal.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(stopped).resolves.toBe(false);
   });
 });
 

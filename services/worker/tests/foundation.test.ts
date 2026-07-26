@@ -5,6 +5,7 @@ import { parseWorkerConfig } from "../src/config.js";
 import { createLogger } from "../src/logger.js";
 
 const validEnv = (): NodeJS.ProcessEnv => ({
+  NODE_ENV: "test",
   WORKER_DATABASE_URL: "postgresql://worker:db-secret@localhost:5432/worker_test",
   WORKER_OWNER_ID: "owner-1",
   WORKER_ID: "worker-1",
@@ -30,8 +31,20 @@ describe("parseWorkerConfig", () => {
       healthPort: 8_080,
       shutdownTimeoutMs: 30_000,
       janitorMaxAgeMs: 21_600_000,
+      r2: expect.objectContaining({ keyPrefix: "originals" }),
     });
     expect(path.isAbsolute(config.tempRoot)).toBe(true);
+  });
+
+  it("requires the restricted worker DSN in production", () => {
+    const env: NodeJS.ProcessEnv = {
+      ...validEnv(),
+      NODE_ENV: "production",
+      WORKER_DATABASE_URL: undefined,
+      DATABASE_URL: "postgresql://web:privileged@localhost:5432/app",
+    };
+
+    expect(() => parseWorkerConfig(env)).toThrowError("WORKER_CONFIG_INVALID");
   });
 
   it.each([
@@ -57,13 +70,16 @@ describe("parseWorkerConfig", () => {
 describe("createLogger", () => {
   it("redacts secret keys and configured secret values recursively", () => {
     const write = vi.fn();
-    const secrets = ["db-secret", "r2-access-secret", "r2-super-secret"];
+    const longSecret = "s".repeat(1_050);
+    const secrets = ["db-secret", "r2-access-secret", "r2-super-secret", longSecret];
     const logger = createLogger({ level: "debug", secrets, write });
 
     logger.child({ ownerId: "owner-1" }).error("worker_failed", {
       databaseUrl: validEnv().WORKER_DATABASE_URL,
       nested: { token: "r2-access-secret", message: "prefix r2-super-secret suffix" },
       safe: "visible",
+      event: "forged_event",
+      longValue: longSecret,
     });
 
     expect(write).toHaveBeenCalledTimes(1);
@@ -73,5 +89,6 @@ describe("createLogger", () => {
     for (const secret of secrets) {
       expect(serialized).not.toContain(secret);
     }
+    expect(serialized).not.toContain(longSecret.slice(0, 100));
   });
 });

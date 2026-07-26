@@ -22,6 +22,7 @@ export type WorkerConfig = {
     accessKeyId: string;
     secretAccessKey: string;
     maxBytes: number;
+    keyPrefix: string;
   };
   shutdownTimeoutMs: number;
   janitorMaxAgeMs: number;
@@ -63,6 +64,7 @@ const environmentSchema = z
     r2AccessKeyId: z.string().min(1),
     r2SecretAccessKey: z.string().min(1),
     r2MaxBytes: integerEnv(536_870_912, 1_048_576, 2_147_483_648),
+    r2KeyPrefix: safeSegment.default("originals"),
     shutdownTimeoutMs: integerEnv(30_000, 1_000, 300_000),
     janitorMaxAgeMs: integerEnv(21_600_000, 1_000, 604_800_000),
   })
@@ -76,8 +78,9 @@ const environmentSchema = z
   });
 
 export function parseWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
+  const databaseUrl = env.WORKER_DATABASE_URL || (env.NODE_ENV === "production" ? undefined : env.DATABASE_URL);
   const parsed = environmentSchema.safeParse({
-    databaseUrl: env.WORKER_DATABASE_URL || env.DATABASE_URL,
+    databaseUrl,
     ownerId: env.WORKER_OWNER_ID,
     workerId: env.WORKER_ID || os.hostname(),
     pollIntervalMs: env.WORKER_POLL_INTERVAL_MS,
@@ -93,6 +96,7 @@ export function parseWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
     r2AccessKeyId: env.R2_ACCESS_KEY_ID,
     r2SecretAccessKey: env.R2_SECRET_ACCESS_KEY,
     r2MaxBytes: env.WORKER_R2_MAX_BYTES,
+    r2KeyPrefix: env.MEDIA_PATH_PREFIX,
     shutdownTimeoutMs: env.WORKER_SHUTDOWN_TIMEOUT_MS,
     janitorMaxAgeMs: env.WORKER_JANITOR_MAX_AGE_MS,
   });
@@ -120,6 +124,7 @@ export function parseWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
       accessKeyId: parsed.data.r2AccessKeyId,
       secretAccessKey: parsed.data.r2SecretAccessKey,
       maxBytes: parsed.data.r2MaxBytes,
+      keyPrefix: parsed.data.r2KeyPrefix,
     },
     shutdownTimeoutMs: parsed.data.shutdownTimeoutMs,
     janitorMaxAgeMs: parsed.data.janitorMaxAgeMs,

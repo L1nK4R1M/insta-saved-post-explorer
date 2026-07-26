@@ -101,6 +101,25 @@ describeWithDatabase("PostgreSQL job repository", () => {
     await expect(repository.retry({ id: second!.id, claimedBy: "worker-2", now: retryAt, nextAttemptAt: new Date(retryAt.getTime() + 1_000), errorCode: "TRANSIENT", errorMessage: "safe" })).resolves.toBe(false);
     await expect(repository.fail({ id: second!.id, claimedBy: "worker-2", now: retryAt, errorCode: "ATTEMPTS_EXHAUSTED", errorMessage: "safe" })).resolves.toBe(true);
   });
+
+  it("terminalizes an expired lease after the effective final attempt", async () => {
+    const now = new Date("2026-07-26T10:00:00.000Z");
+    await seedJob(OWNER_A, "expired-final", "post-worker-a", {
+      status: "PROCESSING",
+      leaseOwner: "dead-worker",
+      leaseExpiresAt: new Date(now.getTime() - 1),
+      attemptCount: 2,
+      maxAttempts: 2,
+    });
+    const repository = createJobRepository(pool, { ownerId: OWNER_A });
+
+    await expect(repository.claimOne({ workerId: "replacement", leaseDurationMs: 90_000, maxAttempts: 3, now })).resolves.toBeNull();
+    const row = await pool.query<{ status: string; error_code: string }>(
+      "SELECT status, error_code FROM place_analysis_jobs WHERE owner_id = $1 AND id = $2",
+      [OWNER_A, "expired-final"],
+    );
+    expect(row.rows[0]).toEqual({ status: "FAILED", error_code: "ATTEMPTS_EXHAUSTED" });
+  });
 });
 
 describe("retryDelayMs", () => {
@@ -135,6 +154,7 @@ type SeedJobOptions = {
   inputHash?: string;
   priority?: number;
   maxAttempts?: number;
+  attemptCount?: number;
 };
 
 async function seedJob(ownerId: string, id: string, postId: string, options: SeedJobOptions = {}): Promise<void> {
@@ -143,7 +163,7 @@ async function seedJob(ownerId: string, id: string, postId: string, options: See
        id, owner_id, post_id, source_theme, depth, status, stage, priority,
        analysis_version, input_hash, attempt_count, max_attempts, lease_owner,
        lease_expires_at, next_attempt_at, created_at, updated_at
-     ) VALUES ($1, $2, $3, 'travel', 'METADATA_ONLY', $4, 'QUEUED', $5, 'phase-e', $6, 0, $7, $8, $9, $10, now(), now())`,
+     ) VALUES ($1, $2, $3, 'travel', 'METADATA_ONLY', $4, 'QUEUED', $5, 'phase-e', $6, $7, $8, $9, $10, $11, now(), now())`,
     [
       id,
       ownerId,
@@ -151,6 +171,7 @@ async function seedJob(ownerId: string, id: string, postId: string, options: See
       options.status ?? "PENDING",
       options.priority ?? 0,
       options.inputHash ?? id,
+      options.attemptCount ?? 0,
       options.maxAttempts ?? 3,
       options.leaseOwner ?? null,
       options.leaseExpiresAt ?? null,

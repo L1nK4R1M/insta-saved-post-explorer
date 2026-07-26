@@ -84,6 +84,7 @@ Not applicable. Phase E has no browser UI, dashboard or public endpoint.
 | `R2_ACCESS_KEY_ID` | yes | yes | none | Non-empty; injected from root `R2_WORKER_ACCESS_KEY_ID`. | Operator |
 | `R2_SECRET_ACCESS_KEY` | yes | yes | none | Non-empty; injected from root `R2_WORKER_SECRET_ACCESS_KEY`. | Operator |
 | `R2_BUCKET_NAME` | yes | no | none | Safe bucket name. | Operator |
+| `MEDIA_PATH_PREFIX` | no | no | `originals` | Safe canonical key prefix. | Operator |
 | `WORKER_ID` | yes | no | hostname-derived local default | 1..128 safe characters. | Runtime |
 | `WORKER_OWNER_ID` | yes | no | none | Existing owner syntax, 1..128. | Owner |
 | `WORKER_POLL_INTERVAL_MS` | no | no | `5000` | integer 100..300000. | Operator |

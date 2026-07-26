@@ -22,11 +22,11 @@ export function createLogger(input: {
   const write = input.write ?? ((line: string) => console.log(line));
 
   const replaceSecrets = (value: string): string => {
-    let redacted = value.slice(0, 1_024);
+    let redacted = value;
     for (const secret of secrets) {
       redacted = redacted.split(secret).join("[REDACTED]");
     }
-    return redacted;
+    return redacted.slice(0, 1_024);
   };
 
   const sanitize = (value: unknown, key: string | undefined, seen: WeakSet<object>): unknown => {
@@ -53,7 +53,7 @@ export function createLogger(input: {
     const emit = (level: LogLevel, event: string, fields: SafeLogFields = {}) => {
       if (levelOrder[level] < levelOrder[input.level]) return;
       const record = sanitize(
-        { timestamp: new Date().toISOString(), level, event, ...context, ...fields },
+        { ...fields, ...context, timestamp: new Date().toISOString(), level, event },
         undefined,
         new WeakSet(),
       );
