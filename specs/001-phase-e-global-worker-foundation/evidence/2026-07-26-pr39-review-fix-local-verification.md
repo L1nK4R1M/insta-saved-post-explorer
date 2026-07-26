@@ -39,6 +39,7 @@ Reviewed predecessor: `7c202c32f2d5ecb7e2c4155d0fe5032a62403826`
 | Worker Compose config | PASS; one private hardened service, no published port |
 | Non-default health port | PASS; port 8181, `healthy`, user `10001:10001`, `ports={}` |
 | `git diff --check` | PASS before review evidence update |
+| Hosted PR checks | PASS on implementation head `2b81e3a`: CI, browser tests, Vercel, preview comments |
 
 The Docker verification container was task-owned, stopped and removed after the
 proof. No hosted database migration, secret rotation, VPS deployment, PR merge

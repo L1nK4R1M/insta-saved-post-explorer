@@ -190,4 +190,4 @@ git diff --check
 | EV-009 | Persisted media authorization | PostgreSQL/R2 regression output and grant proof | PASS: worker PostgreSQL 11/11 plus restricted-role root suite, 2026-07-26 |
 | EV-010 | Graceful shutdown and sequential heartbeat | Deterministic lifecycle/slow-heartbeat tests | PASS: worker suite 59/59 with DB, including 18 runtime scenarios, 2026-07-26 |
 | EV-011 | Targeted queue/config/smoke/container corrections | PostgreSQL, config, transaction and non-8080 container proof | PASS: smoke passed; image healthy at port 8181 as `10001:10001` with `ports={}`, 2026-07-26 |
-| EV-012 | Review-fix completion | Full requested gates, two reviews, updated PR and CI | Local gates PASS; independent reviews, push and refreshed PR CI pending |
+| EV-012 | Review-fix completion | Full requested gates, two reviews, updated PR and CI | PASS: two reviews, updated PR response, CI/browser/Vercel checks green on implementation head, 2026-07-26 |

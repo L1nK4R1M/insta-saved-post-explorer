@@ -118,7 +118,7 @@ TASK-002 are stable. All later tasks depend on their public interfaces.
   - Evidence: EV-011
   - Done: Smoke uses one PoolClient transaction, exhausted pending rows terminalize owner-safely, relative temp roots fail, and healthcheck follows the configured internal port.
 
-- [ ] TASK-012: Reverify, reconverge and update PR #39
+- [x] TASK-012: Reverify, reconverge and update PR #39
   - Requirements: FR-013, NFR-008
   - Dependencies: TASK-011
   - Files: Required Phase E docs, VibeSpec artifacts, evidence, PR body and review response

@@ -20,8 +20,8 @@ proof, correction reviews and PR evidence.
 - Fresh PostgreSQL 16, Docker, repository and VibeSpec gates passed locally.
 - The seven PR #39 findings have focused RED/GREEN evidence and fresh full local
   gates on a disposable PostgreSQL 16 database.
-- Refreshed PR checks are still pending the correction push, so final convergence
-  remains pending despite the clean local result.
+- Refreshed PR checks passed on correction implementation head `2b81e3a`,
+  including CI, browser tests, Vercel and preview comments.
 - VPS credentials, firewall, backup drill and alert routing remain outside this
   non-deployment pull request and cannot be presented as verified.
 
@@ -41,10 +41,12 @@ filesystem containment, container health, dependency impact and test quality.
 
 ## Final decision rationale
 
-Decision: PENDING
+Decision: PASS
 
 The seven findings on reviewed head
-`7c202c32f2d5ecb7e2c4155d0fe5032a62403826` are corrected locally. TASK-009
-through TASK-011 and EV-009 through EV-011 pass; TASK-012/EV-012 await the push,
-review response and refreshed PR checks. No merge, hosted migration, credential
-provisioning or VPS deployment is authorized.
+`7c202c32f2d5ecb7e2c4155d0fe5032a62403826` are corrected and freshly verified.
+TASK-009 through TASK-012 and EV-009 through EV-012 pass, traceability has zero
+uncovered requirements, both correction review passes have no open HIGH/BLOCKER,
+and the implementation-head PR checks are green. PR #39 is ready for owner
+re-review. No merge, hosted migration, credential provisioning or VPS deployment
+is authorized.

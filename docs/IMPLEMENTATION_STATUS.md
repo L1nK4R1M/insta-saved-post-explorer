@@ -29,7 +29,7 @@ Status values:
 | F2 — Geoapify and caption resolution | COMPLETE | F1 merged | PR #30, squash `7cc05e2`; hardening PR #32, squash `216b975` | Server-only resolver, deterministic scoring, JSONL workflow, stale-input guard, atomic persistence, bounded retries with exponential backoff/jitter/Retry-After, quiet idempotent job creation, unit/e2e proof and successful owner-reported local rerun. No migration. |
 | F3 — Read API, statistics and review | COMPLETE | F2 merged | PR #31, squash `15356e9` | Seven read-only Places routes, owner-scoped cursor queries, `source_theme` statistics, durable review decisions, complete audit evidence, exact job ownership validation, conditional Geoapify preflight, CI #94 green and Preview ready. No migration. |
 | F — Places metadata-first domain | COMPLETE | Phases B and D | F1/F2/F3 + hardening PR #32, squash `216b975` | Code and robustness work complete. Exit gate accepted via a successful real local validation: real import succeeded, an identical re-import stayed idempotent with no unwanted duplicates, the expected P2002 no longer appears, transient errors recovered, and `UNKNOWN` was handled correctly. No migration; no public-contract break; no sensitive data committed. |
-| E — Global worker foundation | REVIEW_FIX_VERIFICATION | Phase C | PR #39; `claude/phase-e-global-worker-foundation` | Seven review findings corrected on the existing branch; fresh full gates pending. Unmerged, with no hosted migration or VPS deployment. |
+| E — Global worker foundation | AWAITING_REVIEW | Phase C | PR #39; `claude/phase-e-global-worker-foundation` | Seven review findings corrected; local/CI/browser/Vercel gates and VibeSpec convergence PASS. Unmerged, with no hosted migration or VPS deployment. |
 | G — Places 2D UI and contextual navigation | COMPLETE | Phase F complete | PR #34, squash `2bd2098` | `/places`, Leaflet + markercluster, Geoapify raster tiles, synchronized list, complete filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. Review fixes validated: authenticated read Server Action, complete `sourceThemes`, all countries filterable. CI #107 green; 50 files / 440 tests locally; no migration. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
 | I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | T1–T10 merged: additive `view=map|globe`, pure projection module, renderer seam, WebGL probe and fallback, lazy `react-globe.gl` 2.38.0 / `three` 0.185.1, public-domain Natural Earth texture generated locally with documented licence, segmented `2D | 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. CI #115 green; no migration, no API change, Leaflet preserved. Measured: `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry; first globe render 907–1033 ms on the GPU-less CI baseline. **Performance validated on real GPU** (`FPS_BUDGET_VALIDATED_ON_REAL_GPU`, 25 July 2026): NVIDIA GeForce RTX 5090, 240 fps and 276-326 ms first render at 100/500/1000 places, desktop and mobile viewport — all D6 budgets met. No Phase I follow-up remains open. |
@@ -49,10 +49,10 @@ Current state
 - CI #121 passed on reviewed head 60e228e7112b12ffaff9330b4ff2337206b7686a.
 - Current test baseline: 54 unit files / 448 tests; 46 E2E scenarios / 46 executions
   (45 desktop + 1 mobile). Critical database and security suites remain intact.
-- Phase E PR #39 is in review-fix verification. The existing branch contains the
-  seven requested invariant corrections; final local gates, independent review
-  and refreshed PR checks must pass before it returns to AWAITING_REVIEW. It
-  remains unmerged and undeployed.
+- Phase E PR #39 is AWAITING_REVIEW. The existing branch contains all seven
+  requested invariant corrections; full local gates, both review passes and
+  refreshed CI/browser/Vercel checks are green. It remains unmerged and
+  undeployed.
 - Phase H and Phase J remain blocked.
 
 Reference develop implementation commit
@@ -81,7 +81,7 @@ Recorded proof for global test consolidation
 1. Treat Phase I and the global test consolidation as merged and complete.
 2. Use the consolidated baseline for future PRs; do not reintroduce duplicate desktop/mobile E2E executions without a real device-specific behavior.
 3. Phase I performance is validated on real hardware and needs no further measurement; re-run `npm run places:measure-globe` only if the globe scene or engine version changes.
-4. Complete the Phase E PR #39 correction gates and re-review against `develop`;
-   do not merge, apply its hosted migration or deploy it automatically.
+4. Re-review the verified Phase E PR #39 corrections against `develop`; do not
+   merge, apply its hosted migration or deploy it automatically.
 5. Phase H remains blocked until Phase E is merged and operational activation is separately authorized.
 6. Keep Phase E, H and J in separate branches and PRs; do not mix worker, deep analysis, Hermes or MCP work.
