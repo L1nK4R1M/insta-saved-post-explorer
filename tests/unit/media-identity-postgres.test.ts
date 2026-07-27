@@ -159,7 +159,7 @@ describeWithDatabase("media identity on PostgreSQL", () => {
   });
 
   describe("restricted worker role", () => {
-    it("can read identity columns but not url, other tables, or writes", async () => {
+    it("has only the media, post and queue column privileges required by the worker", async () => {
       // Allowed: identity/locator columns.
       await expect(
         prisma.$transaction(async (tx) => {
@@ -175,6 +175,56 @@ describeWithDatabase("media identity on PostgreSQL", () => {
           return tx.$queryRawUnsafe('SELECT "url" FROM "post_media" LIMIT 1');
         }),
       ).rejects.toThrow(/permission denied/i);
+
+      const privileges = await prisma.$queryRaw<
+        Array<{
+          queueUpdate: boolean;
+          resultRead: boolean;
+          postRead: boolean;
+          postThumbnailRead: boolean;
+          mediaIdentityRead: boolean;
+          queueOwnerUpdate: boolean;
+          queuePostUpdate: boolean;
+          queueInputUpdate: boolean;
+          queueThemeUpdate: boolean;
+          insertJob: boolean;
+          deleteJob: boolean;
+        }>
+      >`
+        SELECT
+          has_column_privilege('ipe_worker_reader', 'place_analysis_jobs', 'status', 'UPDATE') AS "queueUpdate",
+          has_column_privilege('ipe_worker_reader', 'place_analysis_jobs', 'result', 'SELECT') AS "resultRead",
+          has_column_privilege('ipe_worker_reader', 'posts', 'caption', 'SELECT') AS "postRead",
+          has_column_privilege('ipe_worker_reader', 'posts', 'thumbnail_url', 'SELECT') AS "postThumbnailRead",
+          has_column_privilege('ipe_worker_reader', 'post_media', 'id', 'SELECT')
+            AND has_column_privilege('ipe_worker_reader', 'post_media', 'post_id', 'SELECT')
+            AND has_column_privilege('ipe_worker_reader', 'post_media', 'owner_id', 'SELECT')
+            AND has_column_privilege('ipe_worker_reader', 'post_media', 'position', 'SELECT')
+            AND has_column_privilege('ipe_worker_reader', 'post_media', 'object_key', 'SELECT')
+            AND has_column_privilege('ipe_worker_reader', 'post_media', 'mime_type', 'SELECT')
+            AND has_column_privilege('ipe_worker_reader', 'post_media', 'byte_size', 'SELECT')
+            AND has_column_privilege('ipe_worker_reader', 'post_media', 'version_tag', 'SELECT')
+            AND has_column_privilege('ipe_worker_reader', 'post_media', 'identity_state', 'SELECT') AS "mediaIdentityRead",
+          has_column_privilege('ipe_worker_reader', 'place_analysis_jobs', 'owner_id', 'UPDATE') AS "queueOwnerUpdate",
+          has_column_privilege('ipe_worker_reader', 'place_analysis_jobs', 'post_id', 'UPDATE') AS "queuePostUpdate",
+          has_column_privilege('ipe_worker_reader', 'place_analysis_jobs', 'input_hash', 'UPDATE') AS "queueInputUpdate",
+          has_column_privilege('ipe_worker_reader', 'place_analysis_jobs', 'source_theme', 'UPDATE') AS "queueThemeUpdate",
+          has_table_privilege('ipe_worker_reader', 'place_analysis_jobs', 'INSERT') AS "insertJob",
+          has_table_privilege('ipe_worker_reader', 'place_analysis_jobs', 'DELETE') AS "deleteJob"
+      `;
+      expect(privileges[0]).toEqual({
+        queueUpdate: true,
+        resultRead: false,
+        postRead: true,
+        postThumbnailRead: false,
+        mediaIdentityRead: true,
+        queueOwnerUpdate: false,
+        queuePostUpdate: false,
+        queueInputUpdate: false,
+        queueThemeUpdate: false,
+        insertJob: false,
+        deleteJob: false,
+      });
 
       // Denied: another table entirely.
       await expect(

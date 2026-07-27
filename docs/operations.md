@@ -102,3 +102,30 @@ exécuté.
 Il manque encore, hors dépôt : le projet Vercel, son identifiant d'organisation
 et de projet, l'authentification d'un opérateur, les bases Preview/Production,
 les secrets d'environnement et les approbateurs de Production.
+
+## Worker global Phase E
+
+Le worker normal démarre avec un registre vide en Phase E : il expose uniquement
+les probes internes et n'émet aucune requête de claim tant qu'un vrai handler
+n'est pas livré dans une PR séparée.
+
+Contrôles opérateur avant démarrage :
+
+1. vérifier `WORKER_OWNER_ID`, le login PostgreSQL restreint et le credential R2
+   GetObject-only distinct du web ;
+2. vérifier `20260726131000_phase_e_worker_queue` et ses grants versionnés ;
+3. exécuter `docker compose -f services/worker/docker-compose.yml config` et
+   confirmer l'absence de `ports` ;
+4. vérifier l'UID `10001:10001`, `healthy`, les capacités supprimées et
+   `no-new-privileges` ;
+5. ne jamais exécuter le smoke sur une base partagée. Il exige `NODE_ENV=test`
+   et un nom finissant par `_test`, ou `WORKER_SMOKE_CONFIRM=EPHEMERAL`.
+
+Récupération : une readiness 503 conduit à vérifier le DSN restreint sans
+l'afficher. Un lease expiré est repris atomiquement et l'ancien claimant ne peut
+plus finaliser. SIGTERM/SIGINT bloque les nouveaux claims, borne le travail
+courant, arrête les timers et nettoie le workdir. Le janitor ne supprime que les
+enfants directs de `WORKER_TEMP_ROOT` et les liens suspects.
+
+Alertes, dashboards, sauvegardes, firewall et VPS/Coolify restent des gates
+opérateur non exécutées dans la PR Phase E.

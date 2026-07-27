@@ -1,0 +1,29 @@
+services:
+  worker:
+    build:
+      context: ../..
+      dockerfile: services/worker/Dockerfile
+    image: insta-post-explorer-worker:phase-e
+    container_name: insta-post-explorer-worker
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1770,uid=10001,gid=10001
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      NODE_ENV: production
+      WORKER_DATABASE_URL: ${WORKER_DATABASE_URL:?required}
+      WORKER_OWNER_ID: ${WORKER_OWNER_ID:?required}
+      WORKER_ID: ${WORKER_ID:-worker-compose}
+      WORKER_TEMP_ROOT: /tmp/ipe-worker
+      WORKER_HEALTH_HOST: 127.0.0.1
+      WORKER_HEALTH_PORT: "8080"
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?required}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:?required}
+      R2_ACCESS_KEY_ID: ${R2_WORKER_ACCESS_KEY_ID:?required}
+      R2_SECRET_ACCESS_KEY: ${R2_WORKER_SECRET_ACCESS_KEY:?required}
+      MEDIA_PATH_PREFIX: ${MEDIA_PATH_PREFIX:-originals}

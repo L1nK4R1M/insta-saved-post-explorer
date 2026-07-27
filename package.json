@@ -2,6 +2,9 @@
   "name": "insta-saved-post-explorer",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "services/worker"
+  ],
   "engines": {
     "node": ">=24 <25"
   },
@@ -22,7 +25,12 @@
     "places:export-captions": "tsx --conditions=react-server scripts/places/export-caption-batch.ts",
     "places:import-candidates": "tsx --conditions=react-server scripts/places/import-candidate-batch.ts",
     "places:generate-earth-texture": "node scripts/places/generate-earth-texture.mjs",
-    "places:measure-globe": "node scripts/places/measure-globe.mjs"
+    "places:measure-globe": "node scripts/places/measure-globe.mjs",
+    "worker:test": "npm run test --workspace services/worker --",
+    "worker:test:postgres": "npm run test:postgres --workspace services/worker --",
+    "worker:typecheck": "npm run typecheck --workspace services/worker",
+    "worker:build": "npm run build --workspace services/worker",
+    "worker:smoke": "npm run smoke --workspace services/worker"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1085.0",

@@ -146,7 +146,7 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | --- | --- | --- |
 | C — R2 media identity and worker isolation | COMPLETE | PR #24; migration applied to Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
-| E — Global worker foundation | READY, separate | Required before Phase H. This is the next executable infrastructure phase. |
+| E — Global worker foundation | AWAITING REVIEW, separate | PR #39 remains open against `develop`; all seven earlier findings and the final production R2 AbortSignal blocker are corrected on its existing branch, fresh local gates are green and VibeSpec convergence is PASS. Refreshed hosted checks remain to be observed after push. Unmerged; no hosted migration or VPS deployment. |
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E and stable worker infrastructure. |
@@ -176,15 +176,16 @@ transactions, worker isolation and audit completeness.
 
 - ~~**Phase I GPU measurement**~~ — **closed 25 July 2026**, status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`. Measured on an NVIDIA GeForce RTX 5090: 240 fps and 276-326 ms first render at every place count, desktop and mobile viewport. This confirmed the recorded diagnosis — the CI figures (20 fps desktop, 18 fps mobile) were fill-rate bound on a SwiftShader software rasterizer, not scene bound. Both runs are kept in the change record. One honest limit stands: the mobile figures come from a mobile **viewport** on desktop-class hardware, not from a phone GPU, so low-end phone behaviour remains a reasoned expectation rather than a measurement — which is why the WebGL fallback and the pixel-ratio cap stay in place.
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
-- VPS credentials, firewall, backups and observability for Phase E;
+- VPS credentials, firewall, backups, alerting and deployment authorization for Phase E;
 - final confirmation model for sensitive Phase J commands.
 
 ## 8. Exact next action
 
-1. Start the next selected phase from the latest `develop` at `08be9f04df60c9d8e138242fc0d7b0504e0ba51e`.
-2. Phase E — Global worker foundation is READY and is required before Phase H.
-3. Optionally validate Phase I on a machine with a real GPU:
-   `npm run build && npm run start`, then
-   `DATABASE_URL=<local> npm run places:measure-globe -- --url http://127.0.0.1:3000`.
-4. Keep Phase E, H and J isolated in separate branches and PRs.
-5. Do not mix worker, Hermes, MCP, OCR, transcription or multimodal analysis into maintenance work for Phase I.
+1. Re-review the verified Phase E corrections, including production R2
+   cancellation, in PR #39 against `develop`; never
+   merge it automatically and do not apply its migration to a hosted database
+   without explicit authorization.
+2. Keep Phase H blocked until Phase E is merged and operational activation is
+   separately approved.
+3. Keep Phase E, H and J isolated in separate branches and PRs.
+4. Do not mix worker, Hermes, MCP, OCR, transcription or multimodal analysis.
