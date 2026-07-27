@@ -276,6 +276,11 @@ re-queries `post_media` for the claimed owner, post, `VERIFIED` state and non-nu
 key, then passes the returned canonical key to a private GetObject-only adapter.
 Bucket, prefix and size policy remain configuration-owned.
 
+The production GetObject adapter forwards the same execution `AbortSignal` as
+the second argument to `S3Client.send`. The stream pipeline uses that signal as
+well, so deadline cancellation stops the network request, rejects the download
+through the existing retryable R2 classification and removes partial output.
+
 ### Graceful lifecycle and heartbeat
 
 Immediate global abort was rejected because it converts an operator signal into

@@ -135,6 +135,14 @@ References: FR-011, NFR-007, BR-006. The built image is run with an internal
 non-8080 health port and reaches healthy without publishing a port; runtime
 inspection still reports numeric non-root user and empty port bindings.
 
+### AT-021: Production R2 requests receive deadline cancellation
+
+References: FR-008, FR-010, NFR-003, NFR-006. A controlled replacement for the
+real `S3Client` captures the second `send` argument, starts a partial blocked
+stream and listens to its request signal. The test proves strict signal identity,
+observable cancellation, retryable R2 classification and an empty workdir after
+abort. The production adapter remains GetObject-only.
+
 ## Quality commands
 
 Narrow first:
@@ -191,3 +199,4 @@ git diff --check
 | EV-010 | Graceful shutdown and sequential heartbeat | Deterministic lifecycle/slow-heartbeat tests | PASS: worker suite 59/59 with DB, including 18 runtime scenarios, 2026-07-26 |
 | EV-011 | Targeted queue/config/smoke/container corrections | PostgreSQL, config, transaction and non-8080 container proof | PASS: smoke passed; image healthy at port 8181 as `10001:10001` with `ports={}`, 2026-07-26 |
 | EV-012 | Review-fix completion | Full requested gates, two reviews, updated PR and CI | PASS: two reviews, updated PR response, CI/browser/Vercel checks green on implementation head, 2026-07-26 |
+| EV-013 | Production R2 AbortSignal propagation | Focused RED/GREEN regression, final repository gates and review response | PASS on 2026-07-27: targeted 10/10, worker 53 passed / 7 skipped, repository 319 passed / 129 skipped, lint, both typechecks and both builds pass. |

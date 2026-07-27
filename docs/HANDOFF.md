@@ -146,7 +146,7 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | --- | --- | --- |
 | C — R2 media identity and worker isolation | COMPLETE | PR #24; migration applied to Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
-| E — Global worker foundation | AWAITING REVIEW, separate | PR #39 remains open against `develop`; all seven review findings are corrected on its existing branch, local/CI/browser/Vercel gates are green and VibeSpec convergence is PASS. Unmerged; no hosted migration or VPS deployment. |
+| E — Global worker foundation | AWAITING REVIEW, separate | PR #39 remains open against `develop`; all seven earlier findings and the final production R2 AbortSignal blocker are corrected on its existing branch, fresh local gates are green and VibeSpec convergence is PASS. Refreshed hosted checks remain to be observed after push. Unmerged; no hosted migration or VPS deployment. |
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E and stable worker infrastructure. |
@@ -181,7 +181,8 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Re-review the verified Phase E corrections in PR #39 against `develop`; never
+1. Re-review the verified Phase E corrections, including production R2
+   cancellation, in PR #39 against `develop`; never
    merge it automatically and do not apply its migration to a hosted database
    without explicit authorization.
 2. Keep Phase H blocked until Phase E is merged and operational activation is

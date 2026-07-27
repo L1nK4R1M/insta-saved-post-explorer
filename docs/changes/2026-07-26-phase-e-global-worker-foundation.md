@@ -50,6 +50,19 @@ changed by this correction round.
 
 The PR remains open and unmerged for owner review.
 
+## Final R2 cancellation correction — 27 July 2026
+
+The owner re-review of `f445da6` found that `downloadToWorkdir` supplied an
+`AbortSignal` to the internal sender contract, but the production wrapper
+discarded the second argument before calling the AWS SDK. The wrapper now
+forwards `sendOptions` to `S3Client.send`.
+
+One consolidated regression replaces the production S3 seam, captures the exact
+signal, starts a partial blocked stream, observes cancellation and proves that
+the retryable R2 error path removes the partial file. No PutObject, DeleteObject
+or ListObjects capability was added. Prisma, migrations, queue semantics,
+grants, heartbeat and shutdown architecture are unchanged.
+
 ## Explicit limits
 
 No hosted migration, login/credential provisioning, VPS/Coolify deployment,

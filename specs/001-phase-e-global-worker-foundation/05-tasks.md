@@ -125,3 +125,11 @@ TASK-002 are stable. All later tasks depend on their public interfaces.
   - Tests: AT-013 plus every requested final command
   - Evidence: EV-012
   - Done: Fresh PostgreSQL 16/Docker/repository gates pass, two review passes have no HIGH/BLOCKER, PR head checks pass, and no merge, hosted migration or VPS deployment occurred.
+
+- [x] TASK-013: Propagate deadline cancellation to the production S3/R2 request
+  - Requirements: FR-008, FR-010, NFR-003, NFR-006
+  - Dependencies: TASK-012
+  - Files: `services/worker/src/r2/client.ts`, `services/worker/tests/io-security.test.ts`, required Phase E evidence and convergence documents
+  - Tests: AT-021
+  - Evidence: EV-013
+  - Done: The production adapter forwards the exact execution signal to `S3Client.send`; abort rejects the blocked download, uses the retryable R2 classification and leaves no partial file.

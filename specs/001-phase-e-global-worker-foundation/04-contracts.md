@@ -93,7 +93,9 @@ The handler never receives `object_key`, `identity_state`, media owner/post ids
 or declared size as authorization evidence. `downloadToWorkdir` binds the media
 id together with the claimed job owner and post in a parameterized PostgreSQL
 query. Only the returned canonical key, MIME, size and version may reach the
-private R2 adapter.
+private R2 adapter. The adapter must forward the exact `AbortSignal` supplied to
+`downloadToWorkdir` into `S3Client.send(command, { abortSignal })`; cancellation
+must reject the download and remove any partial file.
 
 ## UI contract
 

@@ -6,6 +6,32 @@ import path from "node:path";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const productionS3 = vi.hoisted(() => ({
+  send: vi.fn<
+    (
+      command: unknown,
+      requestOptions?: { abortSignal?: AbortSignal },
+    ) => Promise<{ Body?: unknown; ContentLength?: number }>
+  >(),
+  destroy: vi.fn(),
+}));
+
+vi.mock("@aws-sdk/client-s3", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@aws-sdk/client-s3")>();
+  return {
+    ...actual,
+    S3Client: class {
+      send(command: unknown, requestOptions?: { abortSignal?: AbortSignal }) {
+        return productionS3.send(command, requestOptions);
+      }
+
+      destroy() {
+        productionS3.destroy();
+      }
+    },
+  };
+});
+
 import {
   createReadOnlyMediaClient,
   type PersistedVerifiedMedia,
@@ -20,6 +46,8 @@ import { createTempWorkdirManager } from "../src/runtime/temp-workdir.js";
 let sandbox: string;
 
 beforeEach(async () => {
+  productionS3.send.mockReset();
+  productionS3.destroy.mockReset();
   sandbox = await mkdtemp(path.join(os.tmpdir(), "ipe-worker-io-"));
 });
 
@@ -111,7 +139,10 @@ describe("temporary workdirs", () => {
 });
 
 describe("read-only R2 media", () => {
-  type SendGetObject = (command: GetObjectCommand) => Promise<{ Body?: unknown; ContentLength?: number }>;
+  type SendGetObject = (
+    command: GetObjectCommand,
+    requestOptions?: { abortSignal?: AbortSignal },
+  ) => Promise<{ Body?: unknown; ContentLength?: number }>;
   const persistedMedia = (override: Partial<PersistedVerifiedMedia> = {}): PersistedVerifiedMedia => ({
     id: "media-1",
     position: 0,
@@ -167,10 +198,61 @@ describe("read-only R2 media", () => {
     await expect(scope.client.downloadToWorkdir("media-1", workdir, new AbortController().signal)).rejects.toThrow("WORKER_R2_TOO_LARGE");
     await expect(readdir(workdir)).resolves.toEqual([]);
   });
+
+  it("forwards the download signal to the production S3 client and removes aborted partial output", async () => {
+    let senderObservedAbort = false;
+    let emittedPartialChunk = false;
+    productionS3.send.mockImplementation(async (_command, requestOptions) => {
+      const body = new Readable({
+        read() {
+          if (emittedPartialChunk) return;
+          emittedPartialChunk = true;
+          this.push(Buffer.from("partial"));
+        },
+      });
+      requestOptions?.abortSignal?.addEventListener(
+        "abort",
+        () => {
+          senderObservedAbort = true;
+          body.destroy(new Error("request aborted"));
+        },
+        { once: true },
+      );
+      return { Body: body };
+    });
+    const scope = createReadOnlyMediaClient({
+      accountId: "account-1",
+      bucket: "media",
+      accessKeyId: "access",
+      secretAccessKey: "secret",
+      keyPrefix: "originals",
+      maxBytes: 8,
+      mediaRepository: repository(persistedMedia()),
+    });
+    const workdir = path.join(sandbox, "job");
+    await mkdir(workdir);
+    const controller = new AbortController();
+
+    const download = scope.client.downloadToWorkdir("media-1", workdir, controller.signal);
+    await vi.waitFor(() => expect(productionS3.send).toHaveBeenCalledOnce());
+    await vi.waitFor(async () => expect(await readdir(workdir)).toHaveLength(1));
+    const capturedSignal = productionS3.send.mock.calls[0]?.[1]?.abortSignal;
+    controller.abort(new Error("WORKER_STOPPING"));
+
+    await expect(download).rejects.toThrow("WORKER_R2_UNAVAILABLE");
+    expect(capturedSignal).toBe(controller.signal);
+    expect(senderObservedAbort).toBe(true);
+    await expect(readdir(workdir)).resolves.toEqual([]);
+    await scope.close();
+    expect(productionS3.destroy).toHaveBeenCalledOnce();
+  });
 });
 
 function mediaClient(
-  send: (command: GetObjectCommand) => Promise<{ Body?: unknown; ContentLength?: number }>,
+  send: (
+    command: GetObjectCommand,
+    requestOptions?: { abortSignal?: AbortSignal },
+  ) => Promise<{ Body?: unknown; ContentLength?: number }>,
   maxBytes: number,
   mediaRepository: VerifiedMediaRepository,
 ) {

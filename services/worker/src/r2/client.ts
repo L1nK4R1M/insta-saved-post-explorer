@@ -51,7 +51,7 @@ export function createReadOnlyMediaClient(options: {
         credentials: { accessKeyId: options.accessKeyId, secretAccessKey: options.secretAccessKey },
       });
   const sender: GetObjectSender = options.s3 ?? {
-    send: (command) => ownedClient!.send(command),
+    send: (command, sendOptions) => ownedClient!.send(command, sendOptions),
     destroy: () => ownedClient!.destroy(),
   };
 
