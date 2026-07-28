@@ -34,10 +34,42 @@ the global worker, deploy the web application or import Places data.
 | Required indexes | 17 present |
 | Neon schema diff | Empty between `develop` and Production `main` after promotion |
 
+## Subsequent release completion
+
+The reviewed application was promoted by PR #47 to `main` at `66cfd78`. CI #145
+passed and Vercel Production deployment `dpl_G7R5i5jGWihyqRTNbsqdgdwK3HZ7`
+reached `READY`. Health and `/places` returned HTTP 200 with no runtime error.
+
+The importer then exposed its reviewed Phase E queue-column dependency. A second
+backup, `backup-main-before-phase-e-2026-07-28` (`br-bold-salad-asxuxn2s`), was
+created. The exact additive Phase E migration was rehearsed on a disposable
+branch, verified through the importer public seam, and promoted transactionally
+with checksum
+`4c7b1d89faf0690bc9927f5966f12163403544e3a0bbd1159b8de153e7129bae`.
+This schema promotion does not activate or deploy the VPS worker.
+
+The candidate file with SHA-256
+`27d9f9e69631190cbe4cf344a64fe82e7f67a441bf19faba4844770204cc4a87`
+was committed to Production through the existing importer:
+
+| Check | Result |
+| --- | --- |
+| Records | 407 valid, 0 invalid |
+| Outcomes | 307 succeeded, 100 need review, 0 failed |
+| Unknown candidates | 154 |
+| Importer errors | 0 |
+| Final unique rows | 51 places, 301 links, 1,203 evidence, 407 jobs |
+| Linked posts | 254 |
+| Job states | 307 `SUCCEEDED`, 100 `NEEDS_REVIEW` |
+| Safety invariants | 0 owner mismatches, 0 errored jobs, 0 approximate places without radius |
+
+The importer report counts persistence operations, so its `placesPersisted` and
+`linksPersisted` values are not final unique-row counts. The catalog aggregates
+above are the authoritative post-import state.
+
 ## Remaining gates
 
-The reviewed application code must still be promoted through a pull request and
-verified on Vercel Production. Candidate import is a separate controlled write
-and must target the verified Production database with zero invalid records and
-zero importer errors. Phase E hosted migration and VPS activation remain out of
-scope.
+VPS worker deployment and activation remain separate and pending. Phase H stays
+blocked until that operational gate is explicitly approved and verified. The
+extension 4.2.6 authenticated Production refresh smoke also remains an operator
+action.

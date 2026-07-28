@@ -2,8 +2,8 @@
 
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
-Reference branch: `codex/production-places-promotion`  
-Reference production base: `main` at `64f14cbd64d137dde7842c91df804c5b2b7f6cfd`  
+Reference branch: `main`  
+Reference production base: `main` at `66cfd78c5b1bfcaf0ad16305db993dd88bf73c54`  
 Reference implementation: `develop` at `67e3c1ba38cf350533c9a7ba27059c3fc368d727`
 
 ## 1. Purpose and authority
@@ -203,10 +203,32 @@ Project: `fancy-mud-69762258`
 
 | Environment | Neon branch | Verified schema state |
 | --- | --- | --- |
-| Production | `main` / `br-super-snow-asyrmnbm` | Phase C and F1 migrations applied. The additive Places schema was promoted and verified on 28 July 2026; Places data was still empty immediately after migration. |
+| Production | `main` / `br-super-snow-asyrmnbm` | Phase C, F1 and Phase E queue migrations applied. Application commit `66cfd78` is deployed; the validated Places batch is imported. VPS worker activation remains pending. |
 | Development | `develop` / `br-sparkling-glade-as9gow4m` | Phase C and F1 migrations applied. F2, F3, G and I require no migration. |
 
 Do not run `prisma migrate dev`, `prisma db push` or seeds against either deployed database.
+
+### Places Production release (28 July 2026)
+
+- PR #47 merged after CI #145 passed, including PostgreSQL, worker, browser and
+  production-build jobs;
+- Vercel deployment `dpl_G7R5i5jGWihyqRTNbsqdgdwK3HZ7` is `READY`; `/api/health`
+  reports database connected and version `66cfd78`;
+- the Phase E queue migration was rehearsed on a disposable Neon branch and
+  promoted transactionally with checksum
+  `4c7b1d89faf0690bc9927f5966f12163403544e3a0bbd1159b8de153e7129bae`;
+- rollback branch `backup-main-before-phase-e-2026-07-28`
+  (`br-bold-salad-asxuxn2s`) is retained;
+- candidate file SHA-256:
+  `27d9f9e69631190cbe4cf344a64fe82e7f67a441bf19faba4844770204cc4a87`;
+- import report: 407 valid, 0 invalid, 307 succeeded, 100 need review,
+  0 failed, 154 unknown candidates and 0 errors;
+- final unique aggregates: 51 places, 301 links, 254 linked posts,
+  1,203 evidence rows and 407 analysis jobs;
+- invariants: 0 failed/errored jobs, 0 owner mismatches and 0 approximate
+  places without a radius;
+- Production `/places` returns HTTP 200 and renders 51 places / 254 posts;
+  Vercel reports no runtime error after release.
 
 ## 6. Phase state
 
@@ -214,7 +236,7 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | --- | --- | --- |
 | C — R2 media identity and worker isolation | COMPLETE | PR #24; migration applied to Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
-| E — Global worker foundation | CODE MERGED, ACTIVATION PENDING | PR #39 is merged into `develop` at `c4e37f6`. No hosted migration or VPS deployment is claimed. |
+| E — Global worker foundation | SCHEMA DEPLOYED, VPS ACTIVATION PENDING | PR #39 code and the additive queue migration are on Production. No VPS deployment or worker activation is claimed. |
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E operational activation and stable worker infrastructure. |
@@ -249,23 +271,17 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Promote the reviewed `develop` implementation to `main` through a dedicated
-   pull request, then wait for the Vercel Production deployment and smoke it.
-2. Confirm that Production has the server-only Places configuration before
-   enabling analysis; never expose `GEOAPIFY_API_KEY` to the browser.
-3. Import the already validated candidate JSONL only against the verified Neon
-   production branch, then verify persisted aggregates and errors.
-4. Replace files in the existing unpacked
+1. Replace files in the existing unpacked
    extension directory with `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the
    extension and run the Preview smoke in
    `specs/002-extension-web-sync-reconciliation/08-release.md`.
-5. Confirm extension discovery on the stable develop alias, click
+2. Confirm extension discovery on the stable develop alias, click
    **Actualiser les posts**, and compare the extension count with the Preview
    library count.
-6. After Production promotion, reload the exact 4.2.6 package and confirm a
+3. Reload the exact 4.2.6 package against Production and confirm a
    refresh imports DB-missing posts, terminates, and a second refresh reports
    zero only when the DB and extension index are aligned.
-7. Keep Phase H blocked until Phase E operational activation is separately
+4. Keep Phase H blocked until Phase E VPS operational activation is separately
    approved.
-8. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
+5. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
    analysis outside this correction.
