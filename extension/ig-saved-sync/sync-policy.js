@@ -3,9 +3,53 @@ function normalizedIdentifier(value) {
   return String(value);
 }
 
+function normalizedPostIdentity(value) {
+  if (value && typeof value === "object") {
+    return {
+      pk: normalizedIdentifier(value.pk ?? value.externalId),
+      code: normalizedIdentifier(value.code ?? value.postCode),
+    };
+  }
+  return { pk: normalizedIdentifier(value), code: null };
+}
+
 function postIdentifiers(post) {
-  return [normalizedIdentifier(post?.pk), normalizedIdentifier(post?.code)]
-    .filter(Boolean);
+  const identity = normalizedPostIdentity(post);
+  return [identity.pk, identity.code].filter(Boolean);
+}
+
+export function canonicalizePostIdentities(...groups) {
+  const records = [];
+  const byPk = new Map();
+  const byCode = new Map();
+
+  for (const value of groups.flat()) {
+    const identity = normalizedPostIdentity(value);
+    if (!identity.pk && !identity.code) continue;
+    const matches = new Set([
+      identity.pk ? byPk.get(identity.pk) : null,
+      identity.code ? byCode.get(identity.code) : null,
+    ].filter(Boolean));
+    let record = [...matches].sort((left, right) => left.index - right.index)[0];
+    if (!record) {
+      record = { ...identity, index: records.length, active: true };
+      records.push(record);
+    }
+    for (const duplicate of matches) {
+      if (duplicate === record) continue;
+      record.pk ??= duplicate.pk;
+      record.code ??= duplicate.code;
+      duplicate.active = false;
+    }
+    record.pk ??= identity.pk;
+    record.code ??= identity.code;
+    if (record.pk) byPk.set(record.pk, record);
+    if (record.code) byCode.set(record.code, record);
+  }
+
+  return records
+    .filter((record) => record.active)
+    .map(({ pk, code }) => ({ pk: pk ?? null, code: code ?? null }));
 }
 
 export function isFeedPageTerminal({
@@ -19,17 +63,17 @@ export function isFeedPageTerminal({
 }
 
 export function buildWebsiteReconciliationTargets(
-  extensionArchiveIds,
-  websiteKnownExternalIds,
+  extensionArchivePosts,
+  websiteKnownPosts,
 ) {
   const websiteKnown = new Set(
-    (websiteKnownExternalIds ?? []).map(normalizedIdentifier).filter(Boolean),
+    canonicalizePostIdentities(websiteKnownPosts ?? [])
+      .flatMap(postIdentifiers),
   );
-  return [...new Set(
-    (extensionArchiveIds ?? [])
-      .map(normalizedIdentifier)
-      .filter((identifier) => identifier && !websiteKnown.has(identifier)),
-  )];
+  return canonicalizePostIdentities(extensionArchivePosts ?? [])
+    .filter((post) => !postIdentifiers(post).some((identifier) => websiteKnown.has(identifier)))
+    .map((post) => post.pk ?? post.code)
+    .filter(Boolean);
 }
 
 export function reconciliationCompletionError(remainingTargetIds) {
@@ -56,15 +100,16 @@ export function selectWebsiteReconciliationPage(
   for (const post of posts ?? []) {
     const identifiers = postIdentifiers(post);
     const primaryId = identifiers[0] ?? null;
-    const isPendingTarget = primaryId
-      ? remainingTargets.has(primaryId)
-      : false;
+    const matchedTargetIds = identifiers.filter((identifier) =>
+      remainingTargets.has(identifier)
+    );
+    const isPendingTarget = matchedTargetIds.length > 0;
 
     const knownByWebsite = identifiers.some((identifier) =>
       websiteKnownIdentifiers.has(identifier)
     );
     if (knownByWebsite) {
-      if (primaryId) remainingTargets.delete(primaryId);
+      for (const identifier of matchedTargetIds) remainingTargets.delete(identifier);
       if (remainingTargets.size === 0) {
         stopEarly = true;
         break;
@@ -73,8 +118,8 @@ export function selectWebsiteReconciliationPage(
     }
     fresh.push(post);
     if (isPendingTarget && primaryId) {
-      remainingTargets.delete(primaryId);
-      pendingUploadTargetIds.push(primaryId);
+      for (const identifier of matchedTargetIds) remainingTargets.delete(identifier);
+      pendingUploadTargetIds.push(matchedTargetIds[0] ?? primaryId);
     }
   }
 

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildWebsiteReconciliationTargets,
+  canonicalizePostIdentities,
   isFeedPageTerminal,
   reconciliationCompletionError,
   selectLocalIncrementalPage,
@@ -32,6 +33,33 @@ describe("extension-to-web reconciliation policy", () => {
     expect(result.remainingTargetIds).toEqual([]);
     expect(result.pendingUploadTargetIds).toEqual(["missing-middle"]);
     expect(result.stopEarly).toBe(true);
+  });
+
+  it("aligns a fresh or locally advanced extension index to the DB snapshot without duplicates", () => {
+    const dbSnapshot = canonicalizePostIdentities([], [
+      { pk: "db-pk", code: "DB_CODE" },
+      { code: "LEGACY_DB_CODE" },
+    ]);
+    const extensionAfterLocalExport = canonicalizePostIdentities(dbSnapshot, [
+      { pk: "local-pk", code: "LOCAL_CODE" },
+      { code: "LOCAL_CODE" },
+    ]);
+
+    expect(dbSnapshot).toEqual([
+      { pk: "db-pk", code: "DB_CODE" },
+      { pk: null, code: "LEGACY_DB_CODE" },
+    ]);
+    expect(extensionAfterLocalExport).toHaveLength(3);
+    expect(buildWebsiteReconciliationTargets(
+      extensionAfterLocalExport,
+      dbSnapshot,
+    )).toEqual(["local-pk"]);
+
+    const alignedAfterDbAcceptsLocalPost = canonicalizePostIdentities(
+      dbSnapshot,
+      [{ pk: "local-pk", code: "LOCAL_CODE" }],
+    );
+    expect(alignedAfterDbAcceptsLocalPost).toHaveLength(3);
   });
 
   it("keeps the healthy web path and local incremental path bounded", () => {
@@ -140,8 +168,8 @@ describe("extension-to-web reconciliation policy", () => {
       "http://localhost:3000",
     ];
 
-    expect(manifest.version).toBe("4.2.5");
-    expect(readme).toContain("Insta Saved Sync 4.2.5");
+    expect(manifest.version).toBe("4.2.6");
+    expect(readme).toContain("Insta Saved Sync 4.2.6");
     for (const origin of allowedOrigins) {
       expect(manifest.host_permissions).toContain(`${origin}/*`);
       expect(manifest.content_scripts?.[0]?.matches).toContain(`${origin}/*`);
@@ -151,6 +179,7 @@ describe("extension-to-web reconciliation policy", () => {
     expect(JSON.stringify(manifest)).not.toContain("*.vercel.app");
     expect(contentBridge).not.toContain("*.vercel.app");
     expect(background).not.toContain("*.vercel.app");
+    expect(background).toContain("progressVersion: task.progressVersion");
     expect(refreshButton).not.toContain("Insta Saved Sync 4.2.1");
     expect(refreshButton).toContain("dernière version d’Insta Saved Sync");
   });
