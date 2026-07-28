@@ -7,6 +7,7 @@ import type { ResolvedPlaceCandidate } from "@/server/places/resolvers/types";
 function candidate(overrides: Partial<PlaceCandidate> = {}): PlaceCandidate {
   return {
     name: "Nobu Dubai",
+    address: null,
     city: "Dubai",
     region: null,
     country: "United Arab Emirates",
@@ -32,6 +33,7 @@ function resolved(overrides: Partial<ResolvedPlaceCandidate> = {}): ResolvedPlac
     longitude: 55.1,
     providerResultType: "amenity",
     providerRank: 0.9,
+    providerMatchType: "full_match",
     attribution: "© Geoapify",
     ...overrides,
   };
@@ -46,7 +48,7 @@ describe("scoreResolvedCandidate", () => {
     const result = scoreResolvedCandidate(input({}, {}));
     expect(result.precision).toBe("EXACT");
     expect(result.approximationRadiusMeters).toBeNull();
-    expect(result.confidence).toBeGreaterThanOrEqual(0.9);
+    expect(result.confidence).toBe(0.9375);
   });
 
   it("classifies an incomplete but specific match as PROBABLE with no radius", () => {
@@ -69,6 +71,124 @@ describe("scoreResolvedCandidate", () => {
         { displayName: "Kyoto", city: "Kyoto", country: "Japan", countryCode: "JP", providerResultType: "city" },
       ),
     );
+    expect(result.precision).toBe("APPROXIMATE");
+    expect(result.approximationRadiusMeters).toBe(10_000);
+  });
+
+  it("classifies a provider-verified caption address as EXACT even when the handle is not the provider name", () => {
+    const result = scoreResolvedCandidate(
+      input(
+        {
+          name: "@airelleschateaudeversailles",
+          address: "12 rue de l'Independance Americaine, 78000 Versailles",
+          city: "Versailles",
+          region: "Ile-de-France",
+          country: "France",
+          confidence: 0.87,
+        },
+        {
+          displayName: "Airelles Chateau de Versailles, Le Grand Controle",
+          address: "12 Rue de l'Independance Americaine, 78000 Versailles, France",
+          city: "Versailles",
+          region: "Ile-de-France",
+          country: "France",
+          countryCode: "FR",
+          providerResultType: "building",
+          providerRank: 0.96,
+          providerMatchType: "full_match",
+        },
+      ),
+    );
+
+    expect(result.precision).toBe("EXACT");
+    expect(result.approximationRadiusMeters).toBeNull();
+    expect(result.confidence).toBe(0.96);
+    expect(result.reasons).toEqual(expect.arrayContaining(["address_match", "address_provider_verified", "exact_specific_match"]));
+  });
+
+  it("blocks address-authorized EXACT when the house number contradicts", () => {
+    const result = scoreResolvedCandidate(
+      input(
+        {
+          name: "@airelleschateaudeversailles",
+          address: "12 Rue Royale, 1000 Bruxelles",
+          city: "Bruxelles",
+          region: "Bruxelles-Capitale",
+          country: "Belgique",
+          confidence: 0.95,
+        },
+        {
+          displayName: "Un autre batiment",
+          address: "14 Rue Royale, 1000 Bruxelles, Belgique",
+          city: "Bruxelles",
+          region: "Bruxelles-Capitale",
+          country: "Belgique",
+          providerResultType: "building",
+          providerRank: 0.99,
+          providerMatchType: "full_match",
+        },
+      ),
+    );
+
+    expect(result.precision).not.toBe("EXACT");
+    expect(result.reasons).toContain("address_contradiction");
+  });
+
+  it.each([
+    ["weak provider rank", { providerRank: 0.89, providerMatchType: "full_match" }],
+    ["street-only provider match", { providerRank: 0.99, providerMatchType: "match_by_street" }],
+    ["missing provider match type", { providerRank: 0.99, providerMatchType: null }],
+  ])("does not authorize address-based EXACT for %s", (_label, provider) => {
+    const result = scoreResolvedCandidate(
+      input(
+        {
+          name: "@unrelated_handle",
+          address: "12 rue de l'Independance Americaine, 78000 Versailles",
+          city: "Versailles",
+          region: null,
+          country: "France",
+          confidence: 0.87,
+        },
+        {
+          displayName: "Airelles Chateau de Versailles",
+          address: "12 Rue de l'Independance Americaine, 78000 Versailles, France",
+          city: "Versailles",
+          region: "Ile-de-France",
+          country: "France",
+          providerResultType: "building",
+          ...provider,
+        },
+      ),
+    );
+
+    expect(result.precision).not.toBe("EXACT");
+    expect(result.reasons).not.toContain("address_provider_verified");
+  });
+
+  it("keeps an address candidate approximate when Geoapify resolves only the city", () => {
+    const result = scoreResolvedCandidate(
+      input(
+        {
+          name: "@airelleschateaudeversailles",
+          address: "12 rue de l'Independance Americaine, 78000 Versailles",
+          city: "Versailles",
+          region: null,
+          country: "France",
+          confidence: 0.87,
+        },
+        {
+          displayName: "Versailles",
+          address: "Versailles, France",
+          city: "Versailles",
+          region: "Ile-de-France",
+          country: "France",
+          providerResultType: "city",
+          providerRank: 0.25,
+          providerMatchType: "match_by_city_or_disrict",
+        },
+      ),
+    );
+
     expect(result.precision).toBe("APPROXIMATE");
     expect(result.approximationRadiusMeters).toBe(10_000);
   });

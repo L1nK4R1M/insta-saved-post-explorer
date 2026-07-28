@@ -3,7 +3,7 @@
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `main`  
-Reference production base: `main` at `44b0da02fe89396ac43fe6b29ff4a13b247674f1`
+Reference production base: `main` at `bebf6801eecef94001c39887c9a7dd1abda48f5e`
 Reference implementation: `develop` at `67e3c1ba38cf350533c9a7ba27059c3fc368d727`
 
 ## 1. Purpose and authority
@@ -39,6 +39,23 @@ Stop and document any conflict between this handoff, an authoritative contract a
 
 ## 3. Current execution pointer
 
+### Places address contract awaiting develop review (28 July 2026)
+
+- active branch: `codex/places-address-contract`, based on current Production
+  `bebf680` so PR targeting `develop` also reconciles its seven already approved
+  Production commits and preserves the 10 km radius correction;
+- VibeSpec: `specs/005-places-address-contract`, Critical;
+- strict candidates now require bounded `address: string | null`; export schema
+  is v3 and default analysis identity is `places-v2`;
+- Geoapify receives a free-form address query when available and returns bounded
+  rank/match-type evidence to deterministic scoring;
+- address-authorized `EXACT` requires matching house number, specific result,
+  provider rank at least 0.90, full/building match type, and no contradiction;
+- no Prisma migration, dependency, Production deployment, Neon write, candidate
+  import, or existing place mutation is included;
+- Production remains unchanged until Preview verification and explicit owner
+  approval.
+
 ### Places usability correction released (28 July 2026)
 
 - PR #49 merged on `main` at `8dbfd46`; CI #149 passed and Vercel Production
@@ -56,8 +73,8 @@ Stop and document any conflict between this handoff, an authoritative contract a
   the initial Vercel runtime-error window all pass.
 
 ```text
-Active review branch: codex/places-analysis-json-export
-Reference: develop at f74302b3bba6bf9bd29ab66d6ef8fbc32d5479b3
+Active review branch: codex/places-address-contract
+Reference: main at bebf680; PR target develop at 67e3c1b
 Mode: critical
 VibeSpec convergence: PASS
 
@@ -287,17 +304,25 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Replace files in the existing unpacked
+1. Review and merge `codex/places-address-contract` to `develop`; wait for CI and
+   the stable Preview.
+2. Generate a v3 single-post export for
+   `cmrfhnykb000hjs04ndgb3avh`, produce candidate JSONL with the required
+   `address`, and run the importer without `--commit`.
+3. Confirm the real provider result is a strongly verified specific address and
+   audit duplicate/stale automatic links before authorizing any develop write.
+4. Keep Production code and data unchanged until explicit owner approval.
+5. Replace files in the existing unpacked
    extension directory with `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the
    extension and run the Preview smoke in
    `specs/002-extension-web-sync-reconciliation/08-release.md`.
-2. Confirm extension discovery on the stable develop alias, click
+6. Confirm extension discovery on the stable develop alias, click
    **Actualiser les posts**, and compare the extension count with the Preview
    library count.
-3. Reload the exact 4.2.6 package against Production and confirm a
+7. Reload the exact 4.2.6 package against Production and confirm a
    refresh imports DB-missing posts, terminates, and a second refresh reports
    zero only when the DB and extension index are aligned.
-4. Keep Phase H blocked until Phase E VPS operational activation is separately
+8. Keep Phase H blocked until Phase E VPS operational activation is separately
    approved.
-5. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
+9. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
    analysis outside this correction.

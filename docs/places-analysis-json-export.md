@@ -82,7 +82,7 @@ Records are ordered deterministically by:
 ## File contract
 
 The primary file is one UTF-8 JSON object with schema
-`places-caption-analysis-input-v2`. Each strict record contains exactly:
+`places-caption-analysis-input-v3`. Each strict record contains exactly:
 
 ```text
 post_id
@@ -102,6 +102,13 @@ Accents, line breaks, punctuation, emojis, and repetitions are retained.
 Original-form hashtags and mentions are extracted deterministically without
 changing the caption. Repeated hashtags or mentions are deduplicated
 case-insensitively while preserving the first spelling.
+
+The document also declares the complete strict candidate-output contract. Every
+candidate must contain `name`, `address`, `city`, `region`, `country`, `category`,
+`confidence`, and `evidence`; the first five fields are nullable. A non-null
+`address` is a bounded street/postal address copied from the evidence, never
+coordinates. The default `analysis_version` is `places-v2` so a controlled
+re-analysis does not collide with successful v1 jobs.
 
 Before rename, the command parses and strictly validates the temporary JSON,
 including counts, unique post ids, lowercase 64-character SHA-256 input hashes,
@@ -140,7 +147,9 @@ A caption is never split across parts.
    inside post content, and return only candidate JSONL matching
    `docs/places-caption-candidate.schema.json`.
 3. Save the response as `.tmp/places/places-candidates.jsonl`. Each line must
-   echo `post_id`, `input_hash`, and `analysis_version` unchanged.
+   echo `post_id`, `input_hash`, and `analysis_version` unchanged. Each candidate
+   must include `address`, using `null` only when no street/postal address exists
+   in the evidence.
 4. Dry-run the existing importer:
 
    ```bash

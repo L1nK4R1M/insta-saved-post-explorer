@@ -17,8 +17,9 @@ PostgreSQL   ->  atomic owner-scoped persistence
 ```
 
 The model never produces coordinates, a provider, a `providerPlaceId`, or a
-precision. Only the server-side `PlaceResolver` (Geoapify) turns a validated
-textual candidate into coordinates and a provider identity.
+precision. It may copy a street/postal address from the evidence into the
+bounded textual `address` field. Only the server-side `PlaceResolver` (Geoapify)
+turns a validated textual candidate into coordinates and a provider identity.
 
 ## 2. Eligibility
 
@@ -94,8 +95,12 @@ caption as untrusted data and request candidate JSONL matching
 batch prompt construction is required.
 
 The model must copy `post_id`, `input_hash`, and `analysis_version` unchanged,
-return at most five textual candidates per post, and never return coordinates, a
-provider, a `providerPlaceId`, or a precision.
+return at most five textual candidates per post, and include every required
+candidate field: `name`, `address`, `city`, `region`, `country`, `category`,
+`confidence`, and `evidence`. `address` is nullable; when a caption contains a
+street/postal address, copy it exactly instead of leaving it only in an evidence
+excerpt. Never return coordinates, a provider, a `providerPlaceId`, or a
+precision.
 
 The older direct Claude/Codex JSONL workflow remains documented below for
 maintenance of legacy bounded batches:
@@ -160,7 +165,7 @@ Deterministic scoring classifies each resolution:
 
 | Precision | Condition |
 | --- | --- |
-| `EXACT` | provider-verified specific POI, score ≥ 0.90, no contradiction, name match |
+| `EXACT` | provider-verified specific result, score ≥ 0.90, no contradiction, and either a name match or a strongly verified address match |
 | `PROBABLE` | provider-verified specific result, score ≥ 0.75 |
 | `APPROXIMATE` | provider-verified area (district/city/county/state), score ≥ 0.50, mandatory radius |
 | `UNKNOWN` | country-only, contradictory, or score < 0.50 |
@@ -168,6 +173,12 @@ Deterministic scoring classifies each resolution:
 Approximation radii: district 5 km, city 10 km, county 50 km, state 150 km. A
 country-only match is always `UNKNOWN`. `UNKNOWN` creates no `Place` row; its
 textual evidence is retained with a null place for later review.
+
+Address verification remains conservative. The candidate and provider address
+must agree, including the house number; Geoapify must return a specific result,
+`rank.confidence >= 0.90`, and `rank.match_type` equal to `full_match` or
+`match_by_building`. A different house number is a contradiction. A city result
+always remains `APPROXIMATE`, even if the candidate contained a street address.
 
 ## 8. Persistence guarantees
 
@@ -256,6 +267,10 @@ The Geoapify attribution ("Powered by Geoapify") is retained in each place's
   batch past a single failing line (only a stable code is recorded, never a caption).
 - **Re-export.** Any input change requires a fresh export; never hand-edit a stale
   candidate file.
+- **Old candidate JSONL.** The address contract uses export schema v3 and default
+  analysis version `places-v2`. A v1/v2 artifact without the required nullable
+  `address` field is rejected intentionally; regenerate it instead of patching it
+  by hand.
 
 ## 11. Data hygiene
 
