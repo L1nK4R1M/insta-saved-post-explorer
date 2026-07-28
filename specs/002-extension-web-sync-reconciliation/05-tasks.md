@@ -63,6 +63,16 @@
   - Done: The existing authenticated job route settles the UI once; stale
     dual-channel communication becomes an actionable error after 90 seconds.
 
+- [x] TASK-007: Allow the stable develop Preview through every extension origin gate
+  - Requirements: FR-007, FR-010, NFR-003, NFR-007, BR-007
+  - Dependencies: TASK-006
+  - Files: extension manifest, content bridge, background worker, README,
+    operator docs, focused policy test and VibeSpec evidence
+  - Tests: AT-006, AT-009
+  - Evidence: EV-010, EV-011
+  - Done: RED/GREEN, all repository gates, exact-origin review and flat 4.2.5
+    package verification pass; live Preview smoke remains a rollout action.
+
 ## Dependency graph
 
-TASK-001 → TASK-002 → TASK-003 → TASK-004 → TASK-005
+TASK-001 → TASK-002 → TASK-003 → TASK-004 → TASK-005 → TASK-006 → TASK-007

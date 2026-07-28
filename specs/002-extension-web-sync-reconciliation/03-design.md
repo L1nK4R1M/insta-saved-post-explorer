@@ -6,8 +6,8 @@ A pure MV3-compatible policy module separates local archive evidence from
 website ownership, computes archive-only targets, selects safe page rows and
 commits target progress only after the full selected page succeeds.
 
-Requirement mapping: FR-001 through FR-009 are implemented through this flow.
-NFR-001 through NFR-006 govern its bounded execution, durability,
+Requirement mapping: FR-001 through FR-010 are implemented through this flow.
+NFR-001 through NFR-007 govern its bounded execution, durability,
 compatibility, progress and verification.
 
 ## Repository impact map
@@ -16,7 +16,9 @@ compatibility, progress and verification.
 |---|---|---|---|
 | `sync-policy.js` | New pure policy seam | Targets, page selection, completion error, page commit helper | Low |
 | `background.js` | MV3 scan/upload state machine | Use web-only known set and durable target state | Medium |
-| Manifest/README | Package identity/guidance | Version 4.2.4 | Low |
+| Manifest/README | Package identity, exact origins and guidance | Version 4.2.5 plus stable develop Preview | Medium |
+| `content-bridge.js` | Page-message trust boundary | Add the exact develop Preview origin | Medium |
+| `background.js` | Sync API trust boundary | Add the same exact develop Preview origin | Medium |
 | Refresh button/docs | Recovery/operator copy and terminal fallback | Poll the existing owner-scoped job after session creation | Medium |
 
 ## Architecture and dependency flow
@@ -28,6 +30,8 @@ The policy has no Chrome, network or database dependency. The background worker
 owns IndexedDB state and side effects. Server routes remain unchanged. The web
 button also polls the existing authenticated job route until that job becomes
 terminal, so a lost content-script message cannot leave the UI running forever.
+Manifest injection, page-message validation and API-origin validation use the
+same exact Preview origin. The extension never accepts `*.vercel.app`.
 
 ## Runtime flows
 
@@ -96,7 +100,8 @@ Post/media validation remains server-side.
 | TH-001 | Crafted archive ID claims website ownership | IndexedDB | Omission | Archive never enters ownership set | AT-001 |
 | TH-002 | Restart forgets failed target | MV3 lifecycle | False success | Durable pre-page targets | AT-005 |
 | TH-003 | Replay duplicates posts | Retry | Duplicate data | Existing owner/canonical idempotency | Neighbor/full tests |
-| TH-004 | Wider R2/API access | Extension update | Security regression | No permission/route/token changes | Diff review |
+| TH-004 | Arbitrary Vercel deployment obtains the sync bridge | Manifest/message/API origin gates | Job token misuse | Allow one exact develop Preview origin at all three gates; forbid wildcard | AT-009 |
+| TH-005 | Preview writes production data | Vercel environment configuration | Production contamination | Environment-scoped `DATABASE_URL` values and separate Neon branches; extension does not choose DB | Configuration review |
 
 ## AI and tool-safety controls
 
@@ -118,13 +123,16 @@ media URL or object credential is added to telemetry.
 
 No migration. Optional task fields are backward-compatible. The corrected
 extension consumes the existing production payload; older extensions continue
-their old behavior until replaced.
+their old behavior until replaced. Version 4.2.5 additionally injects into the
+stable develop Preview while retaining production and localhost.
 
 ## Rollout
 
 Review and merge the code, deploy the web copy only with authorization, then
-replace files in the existing extension folder with 4.2.4 and reload it. Run one
+replace files in the existing extension folder with 4.2.5 and reload it. Run one
 controlled production refresh and compare extension/web counts.
+For Preview validation, use 4.2.5 and the stable develop alias after the source
+is merged/deployed there.
 
 ## Rollback
 

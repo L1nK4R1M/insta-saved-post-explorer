@@ -16,7 +16,8 @@ owner-scoped identifiers. A successful result cannot hide a known archive gap.
 - Import extension-only saved posts through the existing secure sync path.
 - Preserve fast incremental behavior when no gap exists.
 - Preserve local export behavior, replay safety and MV3 restart safety.
-- Provide a loadable version 4.2.4 package and accurate operator guidance.
+- Provide a loadable version 4.2.5 package and accurate operator guidance.
+- Support the stable develop Preview through the same extension sync flow.
 
 ## Non-goals
 
@@ -51,13 +52,17 @@ is widened.
   unresolved count instead of reporting success.
 - FR-006: Target resolution commits only after every selected post on the page
   uploads/imports successfully.
-- FR-007: The corrected extension is version 4.2.4 and web recovery copy asks
+- FR-007: The corrected extension is version 4.2.5 and web recovery copy asks
   for the latest extension without a stale hard-coded version.
 - FR-008: A page whose next Instagram cursor equals the cursor just requested
   is terminal, so the task cannot poll the same final page forever.
 - FR-009: After creating a sync session, the web refresh independently observes
   its owner-scoped server job and reaches the same terminal success or failure
   state when the extension-to-page terminal message is lost.
+- FR-010: The exact stable develop Preview origin
+  `https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app`
+  is present in manifest injection/host permissions, content-bridge message
+  validation and background API-origin validation.
 
 ## Non-functional requirements
 
@@ -65,8 +70,9 @@ is widened.
   post, preserving the current bounded incremental request path.
 - NFR-002: Reconciliation targets persist in the durable MV3 task and survive a
   worker restart or a failed later upload without premature removal.
-- NFR-003: No Prisma schema, migration, API route, secret, R2 permission,
-  dependency or host permission changes.
+- NFR-003: No Prisma schema, migration, API route, secret, R2 permission or
+  dependency changes. The only permission expansion is the exact develop
+  Preview origin.
 - NFR-004: Focused policy tests, neighboring sync tests, syntax checks, lint,
   typecheck, full tests and production build all pass.
 - NFR-005: Pagination must always make forward progress or transition to a
@@ -74,6 +80,8 @@ is widened.
 - NFR-006: Server polling is same-origin, stops after a terminal result or
   component cleanup, tolerates transient read failures and settles each refresh
   at most once.
+- NFR-007: No wildcard Vercel origin is trusted; production and localhost
+  behavior remain unchanged.
 
 ## Business rules and invariants
 
@@ -88,6 +96,8 @@ is widened.
   residual-target check still prevents false success.
 - BR-006: The owner-scoped `SyncJob` is the durable terminal-state fallback;
   extension messages remain the lower-latency progress channel.
+- BR-007: Preview uses its environment-scoped `DATABASE_URL` and separate Neon
+  develop branch; the extension origin change never selects a database itself.
 
 ## Failure and edge-case behavior
 
@@ -100,6 +110,7 @@ is widened.
 | Instagram repeats the requested cursor | Stop after the processed page | Success or residual-target error | Automatic |
 | Terminal extension message is lost | Read the authenticated server job | Spinner becomes success or error | Automatic |
 | Multiple extension installations | Highest discovered version is tried first | Corrected extension wins | Remove/reload stale copy |
+| Untrusted or dynamic Vercel deployment | Reject discovery/start messages | Extension remains unavailable | Add a reviewed exact origin only if required |
 
 ## Data and privacy requirements
 

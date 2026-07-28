@@ -1,6 +1,7 @@
 const CHANNEL = "INSTA_POST_EXPLORER_SYNC_V2";
 const ALLOWED_ORIGINS = new Set([
   "https://insta-saved-post-explorer.vercel.app",
+  "https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app",
   "http://localhost:3000",
 ]);
 

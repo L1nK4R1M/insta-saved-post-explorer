@@ -22,6 +22,12 @@ running refresh. The final extension-to-page state message can be lost as the
 content bridge stops, while the existing server job remains available as a
 durable owner-scoped fallback.
 
+The develop Preview then exposed a separate environment boundary: the extension
+only injected and accepted sync messages on production and localhost. The owner
+confirmed that Vercel Preview and Production use separate `DATABASE_URL`
+variables backed by separate Neon branches. The stable develop Preview must be
+allowed explicitly without trusting arbitrary `*.vercel.app` deployments.
+
 ## Desired outcome
 
 A web refresh imports extension-known posts missing from the owner-scoped web
@@ -38,6 +44,8 @@ reports success while a known local gap remains unresolved.
 | Production symptom | Owner report, 2026-07-28 | Exact acceptance scenario |
 | Repeated cursor has no terminal guard | `stepOnce()` pagination before 4.2.4 | Deterministic infinite final-page loop |
 | Completed extension task with running web button | Active Chrome extension IndexedDB and loaded 4.2.4 worker | Demonstrates a lost terminal bridge message |
+| Develop Preview is absent from all extension origin gates | `manifest.json`, `content-bridge.js`, `background.js` | Explains why Preview cannot discover or start the extension |
+| Production and Preview use separate Neon branches | Direct Neon inspection plus owner-confirmed environment-scoped `DATABASE_URL` values | Allows bounded Preview testing without sharing the production database |
 
 ## Brownfield baseline
 
@@ -53,6 +61,7 @@ stops on the local archive; web reconciliation must not.
 |---|---|---|---|---|
 | ASM-001 | Archive IDs are Instagram post primary keys | `finalizeArchive()` records row `pk` values | Targets could be over-reported | Compare with web external IDs and resolve by URL code during scan |
 | ASM-002 | Corrected extension can use the current production sync payload | Payload fields are unchanged | Coordinated deploy would be required | Preserve `knownExternalIds` and `knownPostCodes` |
+| ASM-003 | The stable develop deployment remains `https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app` | Existing Vercel develop alias | A renamed alias would remain blocked | Keep one exact allowlisted origin and update deliberately if the alias changes |
 
 ## Open questions
 
@@ -75,4 +84,5 @@ Selected mode: critical
 
 Critical workflow is required because the defect crosses a production sync
 contract and can silently omit user data. The implementation remains a bounded
-maintenance slice with no schema, permission or deployment change.
+maintenance slice with no schema, authentication or deployment change. It
+deliberately widens the extension host permission by one exact trusted origin.
