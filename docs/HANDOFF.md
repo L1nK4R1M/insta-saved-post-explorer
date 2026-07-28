@@ -2,218 +2,270 @@
 
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
-Reference branch: `main`  
-Reference production base: `55320ffb6199eaf34155c10cd38c24fb46edd0b0`
+Reference branch: `codex/production-places-promotion`  
+Reference production base: `main` at `64f14cbd64d137dde7842c91df804c5b2b7f6cfd`  
+Reference implementation: `develop` at `67e3c1ba38cf350533c9a7ba27059c3fc368d727`
 
-## 1. Purpose
+## 1. Purpose and authority
 
-This file describes the current operational state for the next agent session. It does not replace the architecture, product contracts, or phase gates.
+This file records the current operational state for the next agent session. It does not replace product or architecture contracts.
 
 Authority order:
 
 1. `../AGENTS.md` for global rules and prohibitions;
-2. this file for the current active phase and handoff state;
-3. `CODEX_IMPLEMENTATION_ORDER.md` for phase order, per-phase scope, and dependencies;
-4. the implementation brief and reviewed design for the active phase;
-5. the code and existing repository conventions.
+2. this file for the active phase and verified state;
+3. `CODEX_IMPLEMENTATION_ORDER.md` for phase dependencies and exit gates;
+4. the reviewed design and implementation brief for the active phase;
+5. the code on the latest `develop`.
 
-If this handoff conflicts with an authoritative contract or with the code observed on the latest `develop`, stop and document the conflict before editing.
+Stop and document any conflict between this handoff, an authoritative contract and the current code before editing.
 
-## 2. Completed Work
+## 2. Completed work
 
 | Phase | Outcome |
 | --- | --- |
-| 0 — API and Places audit | Documentation merged (PR #15). Architecture locked: one app, one PostgreSQL, one R2, one global worker, one global MCP; Places eligibility from `Post.mainTheme` (`Voyages`, `Restaurant`) only, no `Lieux` collection dependency. |
-| A — Library filter consistency | Merged into `develop` (PR #18, squash `69ea0da`). Shared predicates `libraryPostWhere()` and `relevanceFilter()` in `src/server/library.ts`; author, year, and collection now apply to every list, count, and random path. Two latent relevance-SQL type-binding defects fixed. 16 PostgreSQL regressions added. |
-| B — Places theme eligibility | Merged into `develop` (PR #19, squash `2323e0d`). `PLACES_ELIGIBLE_THEMES` + `isPlacesEligibleTheme()` in `src/lib/places/eligibility.ts`, reusing `foldForSearch()`; 8 unit tests. |
-| E2e suite re-green | Merged into `develop` (PR #21, squash `1b5fa16`, closes issue #20). Fixed the CSS ribbon-overflow regression and realigned the library/toolbar e2e specs. `develop` browser tests are green. |
-| C — R2 media identity and worker isolation | Design merged (PR #23). Implementation merged (PR #24, squash `0870d69`): authoritative media identity, restricted `ipe_worker_reader`, migration, backfill and PostgreSQL tests. |
-| D — External API V1 | Merged into `develop` (PR #26, squash `9e57f93`). Read-only Bearer SHA-256 authentication, stable errors, six thin `/api/v1` routes, preflight validation, documentation and tests. Historical `/api/*` routes unchanged. |
+| 0 — API and Places audit | PR #15. Architecture locked to one app, one PostgreSQL project, one R2 account, one global worker and one global MCP. Places eligibility comes only from `Post.mainTheme`. |
+| A — Library filter consistency | PR #18, squash `69ea0da`. Shared predicates and PostgreSQL regressions. |
+| B — Places theme eligibility | PR #19, squash `2323e0d`. Canonical Places eligibility. |
+| C — R2 media identity and worker isolation | PR #24, squash `0870d69`. Authoritative R2 identity, owner backfill and restricted worker role. |
+| D — External API V1 | PR #26, squash `9e57f93`. Read-only Bearer API and stable errors. |
+| F1 — Places schema and domain contracts | PR #29, squash `8bf8523`. Places schema, SQL invariants, owner-scoped inputs and idempotent jobs. |
+| F2 — Geoapify and caption resolution | PR #30, squash `7cc05e2`; hardened by PR #32, squash `216b975`. Deterministic resolver, JSONL workflow, retries, quiet idempotence. |
+| F3 — Read API, statistics and review | PR #31, squash `15356e9`. Read-only Places routes, statistics, durable review decisions and audit evidence. |
+| F — Places metadata-first domain | COMPLETE. Exit gate accepted after successful real local validation with idempotent re-import, recovered transient errors and correct `UNKNOWN` handling. |
+| G — Places 2D UI and contextual navigation | PR #34, squash `2bd2098`. `/places`, Leaflet clustering, Geoapify raster tiles, synchronized list, filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. |
+| I design — Places 3D globe | PR #35, squash `3fef818`. ADR `ACCEPTED`, six decisions closed, T0 satisfied. |
+| I implementation — Places 3D globe | PR #36, squash `08be9f0`. T1–T10 merged after two review rounds. WebGL-gated lazy loading, risk-based test consolidation, local Natural Earth texture, shared 2D/3D state and documented performance evidence. |
 
-## 3. Active Phase
-
-```text
-No implementation phase is active.
-Phases 0, A, B, C, D are merged and develop CI is green.
-Next executable phase: F — Places metadata-first domain.
-
-Production hotfix in review:
-- branch: codex/prod-sync-db-first;
-- base: main at 55320ffb6199eaf34155c10cd38c24fb46edd0b0;
-- scope: exact Preview origin plus DB-first extension/web synchronization 4.2.6;
-- no promotion of the unrelated Places or worker phases from develop;
-- no migration, dependency, authentication, R2 permission or new API route;
-- the existing session response adds paired `knownPosts` while preserving both
-  legacy arrays.
-
-Phase F has a proposed reviewed design and implementation plan:
-- docs/CODEX_PHASE_F_METADATA_FIRST_DESIGN.md
-- docs/superpowers/plans/2026-07-23-phase-f-metadata-first.md
-
-The former geographic-provider blocker is resolved by the proposed design:
-- Geoapify behind a replaceable PlaceResolver interface;
-- local caption-only JSONL workflow with Claude Code or Codex CLI;
-- no VPS, AI API key, or application-stored OAuth credential required for Phase F.
-
-Claude must start with F1 only: schema and domain contracts.
-Do not start F2 until F1 is reviewed and merged.
-Do not start F3 until F2 is reviewed and merged.
-
-Phase E is also unblocked but remains separate and depends on VPS decisions.
-Claude branch constraint: claude/insta-saved-post-explorer-continue-wli2my
-(restart from latest develop for every Phase F sub-PR).
-```
-
-Branch divergence note: `CODEX_IMPLEMENTATION_ORDER.md` recommends per-phase branch names. Claude sessions may be constrained to `claude/insta-saved-post-explorer-continue-wli2my`; if so, reset that branch from the latest merged `develop` before each F1/F2/F3 unit. Never continue from an unmerged or stale Phase F branch.
-
-### 3.1 Session Handoff
+## 3. Current execution pointer
 
 ```text
-Date and planning agent: 23 July 2026, Codex/ChatGPT
-Implementation owner: Claude Code
-Review owner: Codex
+Active review branch: codex/places-analysis-json-export
+Reference: develop at f74302b3bba6bf9bd29ab66d6ef8fbc32d5479b3
+Mode: critical
+VibeSpec convergence: PASS
 
-Phase active: none until the Phase F design PR is merged
-Latest develop before planning: 6f1e1be
+Production baseline:
+- PR #45 deployed the DB-first extension convergence to `main` at `64f14cb`;
+- the current promotion merges the complete reviewed `develop` history without
+  discarding either Production hotfix commit.
 
-Planning work completed:
-- verified Phases A–D are merged and Phase F dependencies are satisfied;
-- selected Geoapify as Phase F resolver behind PlaceResolver;
-- defined a no-VPS caption-only workflow using exported JSONL and external Claude/Codex analysis;
-- split Phase F into F1 schema/contracts, F2 resolver/persistence, F3 read API/stats/review;
-- documented migration, owner isolation, idempotency, precision, cursor and auth boundaries;
-- created a task-level TDD implementation plan.
+Verified correction:
+- PR #40 merged the extension/web refresh correction into develop at ba56573;
+- PR #42 merged exact develop Preview support into develop at 2b877ba;
+- the 4.2.6 follow-up makes the owner-scoped PostgreSQL snapshot authoritative
+  for new/imported identity and preserves the legacy session arrays;
+- extension archive and web ownership are separated;
+- archive-only posts become durable reconciliation targets;
+- a successful web sync aligns the extension archive to paired DB identities
+  plus rows accepted during the run, including after a fresh installation;
+- repeated Instagram cursors terminate;
+- the web button observes its owner-scoped /api/sync/jobs/{id};
+- the first terminal extension/server signal settles the UI once;
+- duplicate running messages do not reset the watchdog; 90 seconds without a
+  changed work checkpoint or durable job heartbeat becomes an actionable error;
+- extension 4.2.6 allows the exact stable develop Preview at all three origin
+  gates while preserving Production and localhost;
+- arbitrary `*.vercel.app` deployments remain blocked.
 
-Exact next action for Claude after this documentation is merged:
-1. reset Claude branch from latest develop;
-2. read AGENTS.md, this handoff, CODEX_PLACES_EXTENSION.md,
-   CODEX_PHASE_F_METADATA_FIRST_DESIGN.md and the Phase F plan;
-3. execute only Sub-PR F1;
-4. write failing PostgreSQL tests before the Prisma migration;
-5. open F1 PR and stop.
+Fresh gates:
+- focused DB/extension/UI/media tests: 13/13;
+- lint and typecheck: PASS;
+- full unit suite: 329 passed, 129 skipped;
+- production build: PASS, 32 pages;
+- VibeSpec validation: 0 errors, 0 warnings;
+- traceability: zero uncovered requirements;
+- flat extension ZIP SHA-256:
+  `E7EF63C70AC5054975A5B07C51BF6388EBC2048797719B6FE93008A237C5A48E`;
+- git diff --check: PASS.
 
-Exact Codex responsibility:
-- do not edit Claude's active branch;
-- review each F1/F2/F3 PR against the design;
-- inspect migration safety, owner isolation, idempotency, UNKNOWN semantics,
-  Geoapify secret handling, external read-only API boundary and tests;
-- approve or request concrete changes;
-- update this handoff/status only after merge evidence exists.
+No migration, dependency, authentication, R2 permission or new API route is
+included. The existing session response receives one additive `knownPosts`
+field. Controlled Chromium discovers unpacked 4.2.6 on Production; authenticated
+Preview and Instagram smoke plus Chrome Web Store publication remain operational
+actions.
+
+Phase F is CLOSED and COMPLETE.
+Phase G is CLOSED and COMPLETE.
+Phase I design is CLOSED and APPROVED (PR #35, squash 3fef818; ADR ACCEPTED).
+Phase I implementation is CLOSED and COMPLETE (PR #36, squash 08be9f0).
+
+CI #115 passed on reviewed head:
+7477ac3c8e7f567051d3eb86cdf2fd91ddcbf1dc
+
+Merge commit on develop:
+08be9f04df60c9d8e138242fc0d7b0504e0ba51e
+
+Performance validation:
+FPS_BUDGET_VALIDATED_ON_REAL_GPU — closed 25 July 2026. Measured on an NVIDIA
+GeForce RTX 5090 (ANGLE / Direct3D11): 240 fps and 276-326 ms first globe render
+at 100, 500 and 1000 places, desktop and mobile viewport. All D6 budgets met.
+No Phase I follow-up remains open.
 ```
 
-Open product question unrelated to Phase F: the `Découverte` button remains desktop-only and its mobile e2e test is skipped.
+### Places complete analysis JSON export
 
-## 4. Phase B Contract Summary
+The tool on `codex/places-analysis-json-export` is verified and ready for review.
+PR: `#46 — feat(places): export complete caption analysis JSON`.
+It adds `npm run places:export-analysis-json` over the existing Phase F
+caption-analysis workflow. It uses explicit develop/production database
+variables, performs reads only, validates one strict JSON document, and writes
+atomically below `.tmp`.
 
-The merged contract lives in `src/lib/places/eligibility.ts`:
+Fresh evidence:
 
-- `PLACES_ELIGIBLE_THEMES = ["Voyages", "Restaurant"]` is the single canonical constant;
-- `isPlacesEligibleTheme(mainTheme)` uses the shared `foldForSearch()` normalization;
-- `null`, empty, neighboring and compound themes are not eligible;
-- no collection, tag, slug, or Instagram provenance is ever consulted;
-- leaving an eligible theme blocks future automatic analyses but never silently deletes confirmed Places data.
+- focused exporter and neighboring Places contracts: 45 passed;
+- PostgreSQL caption workflow: 13 tests discovered but skipped without
+  `TEST_DATABASE_URL`;
+- full suite: 361 passed, 130 environment-bound skips;
+- Prisma generation, lint, typecheck, build, and `git diff --check`: PASS;
+- VibeSpec convergence: PASS;
+- production smoke: correctly stopped with
+  `TARGET_DATABASE_NOT_CONFIGURED`.
 
-Every future entry point must import this predicate.
+No production file exists yet. Configure `PLACES_PRODUCTION_DATABASE_URL` with
+the intended read-only SSL DSN before running the command; never infer production
+from the existing generic `DATABASE_URL`.
 
-## 4bis. Phase C Contract Summary
+Phase G owner decisions remain final for the 2D implementation:
 
-- `PostMedia` carries authoritative R2 identity: `objectKey`, `mimeType`, `byteSize`, `versionTag`, `identityState`, `checkedAt`, and denormalized `ownerId`;
-- only `VERIFIED` media is analyzable by a future worker;
-- the restricted role `ipe_worker_reader` reads only approved identity columns;
-- the worker will resolve an object only as a verified `objectKey`, never as an arbitrary URL.
+- Leaflet + `leaflet.markercluster`;
+- Geoapify raster tiles with mandatory attribution;
+- all canonical places loaded client-side because the expected maximum remains below 1000;
+- no bbox/viewport querying and no map pagination;
+- `PlacesMap` kept as a lightweight swappable abstraction;
+- Apple-Plans-inspired minimal design;
+- brunch provisionally folded into the café group;
+- multi-select filters enabled.
 
-## 5. Phase F Design Summary
+Phase I owner decisions remain final and implemented:
 
-The proposed reviewed design is `CODEX_PHASE_F_METADATA_FIRST_DESIGN.md`.
+- `react-globe.gl` / `globe.gl` with Three.js underneath;
+- Concept 2 sober with restrained Concept 1 elements;
+- static public-domain Natural Earth texture with documented licence;
+- additive `view=map|globe`, 2D default and independent cameras;
+- full mobile 3D where WebGL is supported;
+- accessible fallback to 2D;
+- shared filters, search, selection, list, statistics and detail;
+- no replacement of Leaflet.
 
-Key decisions that become signed off when that document is merged:
+## 4. Merge proof
 
-1. Geoapify is the Phase F geographic resolver, hidden behind `PlaceResolver`.
-2. Claude/Codex output textual candidates only; models never provide coordinates.
-3. Caption analysis is a local JSONL export/import workflow until the VPS exists.
-4. `UNKNOWN` creates no Place row.
-5. `EXACT`, `PROBABLE`, and `APPROXIMATE` have deterministic semantics and thresholds.
-6. `PostPlace` contains one canonical link per owner, post, and place; repeated mentions live in evidence.
-7. Places list APIs use opaque cursor pagination.
-8. The Phase D external API key remains read-only; Phase F mutations are service/local-script only.
-9. Phase F is delivered as F1, F2, and F3 reviewable sub-PRs.
+### Phase G
 
-The map renderer remains a Phase G decision. Phase F must not add Mapbox or map UI dependencies.
+- PR: `#34 — feat(places): Phase G — Places 2D UI and contextual navigation`;
+- reviewed head: `82a9760df92b5aa58f6a411c3f90bb07fb7cb46a`;
+- squash merge on `develop`: `2bd2098472c65eeb24c52aa0ee893e09b8e20261`;
+- CI run #107 completed successfully;
+- no migration, no Prisma schema change and no breaking API change.
 
-## 6. CI and Environment State
+### Phase I design
 
-- `develop` CI is green after the Phase D merge and subsequent handoff update.
-- Vercel preview deployments succeed after `AUTH_SECRET` was added to the Preview environment.
-- Phase F requires `GEOAPIFY_API_KEY` only when Places resolution is enabled. It is server-only and must never use a `NEXT_PUBLIC_` prefix.
-- Local Claude Code/Codex OAuth credentials stay outside Vercel, PostgreSQL, `.env.example`, logs, and repository files.
+- PR: `#35 — docs(places): Phase I — 3D globe design pack`;
+- reviewed head: `d4f7cc87435de66a05d41b126294f1292413ab17`;
+- squash merge on `develop`: `3fef818df96f127d5ba9486650a231f6ee2629b4`;
+- ADR accepted and all six owner decisions closed.
 
-## 7. Phase State
+### Phase I implementation
+
+- PR: `#36 — feat(places): Phase I — implémentation du globe 3D (T1–T10)`;
+- reviewed head: `7477ac3c8e7f567051d3eb86cdf2fd91ddcbf1dc`;
+- squash merge on `develop`: `08be9f04df60c9d8e138242fc0d7b0504e0ba51e`;
+- CI #115 completed successfully;
+- review round 1 found a real FR-I-12 defect: the 3D chunk could be requested before the WebGL probe answered;
+- final implementation has explicit `map | probing | globe` states and does not request the 3D chunk before proven WebGL support;
+- Phase I tests consolidated to 18 unit, 8 component and 7 e2e scenarios;
+- repository verification: 466 unit tests and 92 e2e passed;
+- initial `/places` 2D JS increased by 4.2 KiB (+1.08 %);
+- the 1.86 MiB 3D chunk is absent from the initial 2D entry;
+- first globe render measured at 907–1033 ms with about 1000 places;
+- no migration, no public API break, no Neon change and no secret committed.
+
+## 5. Environment and deployment state
+
+### Vercel
+
+| Environment | Git branch | State |
+| --- | --- | --- |
+| Production | `main` | Isolated from development. |
+| Preview development | `develop` | Tracks the merged Phase I implementation. |
+
+Stable URLs:
+
+```text
+Production: https://insta-saved-post-explorer.vercel.app
+Develop:    https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app
+```
+
+### Neon
+
+Project: `fancy-mud-69762258`
+
+| Environment | Neon branch | Verified schema state |
+| --- | --- | --- |
+| Production | `main` / `br-super-snow-asyrmnbm` | Phase C and F1 migrations applied. The additive Places schema was promoted and verified on 28 July 2026; Places data was still empty immediately after migration. |
+| Development | `develop` / `br-sparkling-glade-as9gow4m` | Phase C and F1 migrations applied. F2, F3, G and I require no migration. |
+
+Do not run `prisma migrate dev`, `prisma db push` or seeds against either deployed database.
+
+## 6. Phase state
 
 | Phase | State | Reason |
 | --- | --- | --- |
-| C — R2 media identity and worker isolation | Merged | PR #24 (`0870d69`). |
-| D — External API V1 | Merged | PR #26 (`9e57f93`). Distributed rate limiting remains deferred. |
-| E — Global worker foundation | Ready, separate | Phase C merged; requires VPS decisions and credentials. Do not mix with F. |
-| F — Places metadata-first domain | Ready after design merge | Dependencies B and D merged. Execute F1 → review/merge → F2 → review/merge → F3. |
-| G — Places 2D UI | Blocked | Requires completed Phase F. |
-| H — Deep Places analysis | Blocked | Requires C, E, and stable Phase F. |
-| I — Places 3D globe | Blocked | Requires G and stable Places data. |
-| J — Unified MCP and Hermes | Blocked | Places tools require completed Phase F. |
+| C — R2 media identity and worker isolation | COMPLETE | PR #24; migration applied to Neon `main` and `develop`. |
+| D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
+| E — Global worker foundation | CODE MERGED, ACTIVATION PENDING | PR #39 is merged into `develop` at `c4e37f6`. No hosted migration or VPS deployment is claimed. |
+| F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
+| G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
+| H — Deep Places analysis | BLOCKED | Requires Phase E operational activation and stable worker infrastructure. |
+| I — Places 3D globe | COMPLETE | PR #35 design + PR #36 implementation merged. CI #115 green; WebGL lazy loading corrected; tests consolidated; no migration. |
+| J — Unified MCP and Hermes | BLOCKED | Requires later orchestration decisions and confirmations. |
 
-The presence of a detailed brief is not permission to execute a blocked phase.
+## 6.1 Test suite baseline (25 July 2026)
 
-## 8. Decisions That Must Not Be Guessed
-
-Still open for later phases:
-
-- distributed API rate limiting on Vercel;
-- map rendering provider for Phase G/I;
-- server-side AI providers, models, budgets, and thresholds for Phase H;
-- VPS credentials, firewall, backups, and observability for Phase E;
-- final permission and confirmation model for sensitive Phase G/J commands.
-
-Proposed and signed when the Phase F design PR merges:
-
-- Geoapify geographic resolution;
-- caption-only local workflow;
-- cursor pagination;
-- precision and UNKNOWN semantics;
-- one canonical PostPlace link;
-- no external writes through the Phase D API key;
-- F1/F2/F3 delivery split.
-
-Signed off for Phase C: see `CODEX_R2_WORKER_ISOLATION_DESIGN.md` section 8.
-
-## 9. Required Pull Request Report
-
-Every Phase F sub-PR must include:
+The global suite was audited and consolidated in a dedicated PR (documentation:
+`changes/2026-07-25-global-test-suite-consolidation.md`). Current baseline:
 
 ```text
-Phase active
-Sub-phase active (F1, F2, or F3)
-Gate d’entrée vérifiée
-Fichiers modifiés
-Contrats ajoutés ou modifiés
-Migrations
-Tests ajoutés
-Commandes exécutées
-Résultats
-Risques restants
-Prochaine gate
+unit ...... 54 files, 448 tests, ~15-21 s
+e2e ....... 46 scenarios, 46 executions (45 desktop + 1 mobile), ~69 s
 ```
 
-Every Phase F PR must explicitly confirm that it did not start another phase and did not store captions, candidate JSONL, API keys, OAuth credentials, or production data in Git.
+Desktop is the default Playwright project and runs everything; the mobile project
+runs only `@mobile`-tagged scenarios. Every viewport-sensitive test sets its own
+viewport, so running it on both projects duplicated identical work — that was the
+suite's largest single cost and it is removed.
 
-## 10. Production hotfix handoff
+The 11 PostgreSQL suites (129 tests, 61 % of unit time) are deliberately untouched:
+ownership, composite FKs, idempotence, the P2002 regression, cursors, atomic
+transactions, worker isolation and audit completeness.
 
-- Goal: deploy only the validated extension/web sync changes through 4.2.6,
-  without promoting unrelated `develop` phases.
-- Mode: critical.
-- Verification: focused 13/13, lint PASS, exact typecheck PASS, full suite 152
-  passed and 22 skipped, production build PASS with 27 pages, VibeSpec 0/0 and
-  diff check PASS.
-- Rollback: revert the hotfix merge on `main`; do not delete imported posts or
-  replace the extension archive.
-- Exact next action: open a PR to `main`, wait for every hosted check, merge,
-  verify Vercel Production and `/api/health`, then run the authenticated
-  extension/web smoke with the flat 4.2.6 package.
+## 7. Open decisions and operational follow-ups
+
+- ~~**Phase I GPU measurement**~~ — **closed 25 July 2026**, status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`. Measured on an NVIDIA GeForce RTX 5090: 240 fps and 276-326 ms first render at every place count, desktop and mobile viewport. This confirmed the recorded diagnosis — the CI figures (20 fps desktop, 18 fps mobile) were fill-rate bound on a SwiftShader software rasterizer, not scene bound. Both runs are kept in the change record. One honest limit stands: the mobile figures come from a mobile **viewport** on desktop-class hardware, not from a phone GPU, so low-end phone behaviour remains a reasoned expectation rather than a measurement — which is why the WebGL fallback and the pixel-ratio cap stay in place.
+- server-side AI providers, models, budgets and escalation thresholds for Phase H;
+- VPS credentials, firewall, backups, alerting and deployment authorization for Phase E;
+- final confirmation model for sensitive Phase J commands.
+
+## 8. Exact next action
+
+1. Promote the reviewed `develop` implementation to `main` through a dedicated
+   pull request, then wait for the Vercel Production deployment and smoke it.
+2. Confirm that Production has the server-only Places configuration before
+   enabling analysis; never expose `GEOAPIFY_API_KEY` to the browser.
+3. Import the already validated candidate JSONL only against the verified Neon
+   production branch, then verify persisted aggregates and errors.
+4. Replace files in the existing unpacked
+   extension directory with `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the
+   extension and run the Preview smoke in
+   `specs/002-extension-web-sync-reconciliation/08-release.md`.
+5. Confirm extension discovery on the stable develop alias, click
+   **Actualiser les posts**, and compare the extension count with the Preview
+   library count.
+6. After Production promotion, reload the exact 4.2.6 package and confirm a
+   refresh imports DB-missing posts, terminates, and a second refresh reports
+   zero only when the DB and extension index are aligned.
+7. Keep Phase H blocked until Phase E operational activation is separately
+   approved.
+8. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
+   analysis outside this correction.

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Review Change"
+  short_description: "Use when a diff, branch, pull request, completed ticket, or work-in-progress c"

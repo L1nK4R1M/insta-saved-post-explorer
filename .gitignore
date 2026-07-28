@@ -10,3 +10,10 @@ test-results/
 *.log
 *.tsbuildinfo
 .vercel/
+
+# Places metadata-first local workflow: exported captions and candidate JSONL are
+# working data and must never be committed. Test fixtures under tests/ are tracked.
+.tmp/
+/.tmp/places/
+*.jsonl
+!tests/**/*.jsonl

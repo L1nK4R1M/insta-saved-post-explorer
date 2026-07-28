@@ -25,3 +25,16 @@ export function isPlacesEligibleTheme(mainTheme: string | null | undefined): boo
   if (!mainTheme) return false;
   return PLACES_ELIGIBLE_THEME_KEYS.has(foldForSearch(mainTheme));
 }
+
+export type PlacesEligibleTheme = (typeof PLACES_ELIGIBLE_THEMES)[number];
+
+// Map an eligible theme (in any case/accent form) back to its canonical value,
+// or null when the theme is not eligible. Reuses the same normalization so the
+// canonical Voyages/Restaurant strings are never re-copied into services.
+export function canonicalPlacesTheme(
+  mainTheme: string | null | undefined,
+): PlacesEligibleTheme | null {
+  if (!mainTheme) return null;
+  const folded = foldForSearch(mainTheme);
+  return PLACES_ELIGIBLE_THEMES.find((theme) => foldForSearch(theme) === folded) ?? null;
+}

@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+services/worker/dist
+test-results
+playwright-report
+specs
+*.log
+.env*
+!.env.example

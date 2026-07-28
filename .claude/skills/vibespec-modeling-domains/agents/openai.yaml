@@ -1,0 +1,3 @@
+interface:
+  display_name: "Model Domain"
+  short_description: "Use when project terminology is ambiguous, overloaded, inconsistent with code,"

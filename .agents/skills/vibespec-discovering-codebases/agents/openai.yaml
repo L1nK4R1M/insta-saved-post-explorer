@@ -1,0 +1,3 @@
+interface:
+  display_name: "Discover Codebase"
+  short_description: "Use when changing an existing repository and the current architecture, convent"

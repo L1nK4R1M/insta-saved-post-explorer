@@ -1,0 +1,3 @@
+interface:
+  display_name: "Design Architecture"
+  short_description: "Use when a change introduces or alters module boundaries, public contracts, pe"
