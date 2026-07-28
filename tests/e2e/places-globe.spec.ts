@@ -140,6 +140,15 @@ test.describe("page Places — vue 3D", () => {
   // pixel ratio and the small-screen layout together.
   test("parcours mobile : bascule, globe lisible, aucun débordement @mobile @mobile-only", async ({ page }) => {
     await page.goto("/places");
+    const switchBounds = await page.locator(".places-segmented").boundingBox();
+    const stageBounds = await page.locator(".places-stage").boundingBox();
+    const viewport = page.viewportSize();
+    expect(switchBounds).not.toBeNull();
+    expect(stageBounds).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    expect(switchBounds!.x).toBeGreaterThanOrEqual(stageBounds!.x);
+    expect(switchBounds!.x + switchBounds!.width).toBeLessThanOrEqual(stageBounds!.x + stageBounds!.width);
+    expect(switchBounds!.x + switchBounds!.width).toBeLessThanOrEqual(viewport!.width);
     await page.getByRole("button", { name: "3D" }).click();
     await expect(page.getByTestId("places-globe")).toBeVisible();
     await expect(page.locator(".places-globe-canvas canvas")).toBeVisible();

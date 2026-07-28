@@ -17,6 +17,7 @@ test.describe("page Places", () => {
 
   test("expose la route, la zone carte et la navigation principale", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Places", level: 1 })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Retour aux posts" })).toHaveAttribute("href", "/");
     await expect(page.getByRole("region", { name: "Lieux sauvegardés" })).toBeVisible();
     // Without NEXT_PUBLIC_PLACES_TILE_URL the map states it is unconfigured
     // instead of failing; the rest of the page stays usable.

@@ -70,14 +70,14 @@ describe("scoreResolvedCandidate", () => {
       ),
     );
     expect(result.precision).toBe("APPROXIMATE");
-    expect(result.approximationRadiusMeters).toBe(25_000);
+    expect(result.approximationRadiusMeters).toBe(10_000);
   });
 
   it.each([
     ["suburb", 5_000],
     ["district", 5_000],
-    ["city", 25_000],
-    ["postcode", 25_000],
+    ["city", 10_000],
+    ["postcode", 10_000],
     ["county", 50_000],
     ["state", 150_000],
   ])("uses the documented radius for area type %s", (resultType, radius) => {

@@ -165,7 +165,7 @@ Deterministic scoring classifies each resolution:
 | `APPROXIMATE` | provider-verified area (district/city/county/state), score ≥ 0.50, mandatory radius |
 | `UNKNOWN` | country-only, contradictory, or score < 0.50 |
 
-Approximation radii: district 5 km, city 25 km, county 50 km, state 150 km. A
+Approximation radii: district 5 km, city 10 km, county 50 km, state 150 km. A
 country-only match is always `UNKNOWN`. `UNKNOWN` creates no `Place` row; its
 textual evidence is retained with a null place for later review.
 

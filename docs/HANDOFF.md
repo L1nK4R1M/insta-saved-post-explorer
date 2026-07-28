@@ -3,7 +3,7 @@
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `main`  
-Reference production base: `main` at `66cfd78c5b1bfcaf0ad16305db993dd88bf73c54`  
+Reference production base: `main` at `44b0da02fe89396ac43fe6b29ff4a13b247674f1`
 Reference implementation: `develop` at `67e3c1ba38cf350533c9a7ba27059c3fc368d727`
 
 ## 1. Purpose and authority
@@ -38,6 +38,19 @@ Stop and document any conflict between this handoff, an authoritative contract a
 | I implementation — Places 3D globe | PR #36, squash `08be9f0`. T1–T10 merged after two review rounds. WebGL-gated lazy loading, risk-based test consolidation, local Natural Earth texture, shared 2D/3D state and documented performance evidence. |
 
 ## 3. Current execution pointer
+
+### Unreleased Places usability correction (28 July 2026)
+
+- Branch: `codex/places-mobile-navigation-radius`, based on `origin/main` at
+  `44b0da0`;
+- VibeSpec: `specs/004-places-mobile-usability`, Standard, awaiting review;
+- fixes the clipped mobile 2D/3D control, adds `Retour aux posts`, restores
+  public configured-owner post thumbnails, and changes new city-like approximate
+  scoring from 25 km to 10 km;
+- verification: 29 focused unit tests, 6 desktop Places E2E, 1 mobile Places E2E,
+  lint, typecheck, 360 full unit tests and production build all pass;
+- no commit, push, PR, deploy, Neon write or existing-radius correction is
+  claimed.
 
 ```text
 Active review branch: codex/places-analysis-json-export
@@ -212,8 +225,8 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 
 - PR #47 merged after CI #145 passed, including PostgreSQL, worker, browser and
   production-build jobs;
-- Vercel deployment `dpl_G7R5i5jGWihyqRTNbsqdgdwK3HZ7` is `READY`; `/api/health`
-  reports database connected and version `66cfd78`;
+- Vercel deployment `dpl_2GFsngT1j5DtoypxtnGFpobUu4Po` is `READY`; `/api/health`
+  reports database connected and version `44b0da0`;
 - the Phase E queue migration was rehearsed on a disposable Neon branch and
   promoted transactionally with checksum
   `4c7b1d89faf0690bc9927f5966f12163403544e3a0bbd1159b8de153e7129bae`;
