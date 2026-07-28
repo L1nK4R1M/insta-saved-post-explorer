@@ -4,6 +4,17 @@ export type SyncFeedPost = {
   [key: string]: unknown;
 };
 
+export type SyncPostIdentity = {
+  pk?: string | number | null;
+  code?: string | number | null;
+  externalId?: string | number | null;
+  postCode?: string | number | null;
+};
+
+export function canonicalizePostIdentities(
+  ...groups: Array<Array<SyncPostIdentity | string | number>>
+): Array<{ pk: string | null; code: string | null }>;
+
 export function isFeedPageTerminal(input: {
   currentCursor: string | number | null | undefined;
   nextCursor: string | number | null | undefined;
@@ -11,8 +22,8 @@ export function isFeedPageTerminal(input: {
 }): boolean;
 
 export function buildWebsiteReconciliationTargets(
-  extensionArchiveIds: Array<string | number>,
-  websiteKnownExternalIds: Array<string | number>,
+  extensionArchivePosts: Array<SyncPostIdentity | string | number>,
+  websiteKnownPosts: Array<SyncPostIdentity | string | number>,
 ): string[];
 
 export function reconciliationCompletionError(

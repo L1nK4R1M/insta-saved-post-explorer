@@ -3,7 +3,7 @@
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `develop`  
-Reference implementation commit: `2b877ba043a004b925acdfae3f3decd7fbc89a44`
+Reference implementation: latest `develop` containing the 4.2.6 DB-first sync correction
 
 ## 1. Purpose and authority
 
@@ -40,40 +40,44 @@ Stop and document any conflict between this handoff, an authoritative contract a
 
 ```text
 Active review branch: none
-Reference: develop at 2b877ba043a004b925acdfae3f3decd7fbc89a44
+Reference: latest develop release containing Insta Saved Sync 4.2.6
 Mode: critical
 VibeSpec convergence: PASS
 
 Verified correction:
 - PR #40 merged the extension/web refresh correction into develop at ba56573;
 - PR #42 merged exact develop Preview support into develop at 2b877ba;
+- the 4.2.6 follow-up makes the owner-scoped PostgreSQL snapshot authoritative
+  for new/imported identity and preserves the legacy session arrays;
 - extension archive and web ownership are separated;
 - archive-only posts become durable reconciliation targets;
+- a successful web sync aligns the extension archive to paired DB identities
+  plus rows accepted during the run, including after a fresh installation;
 - repeated Instagram cursors terminate;
 - the web button observes its owner-scoped /api/sync/jobs/{id};
 - the first terminal extension/server signal settles the UI once;
-- 90 seconds without bridge or durable job progress becomes an actionable error.
-- extension 4.2.5 allows the exact stable develop Preview at all three origin
+- duplicate running messages do not reset the watchdog; 90 seconds without a
+  changed work checkpoint or durable job heartbeat becomes an actionable error;
+- extension 4.2.6 allows the exact stable develop Preview at all three origin
   gates while preserving Production and localhost;
 - arbitrary `*.vercel.app` deployments remain blocked.
 
 Fresh gates:
-- focused tests: 7/7;
-- neighboring sync/import tests: 30/30;
+- focused DB/extension/UI/media tests: 13/13;
 - lint and typecheck: PASS;
-- full unit suite: 326 passed, 129 skipped;
+- full unit suite: 329 passed, 129 skipped;
 - production build: PASS, 32 pages;
-- traceability: 24 requirements, zero uncovered;
+- VibeSpec validation: 0 errors, 0 warnings;
+- traceability: zero uncovered requirements;
 - flat extension ZIP SHA-256:
-  `9F842FD55066B2E88E981A1B545ABAB101E6AE0AE462D92349863FAE7E94479D`;
+  `E7EF63C70AC5054975A5B07C51BF6388EBC2048797719B6FE93008A237C5A48E`;
 - git diff --check: PASS.
-- PR #42 hosted checks: lint/types/unit/build, browser and Vercel all PASS;
-- Vercel Preview deployment for 2b877ba: SUCCESS.
 
 No migration, dependency, authentication, R2 permission or new API route is
-included. One exact develop Preview host permission is added. The merge and
-Preview deployment are complete; live Preview smoke and Chrome Web Store
-publication remain separate actions.
+included. The existing session response receives one additive `knownPosts`
+field. Controlled Chromium discovers unpacked 4.2.6 on Production; authenticated
+Preview and Instagram smoke plus Chrome Web Store publication remain operational
+actions.
 
 Phase F is CLOSED and COMPLETE.
 Phase G is CLOSED and COMPLETE.
@@ -216,14 +220,15 @@ transactions, worker isolation and audit completeness.
 ## 8. Exact next action
 
 1. Replace files in the existing unpacked
-   extension directory with `C:\tmp\insta-saved-sync-v4.2.5.zip`, reload the
+   extension directory with `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the
    extension and run the Preview smoke in
    `specs/002-extension-web-sync-reconciliation/08-release.md`.
 2. Confirm extension discovery on the stable develop alias, click
    **Actualiser les posts**, and compare the extension count with the Preview
    library count.
-3. Production promotion remains a separate action; the Preview smoke must not
-   be reported as Production validation.
+3. After Production promotion, reload the exact 4.2.6 package and confirm a
+   refresh imports DB-missing posts, terminates, and a second refresh reports
+   zero only when the DB and extension index are aligned.
 4. Keep Phase H blocked until Phase E operational activation is separately
    approved.
 5. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal

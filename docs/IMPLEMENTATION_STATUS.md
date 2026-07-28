@@ -22,7 +22,7 @@ Status values:
 | B — Places theme eligibility | COMPLETE | Phase A | PR #19, squash `2323e0d` | Canonical eligibility predicate and 8 tests; no collection dependency. |
 | E2e suite re-green | COMPLETE | — | PR #21, squash `1b5fa16` | Browser suite restored to green. |
 | Global test suite consolidation | COMPLETE | Current merged codebase | PR #38, squash `fc019a4` | Risk-based consolidation with zero production-code changes. Unit tests 466 → 448; E2E scenarios 56 → 46; E2E executions 112 → 46; mobile executions 56 → 1. CI #121 green. Critical PostgreSQL, ownership, security, API, idempotence, P2002 and WebGL regression coverage preserved. |
-| Extension/web sync reconciliation | COMPLETE | Existing sync API and extension | PR #40 squash `ba56573`; PR #42 squash `2b877ba` | PR #40 corrected archive reconciliation and terminal UI recovery. Extension 4.2.5 adds the exact stable develop Preview origin with no wildcard; RED/GREEN, 326 tests, build, traceability, hosted browser checks and Preview deployment pass. Live Preview smoke remains an operator action. No migration. |
+| Extension/web sync reconciliation | COMPLETE | Existing sync API and extension | PR #40 squash `ba56573`; PR #42 squash `2b877ba`; 4.2.6 DB-first follow-up | PostgreSQL is authoritative; paired owner-scoped identities align a fresh or locally advanced extension after successful web sync. Duplicate running states no longer keep the spinner alive. Exact Preview origin remains bounded with no wildcard; RED/GREEN, 329 tests, build, VibeSpec validation and flat package inspection pass. Authenticated smoke remains an operator action. No migration. |
 | C — R2 media identity and worker isolation | COMPLETE | Reviewed design | PR #24, squash `0870d69` | Additive migration, owner backfill, restricted role and PostgreSQL tests. Migration recorded on Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | Phase A | PR #26, squash `9e57f93` | Read-only Bearer API, stable errors, six thin routes and tests. |
 | F design and plan | COMPLETE | Phases B and D | PR #28, squash `fd9754e` | Reviewed metadata-first design, Geoapify abstraction and F1/F2/F3 plan. |
@@ -52,13 +52,14 @@ Current state
   (45 desktop + 1 mobile). Critical database and security suites remain intact.
 - Phase E PR #39 is merged at c4e37f6. Hosted migration and VPS operational
   activation remain pending.
-- PR #40 extension/web reconciliation is merged at ba56573. PR #42 exact
-  develop Preview support is merged at 2b877ba; all hosted checks and the
-  Vercel Preview deployment are green. Extension reload and live smoke remain.
+- PR #40 extension/web reconciliation is merged at ba56573 and PR #42 exact
+  develop Preview support is merged at 2b877ba. The 4.2.6 DB-first follow-up
+  preserves the additive legacy contract, repairs the no-progress watchdog and
+  has fresh local verification. Extension reload and authenticated smoke remain.
 - Phase H and Phase J remain blocked.
 
-Reference develop implementation commit
-2b877ba043a004b925acdfae3f3decd7fbc89a44
+Reference develop implementation
+Latest `develop` containing the 4.2.6 DB-first synchronization correction.
 
 Recorded proof for Phase I
 - PR #36 reviewed twice and squash-merged after the WebGL lazy-load defect was fixed.
@@ -83,7 +84,8 @@ Recorded proof for global test consolidation
 1. Treat Phase I and the global test consolidation as merged and complete.
 2. Use the consolidated baseline for future PRs; do not reintroduce duplicate desktop/mobile E2E executions without a real device-specific behavior.
 3. Phase I performance is validated on real hardware and needs no further measurement; re-run `npm run places:measure-globe` only if the globe scene or engine version changes.
-4. Reload extension 4.2.5 in the existing Chrome extension directory and run
+4. Reload extension 4.2.6 from `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`
+   in the existing Chrome extension directory and run
    the documented stable develop Preview smoke.
 5. Phase H remains blocked until Phase E operational activation is separately authorized.
 6. Keep Phase E activation, H and J in separate changes; do not mix worker operations, deep analysis, Hermes or MCP work.

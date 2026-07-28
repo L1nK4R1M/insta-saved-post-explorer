@@ -38,6 +38,28 @@ type SyncJobSnapshot = {
   errorCode?: string | null;
   heartbeatAt?: string;
 };
+type ExtensionSyncTask = {
+  status?: string;
+  progressVersion?: number;
+  processedCount?: number;
+  totalCount?: number | null;
+  stats?: { synced?: number };
+  error?: string;
+  resumeAt?: string | null;
+  pausedReason?: { note?: string } | null;
+};
+
+function extensionProgressKey(task: ExtensionSyncTask) {
+  return JSON.stringify([
+    task.status ?? null,
+    task.progressVersion ?? null,
+    task.processedCount ?? 0,
+    task.totalCount ?? null,
+    task.stats?.synced ?? 0,
+    task.error ?? null,
+    task.resumeAt ?? null,
+  ]);
+}
 
 function nextCandidate(candidates: Map<string, string>, attempted: Set<string>) {
   return [...candidates.entries()]
@@ -71,7 +93,8 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
   const attemptNext = useRef<() => boolean>(() => false);
   const jobPollTimer = useRef<number | null>(null);
   const activeJobId = useRef<string | null>(null);
-  const lastBridgeSignalAt = useRef(0);
+  const lastProgressAt = useRef(0);
+  const lastExtensionProgressKey = useRef<string | null>(null);
   const lastJobHeartbeat = useRef<string | null>(null);
   const settled = useRef(false);
 
@@ -121,7 +144,7 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
           }
           if (typeof job.heartbeatAt === "string" && job.heartbeatAt !== lastJobHeartbeat.current) {
             lastJobHeartbeat.current = job.heartbeatAt;
-            lastBridgeSignalAt.current = Date.now();
+            lastProgressAt.current = Date.now();
           }
         }
       } catch {
@@ -129,7 +152,7 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
       }
 
       if (activeJobId.current !== jobId || settled.current) return;
-      if (Date.now() - lastBridgeSignalAt.current >= BRIDGE_STALE_AFTER_MS) {
+      if (Date.now() - lastProgressAt.current >= BRIDGE_STALE_AFTER_MS) {
         settleError("La synchronisation ne répond plus. Rechargez la page puis réessayez.");
         return;
       }
@@ -179,7 +202,6 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
       }
       if (!requestId.current || message.requestId !== requestId.current) return;
       if (message.payload?.extensionId !== currentTarget.current) return;
-      lastBridgeSignalAt.current = Date.now();
       if (message.type === "START_RESULT" && message.payload?.ok !== true) {
         if (attemptTimer.current) window.clearTimeout(attemptTimer.current);
         if (attemptNext.current()) return;
@@ -188,14 +210,20 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
       if (message.type === "START_RESULT" && message.payload?.ok === true && attemptTimer.current) {
         window.clearTimeout(attemptTimer.current);
         attemptTimer.current = null;
+        lastProgressAt.current = Date.now();
       }
       if (message.type === "STATE" && message.payload?.ok !== true) {
         settleError("La communication avec l’extension a été interrompue. Rechargez l’extension puis réessayez.");
         return;
       }
       if (message.type !== "STATE" || message.payload?.ok !== true) return;
-      const task = message.payload.task as { status?: string; stats?: { synced?: number }; error?: string; resumeAt?: string | null; pausedReason?: { note?: string } | null } | null;
+      const task = message.payload.task as ExtensionSyncTask | null;
       if (!task) return;
+      const progressKey = extensionProgressKey(task);
+      if (progressKey !== lastExtensionProgressKey.current) {
+        lastExtensionProgressKey.current = progressKey;
+        lastProgressAt.current = Date.now();
+      }
       const synced = task.stats?.synced ?? 0;
       if (task.status === "completed") {
         settleSuccess(synced);
@@ -228,7 +256,8 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
     try {
       settled.current = false;
       stopJobPolling();
-      lastBridgeSignalAt.current = Date.now();
+      lastProgressAt.current = Date.now();
+      lastExtensionProgressKey.current = null;
       lastJobHeartbeat.current = null;
       attempted.current.clear();
       const candidate = nextCandidate(candidates.current, attempted.current);
