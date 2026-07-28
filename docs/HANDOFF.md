@@ -39,18 +39,21 @@ Stop and document any conflict between this handoff, an authoritative contract a
 
 ## 3. Current execution pointer
 
-### Unreleased Places usability correction (28 July 2026)
+### Places usability correction released (28 July 2026)
 
-- Branch: `codex/places-mobile-navigation-radius`, based on `origin/main` at
-  `44b0da0`;
-- VibeSpec: `specs/004-places-mobile-usability`, Standard, awaiting review;
-- fixes the clipped mobile 2D/3D control, adds `Retour aux posts`, restores
-  public configured-owner post thumbnails, and changes new city-like approximate
-  scoring from 25 km to 10 km;
-- verification: 29 focused unit tests, 6 desktop Places E2E, 1 mobile Places E2E,
-  lint, typecheck, 360 full unit tests and production build all pass;
-- no commit, push, PR, deploy, Neon write or existing-radius correction is
-  claimed.
+- PR #49 merged on `main` at `8dbfd46`; CI #149 passed and Vercel Production
+  deployment `dpl_HHKuBeSYf5L9izLHqCfMsyxmCNMh` is READY;
+- VibeSpec `specs/004-places-mobile-usability` is Critical with convergence
+  `PASS`;
+- the mobile 2D/3D control is fully visible, `Retour aux posts` is available,
+  public configured-owner post thumbnails load, and new city-like approximate
+  results use 10 km;
+- Neon backup `backup-main-before-places-radius-2026-07-28`
+  (`br-curly-firefly-asy8hqti`) preserves the pre-change state;
+- exactly 29 existing approximate rows were changed from 25 km to 10 km in a
+  guarded transaction; no 25 km row remains and aggregate counts are unchanged;
+- Production health, `/places`, a real 390 x 844 linked-post browser smoke and
+  the initial Vercel runtime-error window all pass.
 
 ```text
 Active review branch: codex/places-analysis-json-export

@@ -1,28 +1,33 @@
 # Places mobile usability - Contracts
 
-## Navigation contract
+## API contracts
 
-`/places` displays a labelled link to `/`. Browser back/forward for 2D/3D state
-continues to work independently.
+No versioned API contract changes. `loadPlacePostsAction(placeId)` remains an
+internal Server Action returning `ok/posts` or stable `NOT_FOUND` and
+`PLACE_POSTS_FAILED` outcomes.
 
-## Mobile layout contract
+## Data contracts
 
-At the configured mobile Playwright viewport, the 2D and 3D buttons are visible,
-operable, and fully contained by both `.places-segmented` and `.places-stage`.
+The action reads at most 24 summaries through `getPlacePosts(placeId,
+{ limit: 24 }, getConfiguredOwnerId())`. City-like scoring returns a 10,000
+metre radius. The Production correction matches only approximate 25,000 metre
+rows and requires exactly 29 updates.
 
-## Linked-post read contract
+## UI contract
 
-`loadPlacePostsAction(placeId)` reads at most 24 summaries using:
+`/places` exposes `Retour aux posts` linking to `/`. At the mobile test viewport,
+both view buttons are visible, operable and contained by the segmented control
+and Places stage. Selecting a listed place renders at least one linked thumbnail
+when the place has associated posts.
 
-```text
-getPlacePosts(placeId, { limit: 24 }, getConfiguredOwnerId())
-```
+## Configuration contract
 
-It returns only `ok/posts` or stable `NOT_FOUND`/`PLACE_POSTS_FAILED` codes. It
-does not accept an owner from the client. Confirm/reject keep the admin contract.
+Owner identity continues to come only from existing server configuration.
+Vercel and Neon project/branch configuration is unchanged, and no new runtime
+environment variable is introduced.
 
-## Radius contract
+## Error catalog
 
-City-like approximate provider types produce `approximationRadiusMeters =
-10_000` for newly scored results. Persisted values remain unchanged until a
-separate authorized correction.
+`NOT_FOUND` represents a missing or out-of-owner place. `PLACE_POSTS_FAILED`
+represents a read failure. A Production data row-count mismatch raises
+`PLACES_RADIUS_UPDATE_COUNT_MISMATCH` and rolls back the transaction.
