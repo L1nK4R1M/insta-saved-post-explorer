@@ -39,8 +39,8 @@ Stop and document any conflict between this handoff, an authoritative contract a
 ## 3. Current execution pointer
 
 ```text
-Active review branch: none
-Reference: latest develop release containing Insta Saved Sync 4.2.6
+Active review branch: codex/places-analysis-json-export
+Reference: develop at f74302b3bba6bf9bd29ab66d6ef8fbc32d5479b3
 Mode: critical
 VibeSpec convergence: PASS
 
@@ -96,6 +96,30 @@ GeForce RTX 5090 (ANGLE / Direct3D11): 240 fps and 276-326 ms first globe render
 at 100, 500 and 1000 places, desktop and mobile viewport. All D6 budgets met.
 No Phase I follow-up remains open.
 ```
+
+### Places complete analysis JSON export
+
+The tool on `codex/places-analysis-json-export` is verified and ready for review.
+PR: `#46 — feat(places): export complete caption analysis JSON`.
+It adds `npm run places:export-analysis-json` over the existing Phase F
+caption-analysis workflow. It uses explicit develop/production database
+variables, performs reads only, validates one strict JSON document, and writes
+atomically below `.tmp`.
+
+Fresh evidence:
+
+- focused exporter and neighboring Places contracts: 45 passed;
+- PostgreSQL caption workflow: 13 tests discovered but skipped without
+  `TEST_DATABASE_URL`;
+- full suite: 361 passed, 130 environment-bound skips;
+- Prisma generation, lint, typecheck, build, and `git diff --check`: PASS;
+- VibeSpec convergence: PASS;
+- production smoke: correctly stopped with
+  `TARGET_DATABASE_NOT_CONFIGURED`.
+
+No production file exists yet. Configure `PLACES_PRODUCTION_DATABASE_URL` with
+the intended read-only SSL DSN before running the command; never infer production
+from the existing generic `DATABASE_URL`.
 
 Phase G owner decisions remain final for the 2D implementation:
 
@@ -219,17 +243,24 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Replace files in the existing unpacked
+1. Review and merge `codex/places-analysis-json-export` separately; no merge is
+   authorized by this handoff.
+2. Configure the explicit production read-only DSN, then run the command in
+   `docs/places-analysis-json-export.md`.
+3. Send only `.tmp/places/places-analysis-input.json` to ChatGPT, save the
+   returned candidate JSONL, run the existing dry-run, and make `--commit` a
+   separate operator decision.
+4. Replace files in the existing unpacked
    extension directory with `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the
    extension and run the Preview smoke in
    `specs/002-extension-web-sync-reconciliation/08-release.md`.
-2. Confirm extension discovery on the stable develop alias, click
+5. Confirm extension discovery on the stable develop alias, click
    **Actualiser les posts**, and compare the extension count with the Preview
    library count.
-3. After Production promotion, reload the exact 4.2.6 package and confirm a
+6. After Production promotion, reload the exact 4.2.6 package and confirm a
    refresh imports DB-missing posts, terminates, and a second refresh reports
    zero only when the DB and extension index are aligned.
-4. Keep Phase H blocked until Phase E operational activation is separately
+7. Keep Phase H blocked until Phase E operational activation is separately
    approved.
-5. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
+8. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
    analysis outside this correction.

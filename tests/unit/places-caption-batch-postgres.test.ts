@@ -118,6 +118,45 @@ describeWithDatabase("Places caption batch workflow on PostgreSQL", () => {
     expect(await batch.exportCaptionBatch({ ownerId: OWNER_A, force: true })).toHaveLength(1);
   });
 
+  it("exports a complete owner-scoped read-only snapshot in theme, date, and id order", async () => {
+    await seedPost("voyage-old", OWNER_A, "Voyages", {
+      caption: "Café\n#Été @guide",
+      savedAt: new Date("2025-01-01T00:00:00.000Z"),
+    });
+    await seedPost("restaurant-b", OWNER_A, "Restaurant", {
+      savedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    await seedPost("restaurant-a", OWNER_A, "restaurant", {
+      savedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    await seedPost("voyage-new", OWNER_A, "voyages", {
+      savedAt: new Date("2026-07-01T00:00:00.000Z"),
+    });
+    await seedPost("other-owner", OWNER_B, "Voyages", {});
+    const tag = await prisma.tag.create({
+      data: { ownerId: OWNER_A, name: "été", slug: "ete" },
+      select: { id: true },
+    });
+    await prisma.postTag.create({ data: { postId: "voyage-old", tagId: tag.id } });
+
+    const before = await ownerBusinessCounts(OWNER_A);
+    const records = await batch.exportCaptionBatch({ ownerId: OWNER_A, all: true });
+    const after = await ownerBusinessCounts(OWNER_A);
+
+    expect(records.map((record) => record.post_id)).toEqual([
+      "restaurant-a",
+      "restaurant-b",
+      "voyage-new",
+      "voyage-old",
+    ]);
+    expect(records.some((record) => record.post_id === "other-owner")).toBe(false);
+    expect(records.find((record) => record.post_id === "voyage-old")).toMatchObject({
+      caption: "Café\n#Été @guide",
+      internal_tags: ["été"],
+    });
+    expect(after).toEqual(before);
+  });
+
   it("writes nothing in dry-run mode", async () => {
     await seedPost("dry", OWNER_A, "Voyages", {});
     const report = await batch.importCandidateBatch({ ownerId: OWNER_A, jsonl: await candidateLine("dry"), resolver: new FakeResolver(), commit: false });
@@ -270,7 +309,15 @@ async function seedPost(
   id: string,
   ownerId: string,
   mainTheme: string,
-  { caption, metadata }: { caption?: string; metadata?: Record<string, unknown> },
+  {
+    caption,
+    metadata,
+    savedAt,
+  }: {
+    caption?: string;
+    metadata?: Record<string, unknown>;
+    savedAt?: Date;
+  },
 ): Promise<void> {
   postCounter += 1;
   await prisma.post.create({
@@ -285,9 +332,22 @@ async function seedPost(
       searchText: "alice trip",
       contentType: "IMAGE",
       mainTheme,
+      ...(savedAt ? { savedAt } : {}),
       ...(metadata ? { metadata: metadata as object } : {}),
     },
   });
+}
+
+async function ownerBusinessCounts(ownerId: string): Promise<Record<string, number>> {
+  const [posts, places, links, evidence, jobs, tags] = await Promise.all([
+    prisma.post.count({ where: { ownerId } }),
+    prisma.place.count({ where: { ownerId } }),
+    prisma.postPlace.count({ where: { ownerId } }),
+    prisma.placeEvidence.count({ where: { ownerId } }),
+    prisma.placeAnalysisJob.count({ where: { ownerId } }),
+    prisma.tag.count({ where: { ownerId } }),
+  ]);
+  return { posts, places, links, evidence, jobs, tags };
 }
 
 async function resetDatabase(): Promise<void> {

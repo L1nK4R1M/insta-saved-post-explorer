@@ -23,6 +23,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "places:export-captions": "tsx --conditions=react-server scripts/places/export-caption-batch.ts",
+    "places:export-analysis-json": "tsx --conditions=react-server scripts/places/export-analysis-json.ts",
     "places:import-candidates": "tsx --conditions=react-server scripts/places/import-candidate-batch.ts",
     "places:generate-earth-texture": "node scripts/places/generate-earth-texture.mjs",
     "places:measure-globe": "node scripts/places/measure-globe.mjs",

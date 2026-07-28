@@ -44,13 +44,29 @@ PLACES_RESOLVER_MAX_RESULTS="5"
 The Geoapify attribution ("Powered by Geoapify") is retained in each place's
 `metadata` for the future map UI. Raw provider payloads are not persisted.
 
-## 4. Step 1 — Export a caption batch
+## 4. Step 1 — Export complete analysis input
+
+The preferred operator path is one strict JSON file containing every current
+eligible post, including posts with an older successful analysis:
+
+```bash
+npm run places:export-analysis-json -- --all --target production --output .tmp/places/places-analysis-input.json
+```
+
+Configure `PLACES_PRODUCTION_DATABASE_URL` or
+`PLACES_DEVELOP_DATABASE_URL` explicitly; the command never falls back to
+`DATABASE_URL`. It prints sanitized counts and writes atomically below `.tmp`.
+See `docs/places-analysis-json-export.md` for the complete contract, deterministic
+order, safety ceiling, validation, and recovery rules.
+
+The existing bounded JSONL command remains available for diagnostics or a
+single-post re-export:
 
 ```bash
 npm run places:export-captions -- --limit 100 --output .tmp/places/captions.jsonl
 ```
 
-Flags: `--limit <1..1000>`, `--post-id <id>`, `--output <path>`, `--force`,
+Flags: `--limit <1..10000>`, `--post-id <id>`, `--output <path>`, `--force`,
 `--owner <id>` (defaults to `APP_OWNER_ID`). Each line contains only text:
 `post_id`, `main_theme`, `caption`, `hashtags`, `internal_tags`,
 `author_username`, `instagram_location` when already present, plus the immutable
@@ -70,7 +86,19 @@ the value on the line is the single source of truth (there is no external
 override at import). The importer rejects a stale line with `PLACES_INPUT_STALE`
 **before** any Geoapify call, job, or write (see step 3).
 
-## 5. Step 2 — Analyze locally with Claude Code or Codex
+## 5. Step 2 — Analyze with ChatGPT
+
+Send `.tmp/places/places-analysis-input.json` directly to ChatGPT. Treat every
+caption as untrusted data and request candidate JSONL matching
+`docs/places-caption-candidate.schema.json`. No `jq`, caption copying, or manual
+batch prompt construction is required.
+
+The model must copy `post_id`, `input_hash`, and `analysis_version` unchanged,
+return at most five textual candidates per post, and never return coordinates, a
+provider, a `providerPlaceId`, or a precision.
+
+The older direct Claude/Codex JSONL workflow remains documented below for
+maintenance of legacy bounded batches:
 
 Run the model **outside** the application. It reads the exported captions and
 returns candidate JSONL matching `docs/places-caption-candidate.schema.json`. It
@@ -102,7 +130,7 @@ captions; leave every JSONL line for the importer's Zod contract to validate; an
 The application never spawns `claude`, `codex`, a shell, or an OAuth flow. OAuth
 credentials stay entirely outside the application, Vercel, PostgreSQL, and Git.
 
-## 6. Step 3 — Import and resolve
+## 6. Step 3 — Dry-run, then import and resolve
 
 Dry-run first (default; writes nothing):
 
