@@ -1,6 +1,6 @@
 # Places address contract - Convergence review
 
-Decision: PENDING follow-up verification; Production gate remains blocked
+Decision: PASS for develop integration; Production gate remains blocked
 
 ## Artifact consistency
 
@@ -28,8 +28,9 @@ match type, threshold, and contradiction checks. No model coordinate is accepted
 
 ## Verification
 
-- focused: 92 passed, 24 environment-bound PostgreSQL skips;
-- full Vitest: 370 passed, 130 environment-bound skips;
+- original focused contract suite: 92 passed, 24 environment-bound PostgreSQL skips;
+- follow-up focused scoring: 24 passed; PostgreSQL supersession executed in CI;
+- follow-up full Vitest: 372 passed, 131 environment-bound local skips;
 - Prisma generation, lint, typecheck, build (32 routes/pages), and
   `git diff --check`: PASS;
 - original hungryconsti-shaped deterministic regression: `EXACT`, confidence
@@ -50,11 +51,19 @@ match type, threshold, and contradiction checks. No model coordinate is accepted
 - The importer printed a clean 1/1 success report, exited 0 after lifecycle
   correction, and Neon develop retained its original one approximate primary,
   proving that no dry-run write escaped.
-- The follow-up scoring, supersession and shutdown diff still requires full
-  gates, PostgreSQL CI, independent review and READY Preview evidence.
+- PR #54 is squash-merged on `develop` at `f98da30`.
+- CI #157 passed every job, including the ephemeral PostgreSQL supersession
+  invariant, lint, types, unit tests, worker checks, build and Playwright.
+- Vercel develop deployment `dpl_GWMGkdvQptBCz1icJidE6zUJM8vL` is READY and
+  its immutable root returns HTTP 200.
+- A fresh schema-v3 export and Geoapify dry-run from merged `develop` at
+  `f98da30` processed 1/1 post, returned exit 0 and `committed=false`; Neon still
+  has one approximate primary and zero exact links for the post afterward.
+- Separate fixed-diff specification and engineering/safety follow-up reviews
+  found no remaining issue.
 
 ## Final decision rationale
 
-The decision returns to PASS only after the follow-up satisfies every local and
-hosted gate. No current evidence authorizes a committed re-analysis or
-Production promotion.
+PASS means the code revision is coherent, merged, CI-green and Preview-ready on
+`develop`. It does not authorize a committed re-analysis or Production
+promotion; each remains a separate owner decision.

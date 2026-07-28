@@ -11,8 +11,8 @@
 | `REQ-007` | `AC-005` | `TASK-03` | city-only address candidate remains 10 km | local verification | Verified |
 | `REQ-008` | `AC-006` | `TASK-01` | places-v2 constant, hash identity test, PostgreSQL export test defined | local verification | Verified |
 | `REQ-009` | scope check | `TASK-04` | no migration/data command; diff inspection | both reviews | Verified |
-| `REQ-010` | `AC-010` | `TASK-05` | real Windows dry-run exits 0 after Prisma disconnect | develop runtime evidence | In progress |
-| `REQ-011` | `AC-009` | `TASK-05` | PostgreSQL exact supersession + confirmed-link preservation test | CI PostgreSQL suite | In progress |
+| `REQ-010` | `AC-010` | `TASK-05` | real Windows dry-run exits 0 after Prisma disconnect | develop runtime evidence | Verified |
+| `REQ-011` | `AC-009` | `TASK-05` | PostgreSQL exact supersession + confirmed-link preservation test | CI #157 PostgreSQL suite | Verified |
 | `NFR-001` | `AC-001` | `TASK-01` | strict/bounded rejection tests | local verification | Verified |
 | `NFR-002` | `AC-002` | `TASK-02` | existing retry/limit suite | full Vitest | Verified |
 | `NFR-003` | `AC-002` | `TASK-02` | URL/error no-leak tests + diff review | engineering review | Verified |

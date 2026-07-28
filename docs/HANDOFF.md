@@ -4,7 +4,7 @@ Last updated: 28 July 2026
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `main`  
 Reference production base: `main` at `bebf6801eecef94001c39887c9a7dd1abda48f5e`
-Reference implementation: `develop` at `71106cc75ab16c5746c452f9332ef30df51557ca`
+Reference implementation: `develop` at `f98da30c49b9cd1dc07b7c006900fdca9ece81f0`
 
 ## 1. Purpose and authority
 
@@ -62,9 +62,12 @@ Stop and document any conflict between this handoff, an authoritative contract a
   is `amenity`, rank 1, `inner_part`; the refined scoring returns `EXACT`,
   confidence 1, radius null, and the importer exits 0 without writing;
 - Neon develop still has the original single automatic approximate primary for
-  this post after the dry-run, proving rollback. A follow-up branch adds narrow
-  atomic supersession for the later committed re-analysis while preserving
-  user-confirmed links and historical places/evidence;
+  this post after the dry-run, proving rollback. PR #54, squash `f98da30`, adds
+  narrow atomic supersession for the later committed re-analysis while
+  preserving user-confirmed links and historical places/evidence;
+- CI #157 passed, including the PostgreSQL supersession invariant and
+  Playwright. Vercel develop deployment `dpl_GWMGkdvQptBCz1icJidE6zUJM8vL` is
+  READY and its immutable root returns HTTP 200;
 - no Prisma migration, dependency, Production deployment, Neon write, candidate
   import, or existing place mutation is included. Production remains unchanged.
 
@@ -316,12 +319,13 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Review the `codex/places-importer-shutdown` follow-up that accepts only
-   strongly verified `inner_part`, fixes clean CLI shutdown, and supersedes only
-   a stale automatic approximate primary when a committed exact primary exists.
-2. Require focused/full gates, PostgreSQL invariants, CI and a READY Preview.
-3. After the follow-up reaches `develop`, regenerate and dry-run the single post
-   once more before any develop data write.
+1. Regenerate and dry-run the single hungryconsti post once more from merged
+   `develop` at `f98da30` before any data write.
+2. Treat the later single-post `--commit` on Neon develop as a separate owner
+   decision; verify one exact primary, zero stale automatic approximate link,
+   and preserved historical place/evidence after any approved write.
+3. Keep Production code and data unchanged until the develop result is approved
+   without bugs and the owner explicitly authorizes promotion.
 4. Keep Production code and data unchanged until the develop result is approved
    without bugs and the owner explicitly authorizes promotion.
 5. Replace files in the existing unpacked
