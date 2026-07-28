@@ -1,6 +1,6 @@
 # Places address contract - Convergence review
 
-Decision: PASS for develop PR readiness
+Decision: PASS for develop integration; Production gate remains pending
 
 ## Artifact consistency
 
@@ -37,13 +37,18 @@ match type, threshold, and contradiction checks. No model coordinate is accepted
 - different house number and city-only provider regressions: safe non-exact and
   10 km approximate outcomes.
 
-## Environment gates
+## Environment evidence and remaining gate
 
-No live Geoapify call, Preview deployment, or candidate import is claimed.
-These are release gates after the PR reaches `develop`. Production remains
-blocked pending Preview evidence and explicit owner approval.
+- PR #52 is merged on `develop` at `71106cc`.
+- GitHub CI #153 passed.
+- Vercel Preview deployment `dpl_632ZKgw3HdT6XwuCfynP3RQkBZBc` is READY and
+  its immutable URL returns HTTP 200.
+- The single real post exported from Neon develop under schema v3 with
+  `business_writes=false`; the temporary export was then removed.
+- No live Geoapify request or candidate import is claimed. Sending the exact
+  caption-derived address to that third party requires explicit authorization.
 
 ## Final decision rationale
 
-PASS means the revision is coherent and locally ready for review/CI on
+PASS means the revision is coherent, merged, CI-green and Preview-ready on
 `develop`; it is not authorization to promote or re-analyze Production data.

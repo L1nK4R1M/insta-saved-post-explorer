@@ -1,6 +1,18 @@
 # Places address contract - Release plan
 
-Release gate: READY_FOR_DEVELOP_PR
+Release gate: DEVELOP_READY_PRODUCTION_BLOCKED
+
+## Develop evidence
+
+- PR #52 squash-merged at `71106cc75ab16c5746c452f9332ef30df51557ca`.
+- GitHub CI #153 passed all jobs.
+- Vercel Preview `dpl_632ZKgw3HdT6XwuCfynP3RQkBZBc` is READY; its immutable
+  URL returned HTTP 200.
+- A schema-v3 export of post `cmrfhnykb000hjs04ndgb3avh` from Neon develop
+  completed read-only (`business_writes=false`) and the local artifact was
+  removed.
+- The real Geoapify dry-run was not executed because transmitting the exact
+  caption-derived address requires explicit owner authorization.
 
 ## Migration plan
 
@@ -21,6 +33,9 @@ default analysis version `places-v2`.
 5. Verify Geoapify returns a specific address/building with strong rank and
    match type, and inspect whether the old automatic city link would coexist.
 6. Treat any develop data commit as a separate operator decision.
+
+Steps 1 through 3 are complete. Step 4 is intentionally paused at the external
+data-sharing boundary; steps 5 and 6 remain pending.
 
 ## Production gate
 

@@ -33,7 +33,7 @@ Status values:
 | E — Global worker foundation | COMPLETE | Phase C | PR #39, squash `c4e37f6` | Worker code promoted to Production with VibeSpec convergence PASS. The additive queue migration is recorded on Neon `main`; VPS operational activation remains pending. |
 | G — Places 2D UI and contextual navigation | COMPLETE | Phase F complete | PR #34, squash `2bd2098` | `/places`, Leaflet + markercluster, Geoapify raster tiles, synchronized list, complete filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. Review fixes validated: authenticated read Server Action, complete `sourceThemes`, all countries filterable. CI #107 green; 50 files / 440 tests locally; no migration. |
 | Places mobile usability correction | COMPLETE | Phases G and I complete | PR #49, squash `8dbfd46` | Mobile 2D/3D bounds, explicit return link, public configured-owner linked-post reads and 10 km city approximation are on Production. CI #149 and Vercel deployment `dpl_HHKuBeSYf5L9izLHqCfMsyxmCNMh` passed. Neon backup `br-curly-firefly-asy8hqti` was created and exactly 29 existing 25 km rows were transactionally changed to 10 km with unchanged aggregates. Live mobile linked-post smoke and runtime-error checks pass. |
-| Places address contract correction | AWAITING_REVIEW | Phase F2 complete | `codex/places-address-contract` | Strict candidate `address`, export schema v3, places-v2 identity, address-first Geoapify query and conservative provider-verified exact scoring are implemented locally. No migration or data write. Production remains unchanged pending develop/Preview review and explicit approval. |
+| Places address contract correction | IN_PROGRESS | Phase F2 complete | PR #52, squash `71106cc` | Strict candidate `address`, export schema v3, places-v2 identity, address-first Geoapify query and conservative provider-verified exact scoring are merged on develop. CI #153 and Vercel Preview `dpl_632ZKgw3HdT6XwuCfynP3RQkBZBc` pass. No migration or data write. The live third-party dry-run and Production approval remain pending. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
 | I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | T1–T10 merged: additive `view=map|globe`, pure projection module, renderer seam, WebGL probe and fallback, lazy `react-globe.gl` 2.38.0 / `three` 0.185.1, public-domain Natural Earth texture generated locally with documented licence, segmented `2D | 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. CI #115 green; no migration, no API change, Leaflet preserved. Measured: `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry; first globe render 907–1033 ms on the GPU-less CI baseline. **Performance validated on real GPU** (`FPS_BUDGET_VALIDATED_ON_REAL_GPU`, 25 July 2026): NVIDIA GeForce RTX 5090, 240 fps and 276-326 ms first render at 100/500/1000 places, desktop and mobile viewport — all D6 budgets met. No Phase I follow-up remains open. |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
@@ -63,10 +63,12 @@ Current state
 - The Places mobile usability correction is released through PR #49 at
   `8dbfd46`. Production has zero remaining 25 km rows and 29 corrected 10 km
   rows; backup branch `br-curly-firefly-asy8hqti` retains the prior state.
-- The Places address contract correction is on
-  `codex/places-address-contract`, based on current `main` for a PR back to
-  `develop`. It is not deployed and has not re-imported any post. Preview must
-  prove the real `hungryconsti` address before any Production approval.
+- The Places address contract correction is merged on `develop` through PR #52
+  at `71106cc`. CI #153 and immutable Vercel Preview deployment
+  `dpl_632ZKgw3HdT6XwuCfynP3RQkBZBc` pass. A read-only schema-v3 export of the
+  real `hungryconsti` input succeeded and was removed locally afterward. No live
+  Geoapify dry-run or candidate import was performed; explicit authorization to
+  transmit the exact address remains a Production gate.
 - PR #40 extension/web reconciliation is merged at ba56573 and PR #42 exact
   develop Preview support is merged at 2b877ba. The 4.2.6 DB-first follow-up
   preserves the additive legacy contract, repairs the no-progress watchdog and
@@ -74,7 +76,8 @@ Current state
 - Phase H and Phase J remain blocked.
 
 Reference develop implementation
-Latest `develop` containing the 4.2.6 DB-first synchronization correction.
+`71106cc75ab16c5746c452f9332ef30df51557ca`, including PR #52 and the 4.2.6
+DB-first synchronization correction.
 
 Recorded proof for Phase I
 - PR #36 reviewed twice and squash-merged after the WebGL lazy-load defect was fixed.
