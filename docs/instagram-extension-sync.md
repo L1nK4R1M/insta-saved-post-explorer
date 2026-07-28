@@ -8,7 +8,9 @@ navigateur. Les cookies Instagram ne quittent jamais l’extension.
 
 1. Cliquer sur **Actualiser les posts** à côté de **Importer JSON**.
 2. La web app transmet les identifiants et codes de posts déjà présents dans la DB.
-3. L’extension parcourt le flux sauvegardé du plus récent au premier post déjà connu.
+3. L’extension compare son archive locale aux identifiants réellement présents
+   dans la DB, puis parcourt le flux sauvegardé jusqu’à avoir réconcilié les
+   posts exportés localement mais absents du site.
 4. Chaque image ou vidéo nouvelle est envoyée directement vers R2 avec une URL PUT présignée.
 5. Le serveur vérifie les objets R2, puis crée ou met à jour le post dans PostgreSQL.
 6. Un post déjà présent est mis à jour ; il n’est jamais dupliqué.
@@ -37,7 +39,7 @@ lecture et écriture des objets. L’application a besoin de `PutObject` et
 
 ## Installation de l’extension
 
-1. Décompresser `outputs/insta-saved-sync-v4.2.1.zip` dans un dossier permanent.
+1. Décompresser `insta-saved-sync-v4.2.4.zip` dans un dossier permanent.
 2. Ouvrir `chrome://extensions`.
 3. Activer **Mode développeur**.
 4. Cliquer **Charger l’extension non empaquetée**.
@@ -58,6 +60,24 @@ La première synchronisation utilise les identifiants et les codes extraits des 
 déjà présents dans la DB pour amorcer l’index incrémental. Les anciens imports sans
 `external_id` restent donc détectables. Les upserts par URL canonique constituent
 une seconde protection contre les doublons.
+
+Depuis la version 4.2.3, l’archive IndexedDB de l’extension et l’état de la web
+app restent séparés. Un post déjà exporté localement mais absent de PostgreSQL
+reste une cible de réconciliation; il ne peut plus provoquer un faux résultat
+« à jour ». Si un post archivé n’est plus retrouvable dans le flux Instagram,
+la synchronisation affiche le nombre de cibles non résolues au lieu d’annoncer
+un succès.
+
+La version 4.2.4 protège également la fin de pagination Instagram : si l’API
+répète le curseur qui vient d’être demandé, la page est considérée comme
+terminale. Le bouton quitte alors l’état de chargement avec un succès ou avec
+l’erreur de cibles non résolues, au lieu de relire indéfiniment la dernière page.
+
+Le site observe aussi le job de synchronisation authentifié après le démarrage.
+Si le dernier message de l’extension se perd lors de l’arrêt du service worker,
+le statut serveur `COMPLETED` ou `FAILED` termine quand même le bouton. Si ni le
+pont ni le job ne répondent, le chargement devient une erreur actionnable après
+90 secondes sans signal au lieu de tourner indéfiniment.
 
 ## Limites opérationnelles
 

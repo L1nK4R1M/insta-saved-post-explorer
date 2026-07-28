@@ -1,9 +1,9 @@
 # Operational Handoff
 
-Last updated: 25 July 2026  
+Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `develop`  
-Reference implementation commit: `08be9f04df60c9d8e138242fc0d7b0504e0ba51e`
+Reference implementation commit: `c4e37f639d9dd9b31a5118199b4a08da87396144`
 
 ## 1. Purpose and authority
 
@@ -39,7 +39,28 @@ Stop and document any conflict between this handoff, an authoritative contract a
 ## 3. Current execution pointer
 
 ```text
-No implementation branch is currently active.
+Active review branch: codex/fix-extension-sync-refresh
+Base: develop at c4e37f639d9dd9b31a5118199b4a08da87396144
+Mode: critical
+VibeSpec convergence: PASS
+
+Verified correction:
+- extension archive and web ownership are separated;
+- archive-only posts become durable reconciliation targets;
+- repeated Instagram cursors terminate;
+- the web button observes its owner-scoped /api/sync/jobs/{id};
+- the first terminal extension/server signal settles the UI once;
+- 90 seconds without bridge or durable job progress becomes an actionable error.
+
+Fresh gates:
+- focused tests: 7/7;
+- lint and typecheck: PASS;
+- full unit suite: 326 passed, 129 skipped;
+- production build: PASS, 32 pages;
+- git diff --check: PASS.
+
+No migration, dependency, permission or new API route is included. Production
+deployment and Chrome Web Store publication remain separate actions.
 
 Phase F is CLOSED and COMPLETE.
 Phase G is CLOSED and COMPLETE.
@@ -146,10 +167,10 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | --- | --- | --- |
 | C — R2 media identity and worker isolation | COMPLETE | PR #24; migration applied to Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
-| E — Global worker foundation | AWAITING REVIEW, separate | PR #39 remains open against `develop`; all seven earlier findings and the final production R2 AbortSignal blocker are corrected on its existing branch, fresh local gates are green and VibeSpec convergence is PASS. Refreshed hosted checks remain to be observed after push. Unmerged; no hosted migration or VPS deployment. |
+| E — Global worker foundation | CODE MERGED, ACTIVATION PENDING | PR #39 is merged into `develop` at `c4e37f6`. No hosted migration or VPS deployment is claimed. |
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
-| H — Deep Places analysis | BLOCKED | Requires Phase E and stable worker infrastructure. |
+| H — Deep Places analysis | BLOCKED | Requires Phase E operational activation and stable worker infrastructure. |
 | I — Places 3D globe | COMPLETE | PR #35 design + PR #36 implementation merged. CI #115 green; WebGL lazy loading corrected; tests consolidated; no migration. |
 | J — Unified MCP and Hermes | BLOCKED | Requires later orchestration decisions and confirmations. |
 
@@ -181,11 +202,11 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Re-review the verified Phase E corrections, including production R2
-   cancellation, in PR #39 against `develop`; never
-   merge it automatically and do not apply its migration to a hosted database
-   without explicit authorization.
-2. Keep Phase H blocked until Phase E is merged and operational activation is
-   separately approved.
-3. Keep Phase E, H and J isolated in separate branches and PRs.
-4. Do not mix worker, Hermes, MCP, OCR, transcription or multimodal analysis.
+1. Review and merge the extension/web refresh correction into `develop`.
+2. Production promotion and deployment remain separate actions. After an
+   authorized deployment, reload the existing unpacked extension folder and run
+   the smoke in `specs/002-extension-web-sync-reconciliation/08-release.md`.
+3. Keep Phase H blocked until Phase E operational activation is separately
+   approved.
+4. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
+   analysis outside this correction.

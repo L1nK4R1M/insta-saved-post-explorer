@@ -2,9 +2,11 @@
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { CheckCircle2, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const CHANNEL = "INSTA_POST_EXPLORER_SYNC_V2";
+const JOB_POLL_INTERVAL_MS = 2_000;
+const BRIDGE_STALE_AFTER_MS = 90_000;
 
 function startErrorMessage(error: unknown) {
   switch (error) {
@@ -30,6 +32,12 @@ type SyncState =
   | { status: "error"; message: string };
 
 type ExtensionCandidate = { extensionId: string; version: string };
+type SyncJobSnapshot = {
+  status?: string;
+  collected?: number;
+  errorCode?: string | null;
+  heartbeatAt?: string;
+};
 
 function nextCandidate(candidates: Map<string, string>, attempted: Set<string>) {
   return [...candidates.entries()]
@@ -61,6 +69,77 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
   const currentTarget = useRef<string | null>(null);
   const attemptTimer = useRef<number | null>(null);
   const attemptNext = useRef<() => boolean>(() => false);
+  const jobPollTimer = useRef<number | null>(null);
+  const activeJobId = useRef<string | null>(null);
+  const lastBridgeSignalAt = useRef(0);
+  const lastJobHeartbeat = useRef<string | null>(null);
+  const settled = useRef(false);
+
+  const stopJobPolling = useCallback(() => {
+    activeJobId.current = null;
+    if (jobPollTimer.current) {
+      window.clearTimeout(jobPollTimer.current);
+      jobPollTimer.current = null;
+    }
+  }, []);
+
+  const settleSuccess = useCallback((synced: number) => {
+    if (settled.current) return;
+    settled.current = true;
+    stopJobPolling();
+    setState({ status: "success", synced });
+    onCompleted();
+  }, [onCompleted, stopJobPolling]);
+
+  const settleError = useCallback((message: string) => {
+    if (settled.current) return;
+    settled.current = true;
+    stopJobPolling();
+    setState({ status: "error", message });
+  }, [stopJobPolling]);
+
+  const startJobPolling = useCallback((jobId: string) => {
+    stopJobPolling();
+    activeJobId.current = jobId;
+
+    const poll = async () => {
+      if (activeJobId.current !== jobId || settled.current) return;
+      try {
+        const response = await fetch(`/api/sync/jobs/${encodeURIComponent(jobId)}`, {
+          cache: "no-store",
+        });
+        if (response.ok) {
+          const job = await response.json() as SyncJobSnapshot;
+          if (activeJobId.current !== jobId || settled.current) return;
+          if (job.status === "COMPLETED") {
+            settleSuccess(job.collected ?? 0);
+            return;
+          }
+          if (job.status === "FAILED") {
+            settleError(job.errorCode ?? "La synchronisation a échoué.");
+            return;
+          }
+          if (typeof job.heartbeatAt === "string" && job.heartbeatAt !== lastJobHeartbeat.current) {
+            lastJobHeartbeat.current = job.heartbeatAt;
+            lastBridgeSignalAt.current = Date.now();
+          }
+        }
+      } catch {
+        // A bridge signal can still complete the refresh after a transient read failure.
+      }
+
+      if (activeJobId.current !== jobId || settled.current) return;
+      if (Date.now() - lastBridgeSignalAt.current >= BRIDGE_STALE_AFTER_MS) {
+        settleError("La synchronisation ne répond plus. Rechargez la page puis réessayez.");
+        return;
+      }
+      jobPollTimer.current = window.setTimeout(() => {
+        void poll();
+      }, JOB_POLL_INTERVAL_MS);
+    };
+
+    void poll();
+  }, [settleError, settleSuccess, stopJobPolling]);
 
   useEffect(() => {
     attemptNext.current = () => {
@@ -73,15 +152,16 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
       if (attemptTimer.current) window.clearTimeout(attemptTimer.current);
       attemptTimer.current = window.setTimeout(() => {
         if (!attemptNext.current()) {
-          setState({ status: "error", message: "Aucune installation de l’extension n’a répondu. Rechargez Insta Saved Sync 4.2.1." });
+          settleError("Aucune installation de l’extension n’a répondu. Rechargez la dernière version d’Insta Saved Sync.");
         }
       }, 2_500);
       return true;
     };
     return () => {
       if (attemptTimer.current) window.clearTimeout(attemptTimer.current);
+      stopJobPolling();
     };
-  }, []);
+  }, [settleError, stopJobPolling]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -99,17 +179,18 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
       }
       if (!requestId.current || message.requestId !== requestId.current) return;
       if (message.payload?.extensionId !== currentTarget.current) return;
+      lastBridgeSignalAt.current = Date.now();
       if (message.type === "START_RESULT" && message.payload?.ok !== true) {
         if (attemptTimer.current) window.clearTimeout(attemptTimer.current);
         if (attemptNext.current()) return;
-        setState({ status: "error", message: startErrorMessage(message.payload?.error) });
+        settleError(startErrorMessage(message.payload?.error));
       }
       if (message.type === "START_RESULT" && message.payload?.ok === true && attemptTimer.current) {
         window.clearTimeout(attemptTimer.current);
         attemptTimer.current = null;
       }
       if (message.type === "STATE" && message.payload?.ok !== true) {
-        setState({ status: "error", message: "La communication avec l’extension a été interrompue. Rechargez l’extension puis réessayez." });
+        settleError("La communication avec l’extension a été interrompue. Rechargez l’extension puis réessayez.");
         return;
       }
       if (message.type !== "STATE" || message.payload?.ok !== true) return;
@@ -117,12 +198,11 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
       if (!task) return;
       const synced = task.stats?.synced ?? 0;
       if (task.status === "completed") {
-        setState({ status: "success", synced });
-        onCompleted();
+        settleSuccess(synced);
       } else if (task.status === "failed") {
-        setState({ status: "error", message: task.error ?? "La synchronisation a échoué." });
+        settleError(task.error ?? "La synchronisation a échoué.");
       } else if (task.status === "paused" && !task.resumeAt) {
-        setState({ status: "error", message: "Synchronisation en pause. Vérifiez votre session Instagram puis relancez." });
+        settleError("Synchronisation en pause. Vérifiez votre session Instagram puis relancez.");
       } else if (task.status === "paused") {
         const resumeTime = new Date(task.resumeAt as string).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" });
         setState({
@@ -139,21 +219,29 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
     return () => {
       window.removeEventListener("message", onMessage);
       if (attemptTimer.current) window.clearTimeout(attemptTimer.current);
+      stopJobPolling();
     };
-  }, [onCompleted]);
+  }, [settleError, settleSuccess, stopJobPolling]);
 
   const start = async () => {
     setState({ status: "starting" });
     try {
+      settled.current = false;
+      stopJobPolling();
+      lastBridgeSignalAt.current = Date.now();
+      lastJobHeartbeat.current = null;
       attempted.current.clear();
       const candidate = nextCandidate(candidates.current, attempted.current);
       if (!candidate) throw new Error("EXTENSION_NOT_FOUND");
       const response = await fetch("/api/sync/session", { method: "POST" });
       if (!response.ok) throw new Error("SESSION_FAILED");
       const payload = await response.json() as Record<string, unknown>;
+      const jobId = typeof payload.jobId === "string" ? payload.jobId : null;
+      if (!jobId) throw new Error("SESSION_FAILED");
       requestId.current = crypto.randomUUID();
       syncPayload.current = payload;
       currentTarget.current = null;
+      startJobPolling(jobId);
       if (!attemptNext.current()) throw new Error("EXTENSION_NOT_FOUND");
       window.setTimeout(() => {
         setState((current) => current.status === "starting"
@@ -161,12 +249,9 @@ export function RefreshPostsButton({ onCompleted, menuItem = false }: { onComple
           : current);
       }, 5_000);
     } catch (error) {
-      setState({
-        status: "error",
-        message: error instanceof Error && error.message === "EXTENSION_NOT_FOUND"
-          ? "Extension introuvable. Installez ou rechargez Insta Saved Sync 4.2.1."
-          : "Impossible de créer la session de synchronisation.",
-      });
+      settleError(error instanceof Error && error.message === "EXTENSION_NOT_FOUND"
+        ? "Extension introuvable. Installez ou rechargez la dernière version d’Insta Saved Sync."
+        : "Impossible de créer la session de synchronisation.");
     }
   };
 
