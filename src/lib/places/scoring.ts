@@ -49,7 +49,7 @@ export const CONTRADICTION_PENALTY = 0.4;
 // Approximation radii by area level (design section 4 / D4).
 export const APPROXIMATION_RADII_METERS = {
   district: 5_000,
-  city: 25_000,
+  city: 10_000,
   county: 50_000,
   state: 150_000,
 } as const;

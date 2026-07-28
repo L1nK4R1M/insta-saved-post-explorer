@@ -159,7 +159,7 @@ Initial approximation radii:
 
 ```text
 district/suburb  5,000 m
-city             25,000 m
+city             10,000 m
 county            50,000 m
 state/region     150,000 m
 ```

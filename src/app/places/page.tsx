@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 import { getConfiguredOwnerId } from "@/auth/config";
 import { getSession } from "@/auth/session";
@@ -77,6 +79,9 @@ export default async function PlacesPage({ searchParams }: PageProps) {
   return (
     <main className="places-page">
       <header className="places-page-head">
+        <Link className="places-back-link" href="/">
+          <ArrowLeft size={15} aria-hidden="true" /> Retour aux posts
+        </Link>
         <h1>Places</h1>
         <p>
           {view.items.length} lieu{view.items.length > 1 ? "x" : ""} identifié

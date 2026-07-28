@@ -32,6 +32,7 @@ Status values:
 | F — Places metadata-first domain | COMPLETE | Phases B and D | F1/F2/F3 + hardening PR #32, squash `216b975` | Code and robustness work complete. Exit gate accepted via a successful real local validation: real import succeeded, an identical re-import stayed idempotent with no unwanted duplicates, the expected P2002 no longer appears, transient errors recovered, and `UNKNOWN` was handled correctly. No migration; no public-contract break; no sensitive data committed. |
 | E — Global worker foundation | COMPLETE | Phase C | PR #39, squash `c4e37f6` | Worker code promoted to Production with VibeSpec convergence PASS. The additive queue migration is recorded on Neon `main`; VPS operational activation remains pending. |
 | G — Places 2D UI and contextual navigation | COMPLETE | Phase F complete | PR #34, squash `2bd2098` | `/places`, Leaflet + markercluster, Geoapify raster tiles, synchronized list, complete filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. Review fixes validated: authenticated read Server Action, complete `sourceThemes`, all countries filterable. CI #107 green; 50 files / 440 tests locally; no migration. |
+| Places mobile usability correction | AWAITING_REVIEW | Phases G and I complete | `codex/places-mobile-navigation-radius` | Mobile 2D/3D bounds, explicit return link, public configured-owner linked-post reads and new 10 km city approximation. 29 focused unit, 6 desktop E2E, 1 mobile E2E, lint, typecheck, 360 full unit tests and build pass. No migration, deploy or production data update. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
 | I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | T1–T10 merged: additive `view=map|globe`, pure projection module, renderer seam, WebGL probe and fallback, lazy `react-globe.gl` 2.38.0 / `three` 0.185.1, public-domain Natural Earth texture generated locally with documented licence, segmented `2D | 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. CI #115 green; no migration, no API change, Leaflet preserved. Measured: `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry; first globe render 907–1033 ms on the GPU-less CI baseline. **Performance validated on real GPU** (`FPS_BUDGET_VALIDATED_ON_REAL_GPU`, 25 July 2026): NVIDIA GeForce RTX 5090, 240 fps and 276-326 ms first render at 100/500/1000 places, desktop and mobile viewport — all D6 budgets met. No Phase I follow-up remains open. |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
@@ -52,12 +53,14 @@ Current state
   (45 desktop + 1 mobile). Critical database and security suites remain intact.
 - Phase E PR #39 is promoted to Production. Its additive queue migration is
   recorded on Neon `main`; VPS operational activation remains pending.
-- PR #47 is merged on `main` at 66cfd78 and the corresponding Vercel Production
+- PR #47 and the documentation follow-up PR #48 are merged on `main` at 44b0da0; the corresponding Vercel Production
   deployment is READY. The validated Places candidate batch imported 407/407
   posts with zero failures and zero importer errors.
 - Production now contains 51 unique places, 301 post/place links, 254 linked
   posts, 1,203 evidence rows and 407 jobs (307 SUCCEEDED, 100 NEEDS_REVIEW).
   Owner-isolation and approximate-radius post-import checks have zero violations.
+- The unreleased `codex/places-mobile-navigation-radius` correction is locally
+  verified and awaiting review. Existing production 25 km rows are unchanged.
 - PR #40 extension/web reconciliation is merged at ba56573 and PR #42 exact
   develop Preview support is merged at 2b877ba. The 4.2.6 DB-first follow-up
   preserves the additive legacy contract, repairs the no-progress watchdog and

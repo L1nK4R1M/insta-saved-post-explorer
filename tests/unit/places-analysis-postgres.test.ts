@@ -129,7 +129,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
     const place = await prisma.place.findFirstOrThrow({ where: { ownerId: OWNER_A } });
     expect(place.precision).toBe("APPROXIMATE");
-    expect(place.approximationRadiusMeters).toBe(25_000);
+    expect(place.approximationRadiusMeters).toBe(10_000);
     expect(place.continentCode).toBe("AS");
   });
 
