@@ -18,7 +18,8 @@ import type { PlaceResolver } from "@/server/places/resolvers/types";
 // resolution and persistence. No media URL, R2 credential, or collection is ever
 // read or emitted. All access is owner-scoped.
 
-const MAX_EXPORT_LIMIT = 1_000;
+const MAX_EXPORT_LIMIT = 10_000;
+const EXPORT_SCAN_PAGE_SIZE = 500;
 const MAX_HASHTAGS = 50;
 
 // One exported line: the minimal text fields the model needs, plus the immutable
@@ -42,8 +43,16 @@ export type ExportCaptionBatchInput = {
   limit?: number;
   postId?: string;
   force?: boolean;
+  all?: boolean;
   analysisVersion?: string;
 };
+
+export class CaptionBatchExportError extends Error {
+  constructor(readonly code: "EXPORT_LIMIT_EXCEEDED") {
+    super(code);
+    this.name = "CaptionBatchExportError";
+  }
+}
 
 function clampLimit(value: number | undefined, fallback: number, max: number): number {
   if (!value || !Number.isFinite(value)) return fallback;
@@ -66,61 +75,138 @@ function extractHashtags(caption: string): string[] {
 }
 
 export async function exportCaptionBatch(input: ExportCaptionBatchInput): Promise<CaptionBatchRecord[]> {
-  const limit = clampLimit(input.limit, 100, MAX_EXPORT_LIMIT);
+  const limit = input.all
+    ? MAX_EXPORT_LIMIT
+    : clampLimit(input.limit, 100, MAX_EXPORT_LIMIT);
   const analysisVersion = input.analysisVersion?.trim() || PLACES_ANALYSIS_VERSION;
+  const force = input.force || input.all;
+  const records: Array<{ record: CaptionBatchRecord; savedAt: Date | null }> = [];
+  let cursor: string | undefined;
 
-  const posts = await prisma.post.findMany({
-    where: { ownerId: input.ownerId, mainTheme: { not: null }, ...(input.postId ? { id: input.postId } : {}) },
-    orderBy: [{ savedAt: "desc" }, { id: "asc" }],
-    take: 2_000,
-    select: { id: true, mainTheme: true },
-  });
-
-  const records: CaptionBatchRecord[] = [];
-  for (const post of posts) {
-    if (records.length >= limit) break;
-
-    const theme = canonicalPlacesTheme(post.mainTheme);
-    if (!theme) continue; // eligibility comes only from mainTheme; collections are never read
-
-    const inputs = await loadAnalysisPostInputs(input.ownerId, post.id);
-    if (!inputs) continue;
-
-    // The hash pins this line to the exact analysis input and version, so a
-    // result generated from this state can be rejected once the post changes.
-    const inputHash = computePlacesInputHash({
-      analysisVersion,
-      postId: inputs.id,
-      sourceTheme: theme,
-      caption: inputs.caption,
-      authorUsername: inputs.authorUsername,
-      internalTags: inputs.internalTags,
-      structuredLocation: inputs.structuredLocation,
-      verifiedMedia: inputs.verifiedMedia,
+  while (true) {
+    const posts = await prisma.post.findMany({
+      where: {
+        ownerId: input.ownerId,
+        mainTheme: { not: null },
+        ...(input.postId ? { id: input.postId } : {}),
+      },
+      orderBy: { id: "asc" },
+      take: input.postId ? 1 : EXPORT_SCAN_PAGE_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: { id: true, mainTheme: true, savedAt: true },
     });
+    if (posts.length === 0) break;
 
-    if (!input.force) {
-      const done = await prisma.placeAnalysisJob.findFirst({
-        where: { ownerId: input.ownerId, postId: inputs.id, inputHash, analysisVersion, status: "SUCCEEDED" },
-        select: { id: true },
+    for (const post of posts) {
+      if (!input.all && records.length >= limit) break;
+
+      const theme = canonicalPlacesTheme(post.mainTheme);
+      if (!theme) continue; // eligibility comes only from mainTheme; collections are never read
+
+      const inputs = await loadAnalysisPostInputs(input.ownerId, post.id);
+      if (!inputs) continue;
+
+      // The hash pins this line to the exact analysis input and version, so a
+      // result generated from this state can be rejected once the post changes.
+      const inputHash = computePlacesInputHash({
+        analysisVersion,
+        postId: inputs.id,
+        sourceTheme: theme,
+        caption: inputs.caption,
+        authorUsername: inputs.authorUsername,
+        internalTags: inputs.internalTags,
+        structuredLocation: inputs.structuredLocation,
+        verifiedMedia: inputs.verifiedMedia,
       });
-      if (done) continue; // already analyzed for this exact input; use --force to re-export
+
+      if (!force) {
+        const done = await prisma.placeAnalysisJob.findFirst({
+          where: {
+            ownerId: input.ownerId,
+            postId: inputs.id,
+            inputHash,
+            analysisVersion,
+            status: "SUCCEEDED",
+          },
+          select: { id: true },
+        });
+        if (done) continue; // already analyzed for this exact input; use --force to re-export
+      }
+
+      records.push({
+        savedAt: post.savedAt,
+        record: {
+          post_id: inputs.id,
+          main_theme: theme,
+          caption: inputs.caption,
+          hashtags: extractHashtags(inputs.caption),
+          internal_tags: inputs.internalTags,
+          author_username: inputs.authorUsername,
+          instagram_location: inputs.structuredLocation,
+          input_hash: inputHash,
+          analysis_version: analysisVersion,
+        },
+      });
+      if (input.all && records.length > MAX_EXPORT_LIMIT) {
+        throw new CaptionBatchExportError("EXPORT_LIMIT_EXCEEDED");
+      }
     }
 
-    records.push({
-      post_id: inputs.id,
-      main_theme: theme,
-      caption: inputs.caption,
-      hashtags: extractHashtags(inputs.caption),
-      internal_tags: inputs.internalTags,
-      author_username: inputs.authorUsername,
-      instagram_location: inputs.structuredLocation,
-      input_hash: inputHash,
-      analysis_version: analysisVersion,
-    });
+    if (input.postId || (!input.all && records.length >= limit)) break;
+    cursor = posts.at(-1)?.id;
+    if (!cursor || posts.length < EXPORT_SCAN_PAGE_SIZE) break;
   }
 
-  return records;
+  records.sort((left, right) => {
+    if (left.record.main_theme !== right.record.main_theme) {
+      return left.record.main_theme < right.record.main_theme ? -1 : 1;
+    }
+    if (left.savedAt && right.savedAt) {
+      const bySavedAt = right.savedAt.getTime() - left.savedAt.getTime();
+      if (bySavedAt !== 0) return bySavedAt;
+    } else if (left.savedAt) {
+      return -1;
+    } else if (right.savedAt) {
+      return 1;
+    }
+    if (left.record.post_id === right.record.post_id) return 0;
+    return left.record.post_id < right.record.post_id ? -1 : 1;
+  });
+  return records.map(({ record }) => record);
+}
+
+export type PlacesExportPreflightCounts = {
+  totalPosts: number;
+  voyagesCount: number;
+  restaurantCount: number;
+  eligibleCount: number;
+};
+
+export async function loadPlacesExportPreflightCounts(
+  ownerId: string,
+): Promise<PlacesExportPreflightCounts> {
+  const [totalPosts, themes] = await Promise.all([
+    prisma.post.count({ where: { ownerId } }),
+    prisma.post.groupBy({
+      by: ["mainTheme"],
+      where: { ownerId },
+      _count: { _all: true },
+    }),
+  ]);
+
+  let voyagesCount = 0;
+  let restaurantCount = 0;
+  for (const theme of themes) {
+    const canonical = canonicalPlacesTheme(theme.mainTheme);
+    if (canonical === "Voyages") voyagesCount += theme._count._all;
+    if (canonical === "Restaurant") restaurantCount += theme._count._all;
+  }
+  return {
+    totalPosts,
+    voyagesCount,
+    restaurantCount,
+    eligibleCount: voyagesCount + restaurantCount,
+  };
 }
 
 export function serializeCaptionBatch(records: CaptionBatchRecord[]): string {
