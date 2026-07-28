@@ -100,6 +100,7 @@ No Phase I follow-up remains open.
 ### Places complete analysis JSON export
 
 The tool on `codex/places-analysis-json-export` is verified and ready for review.
+PR: `#46 — feat(places): export complete caption analysis JSON`.
 It adds `npm run places:export-analysis-json` over the existing Phase F
 caption-analysis workflow. It uses explicit develop/production database
 variables, performs reads only, validates one strict JSON document, and writes

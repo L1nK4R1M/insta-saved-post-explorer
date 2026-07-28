@@ -3,6 +3,7 @@
 Date: 28 July 2026
 Branch: `codex/places-analysis-json-export`
 Base: `f74302b3bba6bf9bd29ab66d6ef8fbc32d5479b3`
+Pull request: `#46`
 Status: tool verified; production environment required
 
 ## Scope
