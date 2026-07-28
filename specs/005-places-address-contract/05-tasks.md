@@ -40,7 +40,7 @@ rollback, observability, traceability, and remaining Production approval gate.
 ## TASK-05 - Close real develop validation gaps
 
 **Mode:** critical
-**Status:** in progress
+**Status:** verified
 **Blocked by:** explicit owner authorization for the single Geoapify dry-run (satisfied)
 
 Deliver `REQ-010` and `REQ-011`, plus the real `inner_part` refinement of

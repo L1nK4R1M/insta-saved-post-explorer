@@ -17,6 +17,14 @@ Release gate: DEVELOP_READY_PRODUCTION_BLOCKED
   develop database still has exactly its original one approximate primary link.
 - The duplicate-link audit proved a committed import needs narrow supersession
   of that old automatic approximate primary before data writes are safe.
+- PR #54 squash-merged on develop at
+  `f98da30c49b9cd1dc07b7c006900fdca9ece81f0`.
+- CI #157 passed, including the real PostgreSQL supersession invariant and
+  Playwright.
+- Vercel develop deployment `dpl_GWMGkdvQptBCz1icJidE6zUJM8vL` is READY and
+  returns HTTP 200 at its immutable root.
+- The final dry-run from merged `develop` processed 1/1 post with exit 0,
+  `committed=false`, zero errors, and no Neon link-count change.
 
 ## Migration plan
 
@@ -38,8 +46,8 @@ default analysis version `places-v2`.
    match type, and inspect whether the old automatic city link would coexist.
 6. Treat any develop data commit as a separate operator decision.
 
-Steps 1 through 5 are complete. The follow-up code must pass review, CI and
-Preview before step 6 can be considered.
+Steps 1 through 5, the follow-up code gate, and the final merged-revision dry-run
+are complete. Step 6 remains a separate owner decision.
 
 ## Production gate
 
