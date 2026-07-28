@@ -32,7 +32,9 @@ provider identity, or precision.
 | `src/server/places/analysis-json-export.ts` | Declared model-output contract | v3 JSON document | candidate constants |
 | `src/server/places/resolvers/geoapify.ts` | Provider query and normalization | `PlaceResolver` | Geoapify HTTP API |
 | `src/lib/places/scoring.ts` | Deterministic precision decision | `scoreResolvedCandidate` | normalized candidate/provider data |
+| `src/server/places/analysis.ts` | Atomic place/link persistence and narrow primary supersession | `persistMetadataAnalysis` | Prisma transaction |
 | `src/server/places/jobs.ts` | Re-analysis identity | `PLACES_ANALYSIS_VERSION` | input hash/job repository |
+| `scripts/places/import-candidate-batch.ts` | Local import lifecycle | CLI | Prisma singleton |
 
 ### Data and control flow
 
@@ -48,9 +50,15 @@ provider identity, or precision.
    agrees.
 6. Address authorizes `EXACT` only if the house number agrees, result type is
    specific, rank is at least 0.90, match type is `full_match` or
-   `match_by_building`, and no city/country/address contradiction exists.
+   `match_by_building` (or `inner_part` with rank at least 0.95), and no
+   city/country/address contradiction exists.
 7. Area result types follow the existing approximate branch regardless of the
    candidate address.
+8. In a committed re-analysis, a new exact primary atomically supersedes only
+   the previous automatic approximate primary link when that place was not
+   retained by the current analysis. The old place and evidence remain.
+9. The local importer disconnects Prisma in `finally` and sets only
+   `process.exitCode` on failure so Windows libuv handles close naturally.
 
 ### Failure and recovery
 
@@ -68,6 +76,7 @@ provider identity, or precision.
 - The request includes only candidate location fields, never a full caption.
 - Only provider-normalized coordinates are persisted.
 - Conflicting house numbers are a major contradiction.
+- User-confirmed links and canonical places are never deleted by supersession.
 
 ### Compatibility and rollout
 

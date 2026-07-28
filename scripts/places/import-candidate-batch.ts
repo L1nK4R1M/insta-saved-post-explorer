@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { prisma } from "@/server/db";
 import { importCandidateBatch } from "@/server/places/caption-batch";
 import { getConfiguredPlaceResolver } from "@/server/places/resolvers";
 
@@ -58,7 +59,7 @@ function safeInputPath(candidate: string): string {
   return resolved;
 }
 
-async function main(): Promise<void> {
+async function runImport(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const jsonl = await readFile(safeInputPath(args.input), "utf8");
   const resolver = getConfiguredPlaceResolver();
@@ -80,9 +81,15 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error: unknown) => {
-    process.stderr.write(`Import failed: ${error instanceof Error ? error.message : "unknown error"}\n`);
-    process.exit(1);
-  });
+async function main(): Promise<void> {
+  try {
+    await runImport();
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+main().catch((error: unknown) => {
+  process.stderr.write(`Import failed: ${error instanceof Error ? error.message : "unknown error"}\n`);
+  process.exitCode = 1;
+});

@@ -10,6 +10,11 @@
    verification; different house number is blocked; city fallback remains 10 km;
    no-address baseline remains unchanged.
 5. Analysis version: default is places-v2 and changes the input hash.
+6. Real provider: `amenity` / rank 1 / `inner_part` becomes exact, while
+   `inner_part` below 0.95 stays non-exact.
+7. Persistence: an exact re-analysis removes only the old automatic approximate
+   primary; a confirmed primary, canonical places, and evidence remain.
+8. CLI lifecycle: the real dry-run prints success and exits 0 on Windows.
 
 ## Focused commands
 
@@ -34,15 +39,16 @@ At minimum, a deterministic unit case uses:
 ```text
 name: @airelleschateaudeversailles
 address: 12 rue de l'Independance Americaine, 78000 Versailles
-provider: building/full_match/rank >= 0.90
+provider: amenity/inner_part/rank 1 (real) or building/full_match/rank >= 0.90
 ```
 
 Expected result: `EXACT`, radius null, reasons include address verification.
 
-If the develop Geoapify secret is available after Preview deployment, perform a
-single-post dry-run for `cmrfhnykb000hjs04ndgb3avh`. This is supporting runtime
-evidence, not a substitute for deterministic tests. Do not commit the re-import
-or touch Production without the later owner gate.
+The owner authorized the single-post Geoapify dry-run for
+`cmrfhnykb000hjs04ndgb3avh`. Record only bounded provider/scoring metadata, not
+the address. This is supporting runtime evidence, not a substitute for
+deterministic tests. Do not commit the re-import or touch Production without the
+later owner gate.
 
 ## Review gates
 

@@ -11,8 +11,12 @@ Release gate: DEVELOP_READY_PRODUCTION_BLOCKED
 - A schema-v3 export of post `cmrfhnykb000hjs04ndgb3avh` from Neon develop
   completed read-only (`business_writes=false`) and the local artifact was
   removed.
-- The real Geoapify dry-run was not executed because transmitting the exact
-  caption-derived address requires explicit owner authorization.
+- The owner authorized the real Geoapify dry-run. It returned `amenity`, rank 1,
+  `inner_part`; refined scoring returns `EXACT`, confidence 1, radius null.
+- The importer exits 0 and reports 1/1 success with `committed=false`; the
+  develop database still has exactly its original one approximate primary link.
+- The duplicate-link audit proved a committed import needs narrow supersession
+  of that old automatic approximate primary before data writes are safe.
 
 ## Migration plan
 
@@ -34,8 +38,8 @@ default analysis version `places-v2`.
    match type, and inspect whether the old automatic city link would coexist.
 6. Treat any develop data commit as a separate operator decision.
 
-Steps 1 through 3 are complete. Step 4 is intentionally paused at the external
-data-sharing boundary; steps 5 and 6 remain pending.
+Steps 1 through 5 are complete. The follow-up code must pass review, CI and
+Preview before step 6 can be considered.
 
 ## Production gate
 
@@ -59,7 +63,7 @@ counts, and duplicate automatic links for the selected post.
 ## Stop conditions
 
 - real provider result is only city/district or rank below 0.90;
-- provider match type is not full/building;
+- provider match type is neither full/building nor `inner_part` at rank 0.95+;
 - a house-number contradiction appears;
 - the new exact result would silently leave a misleading automatic city link;
 - any secret/caption leakage, quality-gate failure, or Preview runtime error.

@@ -37,6 +37,17 @@ Update durable contracts/operator guidance, run focused and full gates, perform
 separate specification and engineering-quality reviews, and record rollout,
 rollback, observability, traceability, and remaining Production approval gate.
 
+## TASK-05 - Close real develop validation gaps
+
+**Mode:** critical
+**Status:** in progress
+**Blocked by:** explicit owner authorization for the single Geoapify dry-run (satisfied)
+
+Deliver `REQ-010` and `REQ-011`, plus the real `inner_part` refinement of
+`REQ-005`: prove the CLI exits cleanly, accept only strongly verified
+`inner_part`, atomically supersede the previous automatic approximate primary,
+preserve user-confirmed/history data, and rerun the complete gates.
+
 ## Exact expected implementation files
 
 - `src/lib/places/candidates.ts`
@@ -46,6 +57,7 @@ rollback, observability, traceability, and remaining Production approval gate.
 - `src/server/places/analysis-json-export.ts`
 - `src/server/places/analysis.ts`
 - `src/server/places/jobs.ts`
+- `scripts/places/import-candidate-batch.ts`
 - `docs/places-caption-candidate.schema.json`
 - `tests/unit/places-candidates.test.ts`
 - `tests/unit/places-scoring.test.ts`

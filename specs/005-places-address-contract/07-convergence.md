@@ -1,6 +1,6 @@
 # Places address contract - Convergence review
 
-Decision: PASS for develop integration; Production gate remains pending
+Decision: PENDING follow-up verification; Production gate remains blocked
 
 ## Artifact consistency
 
@@ -10,7 +10,7 @@ traceability describe the same address-first flow.
 
 ## Requirement coverage
 
-Every `REQ-001` through `REQ-009` and `NFR-001` through `NFR-004` maps to an
+Every `REQ-001` through `REQ-011` and `NFR-001` through `NFR-004` maps to an
 existing test seam or an inspectable no-change check. Uncovered requirements: 0.
 
 ## Implementation against specification
@@ -45,10 +45,16 @@ match type, threshold, and contradiction checks. No model coordinate is accepted
   its immutable URL returns HTTP 200.
 - The single real post exported from Neon develop under schema v3 with
   `business_writes=false`; the temporary export was then removed.
-- No live Geoapify request or candidate import is claimed. Sending the exact
-  caption-derived address to that third party requires explicit authorization.
+- The owner authorized the live Geoapify dry-run. It returned `amenity`, rank 1,
+  `inner_part`; the refined scorer returns `EXACT`, confidence 1, radius null.
+- The importer printed a clean 1/1 success report, exited 0 after lifecycle
+  correction, and Neon develop retained its original one approximate primary,
+  proving that no dry-run write escaped.
+- The follow-up scoring, supersession and shutdown diff still requires full
+  gates, PostgreSQL CI, independent review and READY Preview evidence.
 
 ## Final decision rationale
 
-PASS means the revision is coherent, merged, CI-green and Preview-ready on
-`develop`; it is not authorization to promote or re-analyze Production data.
+The decision returns to PASS only after the follow-up satisfies every local and
+hosted gate. No current evidence authorizes a committed re-analysis or
+Production promotion.

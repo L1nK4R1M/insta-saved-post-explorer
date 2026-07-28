@@ -54,12 +54,17 @@ Stop and document any conflict between this handoff, an authoritative contract a
 - Geoapify receives a free-form address query when available and returns bounded
   rank/match-type evidence to deterministic scoring;
 - address-authorized `EXACT` requires matching house number, specific result,
-  provider rank at least 0.90, full/building match type, and no contradiction;
+  provider rank at least 0.90, full/building match type (or `inner_part` at
+  rank 0.95+), and no contradiction;
 - a schema-v3 export of the single `hungryconsti` post from Neon develop passed
   with `business_writes=false`; the temporary export was removed afterward;
-- the live Geoapify dry-run was not sent because transmitting that exact
-  caption-derived address to a third party still requires explicit owner
-  authorization;
+- the owner authorized the live single-post Geoapify dry-run. The real response
+  is `amenity`, rank 1, `inner_part`; the refined scoring returns `EXACT`,
+  confidence 1, radius null, and the importer exits 0 without writing;
+- Neon develop still has the original single automatic approximate primary for
+  this post after the dry-run, proving rollback. A follow-up branch adds narrow
+  atomic supersession for the later committed re-analysis while preserving
+  user-confirmed links and historical places/evidence;
 - no Prisma migration, dependency, Production deployment, Neon write, candidate
   import, or existing place mutation is included. Production remains unchanged.
 
@@ -311,12 +316,12 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Obtain explicit owner authorization before sending the exact caption-derived
-   address of post `cmrfhnykb000hjs04ndgb3avh` to Geoapify.
-2. After authorization, regenerate the v3 single-post export, produce candidate
-   JSONL with the required `address`, and run the importer without `--commit`.
-3. Confirm the real provider result is a strongly verified specific address and
-   audit duplicate/stale automatic links before authorizing any develop write.
+1. Review the `codex/places-importer-shutdown` follow-up that accepts only
+   strongly verified `inner_part`, fixes clean CLI shutdown, and supersedes only
+   a stale automatic approximate primary when a committed exact primary exists.
+2. Require focused/full gates, PostgreSQL invariants, CI and a READY Preview.
+3. After the follow-up reaches `develop`, regenerate and dry-run the single post
+   once more before any develop data write.
 4. Keep Production code and data unchanged until the develop result is approved
    without bugs and the owner explicitly authorizes promotion.
 5. Replace files in the existing unpacked

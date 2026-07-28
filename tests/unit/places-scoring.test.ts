@@ -106,6 +106,37 @@ describe("scoreResolvedCandidate", () => {
     expect(result.reasons).toEqual(expect.arrayContaining(["address_match", "address_provider_verified", "exact_specific_match"]));
   });
 
+  it("accepts Geoapify inner_part for an exact house-number address with maximum provider confidence", () => {
+    const result = scoreResolvedCandidate(
+      input(
+        {
+          name: "@airelleschateaudeversailles",
+          address: "12 rue de l'Independance Americaine, 78000 Versailles",
+          city: "Versailles",
+          region: "Ile-de-France",
+          country: "France",
+          confidence: 0.98,
+        },
+        {
+          displayName: "Airelles Chateau de Versailles, Le Grand Controle",
+          address: "12 Rue de l'Independance Americaine, 78000 Versailles, France",
+          city: "Versailles",
+          region: "Ile-de-France",
+          country: "France",
+          countryCode: "FR",
+          providerResultType: "amenity",
+          providerRank: 1,
+          providerMatchType: "inner_part",
+        },
+      ),
+    );
+
+    expect(result.precision).toBe("EXACT");
+    expect(result.confidence).toBe(1);
+    expect(result.approximationRadiusMeters).toBeNull();
+    expect(result.reasons).toEqual(expect.arrayContaining(["address_match", "address_provider_verified", "exact_specific_match"]));
+  });
+
   it("blocks address-authorized EXACT when the house number contradicts", () => {
     const result = scoreResolvedCandidate(
       input(
@@ -136,6 +167,7 @@ describe("scoreResolvedCandidate", () => {
 
   it.each([
     ["weak provider rank", { providerRank: 0.89, providerMatchType: "full_match" }],
+    ["inner-part rank below its stricter threshold", { providerRank: 0.94, providerMatchType: "inner_part" }],
     ["street-only provider match", { providerRank: 0.99, providerMatchType: "match_by_street" }],
     ["missing provider match type", { providerRank: 0.99, providerMatchType: null }],
   ])("does not authorize address-based EXACT for %s", (_label, provider) => {
