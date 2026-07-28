@@ -42,7 +42,11 @@ idempotently, and polling stops at the first terminal result.
 
 | Variable | Required | Secret | Default | Validation | Owner |
 |---|---|---|---|---|---|
-| None | — | — | — | No configuration change | — |
+| `DATABASE_URL` | Yes per deployed environment | Yes | None | Preview resolves to Neon develop; Production resolves to Neon main | Vercel project owner |
+
+The extension does not read `DATABASE_URL`. It trusts exactly production,
+localhost and the stable develop Preview at manifest, content-bridge and
+background API-origin boundaries. Wildcard Vercel hosts are outside contract.
 
 ## Feature flags
 
@@ -63,4 +67,5 @@ idempotently, and polling stops at the first terminal result.
 
 Current web API payload and existing extension messaging remain compatible.
 Local export, media-only download, owner isolation, import idempotency, R2
-verification and rate limiting are preserved.
+verification and rate limiting are preserved. Production and localhost origins
+remain supported; extension 4.2.5 adds only the exact stable develop Preview.

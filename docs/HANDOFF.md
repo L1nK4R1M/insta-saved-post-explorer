@@ -3,7 +3,7 @@
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `develop`  
-Reference implementation commit: `c4e37f639d9dd9b31a5118199b4a08da87396144`
+Reference implementation commit: `ba56573d66c1bf595a4d8f0551591a5eb423e453`
 
 ## 1. Purpose and authority
 
@@ -39,28 +39,37 @@ Stop and document any conflict between this handoff, an authoritative contract a
 ## 3. Current execution pointer
 
 ```text
-Active review branch: codex/fix-extension-sync-refresh
-Base: develop at c4e37f639d9dd9b31a5118199b4a08da87396144
+Active review branch: codex/allow-develop-preview-sync
+Base: develop at ba56573d66c1bf595a4d8f0551591a5eb423e453
 Mode: critical
 VibeSpec convergence: PASS
 
 Verified correction:
+- PR #40 merged the extension/web refresh correction into develop at ba56573;
 - extension archive and web ownership are separated;
 - archive-only posts become durable reconciliation targets;
 - repeated Instagram cursors terminate;
 - the web button observes its owner-scoped /api/sync/jobs/{id};
 - the first terminal extension/server signal settles the UI once;
 - 90 seconds without bridge or durable job progress becomes an actionable error.
+- extension 4.2.5 allows the exact stable develop Preview at all three origin
+  gates while preserving Production and localhost;
+- arbitrary `*.vercel.app` deployments remain blocked.
 
 Fresh gates:
 - focused tests: 7/7;
+- neighboring sync/import tests: 30/30;
 - lint and typecheck: PASS;
 - full unit suite: 326 passed, 129 skipped;
 - production build: PASS, 32 pages;
+- traceability: 24 requirements, zero uncovered;
+- flat extension ZIP SHA-256:
+  `9F842FD55066B2E88E981A1B545ABAB101E6AE0AE462D92349863FAE7E94479D`;
 - git diff --check: PASS.
 
-No migration, dependency, permission or new API route is included. Production
-deployment and Chrome Web Store publication remain separate actions.
+No migration, dependency, authentication, R2 permission or new API route is
+included. One exact develop Preview host permission is added. Merge, deployment,
+live Preview smoke and Chrome Web Store publication remain separate actions.
 
 Phase F is CLOSED and COMPLETE.
 Phase G is CLOSED and COMPLETE.
@@ -202,11 +211,16 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Review and merge the extension/web refresh correction into `develop`.
-2. Production promotion and deployment remain separate actions. After an
-   authorized deployment, reload the existing unpacked extension folder and run
-   the smoke in `specs/002-extension-web-sync-reconciliation/08-release.md`.
-3. Keep Phase H blocked until Phase E operational activation is separately
+1. Review the exact-origin 4.2.5 diff on
+   `codex/allow-develop-preview-sync`, then commit/push/merge only with owner
+   authorization.
+2. After the develop Preview deploys, replace files in the existing unpacked
+   extension directory with `C:\tmp\insta-saved-sync-v4.2.5.zip`, reload the
+   extension and run the Preview smoke in
+   `specs/002-extension-web-sync-reconciliation/08-release.md`.
+3. Production promotion remains a separate action; the Preview smoke must not
+   be reported as Production validation.
+4. Keep Phase H blocked until Phase E operational activation is separately
    approved.
-4. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
+5. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
    analysis outside this correction.

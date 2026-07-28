@@ -39,7 +39,7 @@ lecture et écriture des objets. L’application a besoin de `PutObject` et
 
 ## Installation de l’extension
 
-1. Décompresser `insta-saved-sync-v4.2.4.zip` dans un dossier permanent.
+1. Décompresser `insta-saved-sync-v4.2.5.zip` dans un dossier permanent.
 2. Ouvrir `chrome://extensions`.
 3. Activer **Mode développeur**.
 4. Cliquer **Charger l’extension non empaquetée**.
@@ -78,6 +78,14 @@ Si le dernier message de l’extension se perd lors de l’arrêt du service wor
 le statut serveur `COMPLETED` ou `FAILED` termine quand même le bouton. Si ni le
 pont ni le job ne répondent, le chargement devient une erreur actionnable après
 90 secondes sans signal au lieu de tourner indéfiniment.
+
+La version 4.2.5 autorise aussi la Preview develop stable
+`https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app`
+aux trois barrières de l’extension : injection du content script, validation
+des messages de page et validation de l’origine API. Aucun wildcard
+`*.vercel.app` n’est accepté. Preview et Production utilisent chacune leur
+`DATABASE_URL` Vercel, respectivement vers les branches Neon `develop` et
+`main`; l’extension ne choisit jamais la base elle-même.
 
 ## Limites opérationnelles
 
