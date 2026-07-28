@@ -4,7 +4,7 @@ Last updated: 28 July 2026
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `main`  
 Reference production base: `main` at `bebf6801eecef94001c39887c9a7dd1abda48f5e`
-Reference implementation: `develop` at `67e3c1ba38cf350533c9a7ba27059c3fc368d727`
+Reference implementation: `develop` at `71106cc75ab16c5746c452f9332ef30df51557ca`
 
 ## 1. Purpose and authority
 
@@ -39,11 +39,15 @@ Stop and document any conflict between this handoff, an authoritative contract a
 
 ## 3. Current execution pointer
 
-### Places address contract awaiting develop review (28 July 2026)
+### Places address contract merged on develop (28 July 2026)
 
-- active branch: `codex/places-address-contract`, based on current Production
-  `bebf680` so PR targeting `develop` also reconciles its seven already approved
-  Production commits and preserves the 10 km radius correction;
+- PR #52 was squash-merged into `develop` at `71106cc`; the merge also
+  reconciles the seven already approved Production commits and preserves the
+  10 km radius correction;
+- GitHub CI #153 passed, including PostgreSQL invariants, worker checks, unit
+  tests, build and Playwright;
+- Vercel Preview deployment `dpl_632ZKgw3HdT6XwuCfynP3RQkBZBc` is READY and
+  its immutable deployment URL returns HTTP 200;
 - VibeSpec: `specs/005-places-address-contract`, Critical;
 - strict candidates now require bounded `address: string | null`; export schema
   is v3 and default analysis identity is `places-v2`;
@@ -51,10 +55,13 @@ Stop and document any conflict between this handoff, an authoritative contract a
   rank/match-type evidence to deterministic scoring;
 - address-authorized `EXACT` requires matching house number, specific result,
   provider rank at least 0.90, full/building match type, and no contradiction;
+- a schema-v3 export of the single `hungryconsti` post from Neon develop passed
+  with `business_writes=false`; the temporary export was removed afterward;
+- the live Geoapify dry-run was not sent because transmitting that exact
+  caption-derived address to a third party still requires explicit owner
+  authorization;
 - no Prisma migration, dependency, Production deployment, Neon write, candidate
-  import, or existing place mutation is included;
-- Production remains unchanged until Preview verification and explicit owner
-  approval.
+  import, or existing place mutation is included. Production remains unchanged.
 
 ### Places usability correction released (28 July 2026)
 
@@ -73,10 +80,10 @@ Stop and document any conflict between this handoff, an authoritative contract a
   the initial Vercel runtime-error window all pass.
 
 ```text
-Active review branch: codex/places-address-contract
-Reference: main at bebf680; PR target develop at 67e3c1b
+Active code review branch: none; PR #52 is merged
+Reference: main at bebf680; develop at 71106cc
 Mode: critical
-VibeSpec convergence: PASS
+VibeSpec convergence: PASS for develop; Production gate remains pending
 
 Production baseline:
 - PR #45 deployed the DB-first extension convergence to `main` at `64f14cb`;
@@ -304,14 +311,14 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Review and merge `codex/places-address-contract` to `develop`; wait for CI and
-   the stable Preview.
-2. Generate a v3 single-post export for
-   `cmrfhnykb000hjs04ndgb3avh`, produce candidate JSONL with the required
-   `address`, and run the importer without `--commit`.
+1. Obtain explicit owner authorization before sending the exact caption-derived
+   address of post `cmrfhnykb000hjs04ndgb3avh` to Geoapify.
+2. After authorization, regenerate the v3 single-post export, produce candidate
+   JSONL with the required `address`, and run the importer without `--commit`.
 3. Confirm the real provider result is a strongly verified specific address and
    audit duplicate/stale automatic links before authorizing any develop write.
-4. Keep Production code and data unchanged until explicit owner approval.
+4. Keep Production code and data unchanged until the develop result is approved
+   without bugs and the owner explicitly authorizes promotion.
 5. Replace files in the existing unpacked
    extension directory with `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the
    extension and run the Preview smoke in
