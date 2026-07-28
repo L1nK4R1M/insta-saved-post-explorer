@@ -14,6 +14,14 @@
 import {
   TASK_ID, TaskStore, TaskStoreRaw, PageStore, MediaStore, ArchiveStore,
 } from "./idb.js";
+import {
+  buildWebsiteReconciliationTargets,
+  isFeedPageTerminal,
+  reconciliationCompletionError,
+  selectLocalIncrementalPage,
+  selectWebsiteReconciliationPage,
+  synchronizeWebsitePage,
+} from "./sync-policy.js";
 
 const IG_ORIGIN = "https://www.instagram.com";
 const IG_APP_ID = "936619743392459";
@@ -469,20 +477,29 @@ async function downloadMedia(target) {
 
 // Fetch and persist one page. Returns { done, stopEarly }.
 async function stepOnce(task, seenSet) {
-  const data = await client.get(savedPath(task.collectionId), { max_id: task.cursor });
+  const requestedCursor = task.cursor ?? null;
+  const data = await client.get(savedPath(task.collectionId), { max_id: requestedCursor });
   const media = (data.items ?? []).map((entry) => entry.media).filter(Boolean);
 
-  // Incremental: keep only posts not already archived; stop when we hit a known one.
+  // Incremental local exports stop on the local archive. Web reconciliation
+  // stops only on website-owned identifiers after archive-only gaps are resolved.
   let stopEarly = false;
   let fresh = media;
+  let reconciliationTargetIdsAfterPage = null;
   if (task.mode === "incremental" && seenSet) {
-    fresh = [];
-    for (const m of media) {
-      if (seenSet.has(String(m.pk)) || (m.code && seenSet.has(String(m.code)))) {
-        stopEarly = true;
-        break;
-      }
-      fresh.push(m);
+    if (task.webSync) {
+      const selection = selectWebsiteReconciliationPage(
+        media,
+        seenSet,
+        task.reconciliationTargetIds ?? [],
+      );
+      fresh = selection.fresh;
+      stopEarly = selection.stopEarly;
+      reconciliationTargetIdsAfterPage = selection.remainingTargetIds;
+    } else {
+      const selection = selectLocalIncrementalPage(media, seenSet);
+      fresh = selection.fresh;
+      stopEarly = selection.stopEarly;
     }
   }
 
@@ -498,12 +515,21 @@ async function stepOnce(task, seenSet) {
   // The web app always receives the best available media URLs, independently
   // from the quality selected for optional local downloads.
   if (task.webSync) {
-    for (const row of rows) {
-      const uploadedCount = await syncPostToExplorer(row, task.webSync);
-      task.stats.synced = (task.stats.synced ?? 0) + 1;
-      task.stats.mediaUploaded = (task.stats.mediaUploaded ?? 0) + uploadedCount;
-      await TaskStoreRaw.put(task);
-    }
+    await synchronizeWebsitePage(
+      rows,
+      (row) => syncPostToExplorer(row, task.webSync),
+      async (_row, uploadedCount) => {
+        task.stats.synced = (task.stats.synced ?? 0) + 1;
+        task.stats.mediaUploaded = (task.stats.mediaUploaded ?? 0) + uploadedCount;
+        await TaskStoreRaw.put(task);
+      },
+      async () => {
+        if (reconciliationTargetIdsAfterPage) {
+          task.reconciliationTargetIds = reconciliationTargetIdsAfterPage;
+        }
+        await TaskStoreRaw.put(task);
+      },
+    );
   }
 
   // Optional media download straight to disk.
@@ -531,10 +557,15 @@ async function stepOnce(task, seenSet) {
 
   task.seq += 1;
   task.processedCount += rows.length;
-  task.cursor = data.next_max_id ?? null;
+  const nextCursor = data.next_max_id ?? null;
+  task.cursor = nextCursor;
   task.nextAllowedAt = Date.now() + SPACING_MS + Math.random() * JITTER_MS;
 
-  const done = stopEarly || !data.more_available || !data.next_max_id;
+  const done = stopEarly || isFeedPageTerminal({
+    currentCursor: requestedCursor,
+    nextCursor,
+    moreAvailable: Boolean(data.more_available),
+  });
   return { done, newest: media[0]?.pk ? String(media[0].pk) : task.newestPk };
 }
 
@@ -555,9 +586,15 @@ let seenSetCache = null; // Set of pks, loaded once per run
 async function loadSeenSet(task) {
   if (task.mode !== "incremental") return null;
   if (seenSetCache) return seenSetCache;
+  if (task.webSync) {
+    seenSetCache = new Set([
+      ...(task.knownExternalIds ?? []).map(String),
+      ...(task.knownPostCodes ?? []).map(String),
+    ]);
+    return seenSetCache;
+  }
   const archive = await ArchiveStore.get();
   seenSetCache = new Set(archive.seenPks.map(String));
-  for (const code of task.knownPostCodes ?? []) seenSetCache.add(String(code));
   return seenSetCache;
 }
 
@@ -621,6 +658,22 @@ async function tick() {
       if (task.newestPk == null && result.newest) task.newestPk = result.newest;
 
       if (result.done) {
+        const reconciliationError = task.webSync
+          ? reconciliationCompletionError(task.reconciliationTargetIds ?? [])
+          : null;
+        if (reconciliationError) {
+          task.status = "failed";
+          task.error = reconciliationError;
+          await TaskStoreRaw.put(task);
+          await finishWebSync(
+            task.webSync,
+            "failed",
+            reconciliationError,
+            task.stats.mediaFailed ?? 0,
+          );
+          await setBadge("!", "#b4462f");
+          return;
+        }
         task.status = "completed";
         task.totalCount = task.processedCount;
         await TaskStoreRaw.put(task);
@@ -851,7 +904,19 @@ function taskBlocksCompetingStart(task) {
   return task.status === "paused" && Boolean(task.resumeAt);
 }
 
-async function startExport({ collectionId, includeMedia, mode, filterSpec, mediaFilter, mediaQuality, webSync = null, taskId = TASK_ID, knownPostCodes = [] }) {
+async function startExport({
+  collectionId,
+  includeMedia,
+  mode,
+  filterSpec,
+  mediaFilter,
+  mediaQuality,
+  webSync = null,
+  taskId = TASK_ID,
+  knownExternalIds = [],
+  knownPostCodes = [],
+  reconciliationTargetIds = [],
+}) {
   const competingTaskId = taskId === WEB_SYNC_TASK_ID ? TASK_ID : WEB_SYNC_TASK_ID;
   if (taskIsActive(await TaskStoreRaw.get(taskId))) throw new Error("export_already_running");
   const competingTask = await TaskStoreRaw.get(competingTaskId);
@@ -882,7 +947,9 @@ async function startExport({ collectionId, includeMedia, mode, filterSpec, media
     pausedReason: null,
     error: null,
     webSync,
+    knownExternalIds,
     knownPostCodes,
+    reconciliationTargetIds,
     createdAt: now,
     updatedAt: now,
   });
@@ -924,13 +991,19 @@ async function startWebSync(data) {
   const knownCodes = Array.isArray(data.knownPostCodes) ? data.knownPostCodes.map(String) : [];
   const known = [...new Set(knownIds)].slice(0, 10_000);
   const postCodes = [...new Set(knownCodes)].slice(0, 10_000);
-  if (known.length) await seedArchiveFromPks(known, known[0]);
+  const archive = await ArchiveStore.get();
+  const reconciliationTargetIds = buildWebsiteReconciliationTargets(
+    archive.seenPks,
+    known,
+  );
   await startExport({
     taskId: WEB_SYNC_TASK_ID,
     mode: "incremental",
     includeMedia: false,
     mediaQuality: "high",
+    knownExternalIds: known,
     knownPostCodes: postCodes,
+    reconciliationTargetIds,
     webSync: incomingSync,
   });
 }
