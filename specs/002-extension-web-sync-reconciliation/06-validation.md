@@ -12,7 +12,7 @@ needed because the existing authenticated job contract is reused.
 
 ### AT-001: Archive-only post behind a website-known post
 
-Requirements: FR-001, FR-002, FR-003
+Requirements: FR-001, FR-002, FR-003, BR-001
 
 Given a newer and older post known by the website with an archive-only post between
 When the page is selected for web reconciliation
@@ -44,7 +44,7 @@ Then the task returns their count and recovery action instead of success
 
 ### AT-005: Page target commit is atomic
 
-Requirements: FR-006, NFR-002, BR-004
+Requirements: FR-006, NFR-002, BR-002, BR-004
 
 Given two selected posts and a failure on the second upload
 When the page helper runs
@@ -56,7 +56,7 @@ Requirements: FR-007, NFR-003, NFR-004
 
 Given the corrected source
 When package identity and web copy are inspected
-Then manifest/README are 4.2.4 and the UI asks for the latest extension
+Then manifest/README are 4.2.5 and the UI asks for the latest extension
 
 ### AT-007: Non-advancing Instagram cursor
 
@@ -74,10 +74,20 @@ Given a web refresh has created a sync job and no terminal extension message arr
 When the authenticated job route reports `COMPLETED`
 Then the spinner stops, the synchronized count is shown and completion fires once
 
+### AT-009: Exact develop Preview origin
+
+Requirements: FR-010, NFR-003, NFR-007, BR-007
+
+Given extension 4.2.5 source and manifest
+When the three origin boundaries are inspected
+Then production, localhost and the exact stable develop Preview are accepted,
+and no wildcard Vercel origin is present
+
 ## Unit tests
 
-`tests/unit/extension-sync-policy.test.ts` covers AT-001 through AT-007 in six
-risk-focused tests. `tests/unit/refresh-posts-button.test.tsx` covers AT-008.
+`tests/unit/extension-sync-policy.test.ts` covers AT-001 through AT-007 and
+AT-009 in six risk-focused tests. `tests/unit/refresh-posts-button.test.tsx`
+covers AT-008.
 
 ## Integration and contract tests
 
@@ -92,8 +102,9 @@ is unchanged. A production smoke is reserved for authorized rollout.
 
 ## Security and abuse tests
 
-Existing auth/token/R2 tests remain in the full suite. Diff review proves no
-host permission, token, API or R2 capability change.
+Existing auth/token/R2 tests remain in the full suite. AT-009 proves the
+permission expansion is exact and rejects a Vercel wildcard; diff review proves
+no token, API or R2 capability change.
 
 ## Performance and capacity tests
 
@@ -112,13 +123,13 @@ Rollback is package/code replacement with no data deletion.
 | Install | `npm ci` | Clean install | EV-001 |
 | Prisma client only | `npm run db:generate` | Generated, no migration | EV-001 |
 | Syntax | `node --check` on both MV3 JS files | Exit 0 | EV-002 |
-| Focused | policy and refresh-button component tests | 7/7 | EV-002, EV-008, EV-009 |
+| Focused | policy and refresh-button component tests | 7/7 | EV-002, EV-008, EV-009, EV-010 |
 | Neighboring | focused 5-file run | 29/29 | EV-003, EV-008 |
 | Lint | `npm run lint` | Exit 0 | EV-004 |
 | Types | `npm run typecheck` | Exit 0 | EV-004 |
 | Full tests | `npm run test` | 326 pass, 129 skip | EV-004, EV-008, EV-009 |
 | Build | `npm run build` | 32 pages | EV-004 |
-| Package | ZIP listing and SHA-256 | Flat, required files | EV-005 |
+| Package | ZIP listing and SHA-256 | Flat, required files | EV-005, EV-011 |
 | Diff | `git diff --check` | Exit 0 | EV-006 |
 
 ## Evidence ledger
@@ -134,6 +145,8 @@ Rollback is package/code replacement with no data deletion.
 | EV-007 | Critical convergence | spec and engineering reviews | PASS, no HIGH/BLOCKER | `07-convergence.md` |
 | EV-008 | Production final-page loop regression | RED/GREEN repeated-cursor test, engine wiring and full gates | PASS, 6/6 focused and visible terminal state | command output and verification report |
 | EV-009 | Lost terminal bridge message | RED/GREEN refresh-button component test and fresh gates | PASS; 1/1 focused, 326 pass full suite | command output |
+| EV-010 | Preview origin contract | RED/GREEN manifest/source contract test | PASS; Production, localhost and exact Preview allowed, wildcard rejected | command output and Preview-origin report |
+| EV-011 | Installable extension 4.2.5 | ZIP listing, manifest inspection and SHA-256 | PASS; flat ZIP, SHA-256 `9F842FD55066B2E88E981A1B545ABAB101E6AE0AE462D92349863FAE7E94479D` | `C:\tmp` |
 
 ## Manual validation
 

@@ -4,7 +4,9 @@ Decision: PASS
 
 ## Artifact consistency
 
-Intake, specification, evidence, design, contracts, tasks and validation agree:
+The 4.2.4 reconciliation remains converged. The 4.2.5 develop Preview origin
+follow-up has RED/GREEN evidence, full gates, package inspection and fixed-diff
+review. Intake, specification, design, contracts, tasks and validation agree:
 website state owns imported identity, archive state defines reconciliation work,
 page target progress is atomic, non-advancing pagination is terminal, the server
 job recovers a lost terminal bridge message, and no API/schema/permission change
@@ -12,20 +14,19 @@ exists.
 
 ## Requirement coverage
 
-FR-001 through FR-009, NFR-001 through NFR-006 and BR-001 through BR-006 map to
-TASK-001 through TASK-006, AT-001 through AT-008 and EV-001 through EV-009.
-Generated traceability reports zero uncovered requirements.
+FR-001 through FR-010, NFR-001 through NFR-007 and BR-001 through BR-007 map
+to TASK-001 through TASK-007, AT-001 through AT-009 and EV-001 through EV-011.
+The final check reports 24 requirements and zero uncovered.
 
 ## Implementation against specification
 
-PASS. The exact production failure is corrected. The final diff includes no
-unrequested collection, delete, migration, deployment or authentication work.
+PASS. Version 4.2.5 adds the exact stable develop Preview at all three required
+extension gates and adds no unrequested application behavior.
 
 ## Contracts against implementation
 
-PASS. Sync API and message payloads remain unchanged. Optional durable task
-fields match the contract. Residual-target and UI recovery messages match the
-specified behavior.
+PASS. Production, localhost and the exact develop Preview are accepted. No
+wildcard Vercel origin, API payload, route or database-selection logic is added.
 
 ## Tests against behavior
 
@@ -37,7 +38,7 @@ server-job component regression.
 
 ## Documentation and operational readiness
 
-PASS for review readiness. Operator docs name 4.2.4, installation preserves the
+PASS for review readiness. Operator docs name 4.2.5, installation preserves the
 existing IndexedDB archive, rollback is code/package-only, and production smoke
 is explicitly unverified pending deployment authorization.
 
@@ -49,6 +50,7 @@ is explicitly unverified pending deployment authorization.
 | HIGH | REV-002 | Per-post target commit could skip a later failed row after restart | Failure-injection review/test | Commit target state only after full page | Closed |
 | HIGH | REV-004 | A repeated Instagram cursor leaves the final page running forever | Owner production smoke plus missing progress guard in `stepOnce()` | Treat an unchanged requested cursor as terminal and retain residual-target failure | Closed |
 | HIGH | REV-005 | Chrome persisted a completed 4.2.4 task while the web button remained running after the terminal bridge message was lost | Direct production browser state inspection | Add owner-scoped server-job fallback and idempotent UI settlement | Closed |
+| MEDIUM | REV-006 | AT-009 specified preserved Production/localhost support but initially asserted only Preview and no wildcard | Fixed-diff engineering review | Parameterize the package contract across all three trusted origins | Closed |
 | LOW | REV-003 | npm audit reports 12 high dependency findings in existing lockfile | `npm ci` | Track separately; do not run breaking audit fix in this bug | Open, non-blocking |
 
 Severity meanings:
@@ -74,7 +76,7 @@ the axes were executed separately against the stabilized diff.
 
 ## Final decision rationale
 
-Decision: PASS. No BLOCKER or HIGH finding remains, traceability is complete,
-fresh gates pass, documentation matches implementation and rollback is
-reversible. The change is ready for owner review but is not committed, pushed,
-deployed or published.
+Decision: PASS. No BLOCKER, HIGH or MEDIUM finding remains. Traceability,
+repository gates, exact-origin security checks, documentation and the flat
+4.2.5 package are complete. The change is ready for owner review but is not
+committed, pushed, deployed or published, and no live Preview smoke is claimed.

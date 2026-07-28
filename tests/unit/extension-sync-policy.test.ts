@@ -113,18 +113,44 @@ describe("extension-to-web reconciliation policy", () => {
   it("ships a coherent corrected extension version and version-neutral recovery copy", () => {
     const manifest = JSON.parse(
       readFileSync(resolve(process.cwd(), "extension/ig-saved-sync/manifest.json"), "utf8"),
-    ) as { version?: string };
+    ) as {
+      version?: string;
+      host_permissions?: string[];
+      content_scripts?: Array<{ matches?: string[] }>;
+    };
     const readme = readFileSync(
       resolve(process.cwd(), "extension/ig-saved-sync/README.md"),
+      "utf8",
+    );
+    const contentBridge = readFileSync(
+      resolve(process.cwd(), "extension/ig-saved-sync/content-bridge.js"),
+      "utf8",
+    );
+    const background = readFileSync(
+      resolve(process.cwd(), "extension/ig-saved-sync/background.js"),
       "utf8",
     );
     const refreshButton = readFileSync(
       resolve(process.cwd(), "src/features/library/components/refresh-posts-button.tsx"),
       "utf8",
     );
+    const allowedOrigins = [
+      "https://insta-saved-post-explorer.vercel.app",
+      "https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app",
+      "http://localhost:3000",
+    ];
 
-    expect(manifest.version).toBe("4.2.4");
-    expect(readme).toContain("Insta Saved Sync 4.2.4");
+    expect(manifest.version).toBe("4.2.5");
+    expect(readme).toContain("Insta Saved Sync 4.2.5");
+    for (const origin of allowedOrigins) {
+      expect(manifest.host_permissions).toContain(`${origin}/*`);
+      expect(manifest.content_scripts?.[0]?.matches).toContain(`${origin}/*`);
+      expect(contentBridge).toContain(`"${origin}"`);
+      expect(background).toContain(`"${origin}"`);
+    }
+    expect(JSON.stringify(manifest)).not.toContain("*.vercel.app");
+    expect(contentBridge).not.toContain("*.vercel.app");
+    expect(background).not.toContain("*.vercel.app");
     expect(refreshButton).not.toContain("Insta Saved Sync 4.2.1");
     expect(refreshButton).toContain("dernière version d’Insta Saved Sync");
   });
