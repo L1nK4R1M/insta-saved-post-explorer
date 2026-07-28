@@ -173,3 +173,48 @@ Arrêter l’implémentation et documenter le blocage si :
 - la phase active dépend d’une gate non satisfaite.
 
 Ne pas improviser une nouvelle architecture pour contourner le blocage.
+
+<!-- BEGIN VIBESPEC CLOUD -->
+## 10. Discipline de test
+
+Les tests protègent des risques, pas des statistiques. Une suite trop grosse coûte
+en maintenance, en durée de vérification, en contexte consommé par les agents et en
+tokens à chaque analyse — sans rien prouver de plus.
+
+Règles :
+
+- un test doit protéger un comportement critique, un contrat public ou une
+  régression plausible ; s'il ne fait aucun des trois, il ne doit pas exister ;
+- regrouper les variantes numériques ou de données dans un test paramétré ou piloté
+  par table, pas en cas séparés ;
+- ne pas répéter en composant ou en e2e une règle déjà suffisamment prouvée par un
+  test unitaire, sauf pour un parcours d'intégration réellement critique ;
+- limiter les e2e aux parcours transversaux : routage réel, chargement réel,
+  capacité navigateur réelle, mise en page réelle ;
+- n'exécuter un scénario e2e sur plusieurs projets (desktop et mobile) que lorsque
+  le comportement diffère réellement. Le projet desktop est le projet par défaut et
+  exécute tout ; le projet mobile n'exécute que les scénarios marqués `@mobile`
+  (voir `playwright.config.ts`). Un test qui fixe lui-même son viewport avec
+  `test.use` ou `setViewportSize` n'a rien à gagner du projet mobile : il produirait
+  un run identique ;
+- aucune cible de quantité ni de couverture brute ne justifie un test ; il n'existe
+  pas d'objectif de 100 % ;
+- éviter les permutations et les cas triviaux redondants ;
+- ne pas supprimer un test historique hors périmètre, sauf doublon direct créé par
+  le changement en cours.
+
+Chaque pull request qui ajoute un fichier de test doit indiquer, en une ligne par
+fichier, pourquoi ce fichier est nécessaire et quel risque il couvre.
+
+# VibeSpec Pro Cloud Bundle
+
+Use the repository-managed VibeSpec skills for software changes.
+
+Before implementation:
+1. Read `.vibespec/project.yaml` when present.
+2. Treat `.vibespec/bundle` as the active VibeSpec root.
+3. Route the change as Patch, Standard, or Critical.
+4. Load only the skills, profiles, and templates needed for the selected route.
+
+Never claim completion without fresh verification evidence. Never commit, push, deploy, migrate, or run destructive operations unless explicitly authorized. Repository-specific instructions outside this managed block override these defaults.
+<!-- END VIBESPEC CLOUD -->

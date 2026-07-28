@@ -1,0 +1,91 @@
+import { describe, expect, it } from "vitest";
+
+import { placeCandidateSchema, placeCandidateBatchSchema, placeCandidateRecordSchema } from "@/lib/places/candidates";
+
+// These schemas are the boundary between an AI-produced file and the database.
+// The risk they guard is a permissive parser letting the model supply anything
+// authoritative — coordinates, a provider id, a precision — or an unbounded
+// payload. Every rejected shape below is a distinct branch of that risk, grouped
+// into rejection tables instead of one test per field.
+
+const validCandidate = {
+  name: "Nobu Dubai",
+  city: "Dubai",
+  region: null,
+  country: "United Arab Emirates",
+  category: "restaurant" as const,
+  confidence: 0.9,
+  evidence: [{ type: "CAPTION" as const, excerpt: "Dinner at Nobu Dubai" }],
+};
+
+describe("placeCandidateSchema", () => {
+  it("accepts a bounded textual candidate, with or without evidence", () => {
+    expect(placeCandidateSchema.parse(validCandidate)).toEqual(validCandidate);
+    expect(placeCandidateSchema.parse({ ...validCandidate, evidence: [] })).toBeDefined();
+  });
+
+  it("refuses anything authoritative or unbounded coming from the model", () => {
+    const rejected: [string, Record<string, unknown>][] = [
+      // The model proposes text only: coordinates and provider identity are the
+      // geographic provider's job, never the model's.
+      ["latitude", { latitude: 25.14 }],
+      ["longitude", { longitude: 55.18 }],
+      ["providerPlaceId", { providerPlaceId: "forbidden" }],
+      ["provider", { provider: "geoapify" }],
+      ["precision", { precision: "EXACT" }],
+      // Bounded vocabulary and ranges.
+      ["unknown category", { category: "airport" }],
+      ["confidence above 1", { confidence: 1.5 }],
+      ["confidence below 0", { confidence: -0.1 }],
+      // Bounded payload size.
+      ["over-long excerpt", { evidence: [{ type: "CAPTION", excerpt: "x".repeat(501) }] }],
+      ["more than eight evidence rows", { evidence: Array.from({ length: 9 }, () => ({ type: "CAPTION", excerpt: "a" })) }],
+    ];
+    for (const [label, override] of rejected) {
+      expect(() => placeCandidateSchema.parse({ ...validCandidate, ...override }), label).toThrow();
+    }
+  });
+});
+
+describe("placeCandidateBatchSchema", () => {
+  it("accepts at most five candidates per post", () => {
+    expect(placeCandidateBatchSchema.parse(Array.from({ length: 5 }, () => validCandidate))).toHaveLength(5);
+    expect(() => placeCandidateBatchSchema.parse(Array.from({ length: 6 }, () => validCandidate))).toThrow();
+  });
+});
+
+describe("placeCandidateRecordSchema", () => {
+  const validRecord = {
+    post_id: "post-1",
+    input_hash: "a".repeat(64),
+    analysis_version: "places-v1",
+    candidates: [validCandidate],
+  };
+
+  function without(key: string): Record<string, unknown> {
+    const copy: Record<string, unknown> = { ...validRecord };
+    delete copy[key];
+    return copy;
+  }
+
+  it("accepts a record carrying a canonical hash and a version", () => {
+    expect(placeCandidateRecordSchema.parse(validRecord)).toBeDefined();
+  });
+
+  it("refuses a record whose identity or provenance cannot be trusted", () => {
+    // The hash and the version are what make a re-import idempotent and a stale
+    // analysis detectable; a lenient parser here would silently reopen both.
+    const rejected: [string, Record<string, unknown>][] = [
+      ["hash too short", { ...validRecord, input_hash: "xyz" }],
+      ["hash uppercase (non-canonical)", { ...validRecord, input_hash: "A".repeat(64) }],
+      ["hash one char short", { ...validRecord, input_hash: "a".repeat(63) }],
+      ["hash missing", without("input_hash")],
+      ["version missing", without("analysis_version")],
+      ["version empty", { ...validRecord, analysis_version: "" }],
+      ["unknown property", { ...validRecord, latitude: 25.14 }],
+    ];
+    for (const [label, record] of rejected) {
+      expect(() => placeCandidateRecordSchema.parse(record), label).toThrow();
+    }
+  });
+});

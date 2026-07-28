@@ -1,0 +1,88 @@
+{
+  "name": "VibeSpec Pro Generic",
+  "version": "2.2.0",
+  "schema_version": 3,
+  "project_config_version": 1,
+  "minimum_python": "3.10",
+  "description": "A framework-neutral, context-efficient workflow pack for agentic software engineering.",
+  "default_change_mode": "standard",
+  "installation_modes": [
+    "global-user",
+    "repository-local",
+    "cloud-bundle"
+  ],
+  "context_budget": {
+    "agents_bootstrap_max_words": 220,
+    "frequent_skill_max_words": 220,
+    "other_skill_max_words": 500,
+    "frequent_skills": [
+      "vibespec-routing-changes",
+      "vibespec-implementing-changes",
+      "vibespec-verifying-completion",
+      "vibespec-handing-off"
+    ]
+  },
+  "skills": [
+    "vibespec-routing-changes",
+    "vibespec-discovering-codebases",
+    "vibespec-clarifying-changes",
+    "vibespec-modeling-domains",
+    "vibespec-writing-specifications",
+    "vibespec-designing-architecture",
+    "vibespec-creating-tickets",
+    "vibespec-implementing-changes",
+    "vibespec-developing-with-tdd",
+    "vibespec-diagnosing-bugs",
+    "vibespec-reviewing-changes",
+    "vibespec-verifying-completion",
+    "vibespec-converging-docs",
+    "vibespec-handing-off"
+  ],
+  "profiles": [
+    "web-app",
+    "backend-api",
+    "ai-data",
+    "embedded",
+    "cli-library",
+    "mobile-desktop",
+    "devops-infrastructure"
+  ],
+  "adapters": [
+    "codex",
+    "claude-code",
+    "generic-agent",
+    "hermes-orchestrator"
+  ],
+  "templates": [
+    "project-context",
+    "project-config",
+    "feature-spec",
+    "architecture",
+    "adr",
+    "api-contract",
+    "data-contract",
+    "risk-register",
+    "task",
+    "traceability-matrix",
+    "verification-report",
+    "handoff"
+  ],
+  "global_tools": [
+    "install_global.py",
+    "update_global.py",
+    "uninstall_global.py",
+    "init_project.py",
+    "doctor.py",
+    "vibespec.py",
+    "vibespec.cmd",
+    "vibespec.sh",
+    "vibespec_common.py",
+    "install_global.ps1",
+    "install_global.sh",
+    "cloud_bundle.py",
+    "bootstrap_github_repo.ps1",
+    "bootstrap_github_repo.sh"
+  ],
+  "repository": "L1nK4R1M/vibespec-pro",
+  "release_tag": "v2.2.0"
+}

@@ -1,0 +1,14 @@
+version: 1
+project:
+  name: project-name
+  type: application
+profiles: []
+commands: {}
+documentation:
+  root: docs
+  changes: docs/changes
+permissions:
+  auto_commit: false
+  auto_push: false
+  auto_deploy: false
+  destructive_operations: require-confirmation

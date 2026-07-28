@@ -2,6 +2,9 @@
   "name": "insta-saved-post-explorer",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "services/worker"
+  ],
   "engines": {
     "node": ">=24 <25"
   },
@@ -18,7 +21,17 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "places:export-captions": "tsx --conditions=react-server scripts/places/export-caption-batch.ts",
+    "places:export-analysis-json": "tsx --conditions=react-server scripts/places/export-analysis-json.ts",
+    "places:import-candidates": "tsx --conditions=react-server scripts/places/import-candidate-batch.ts",
+    "places:generate-earth-texture": "node scripts/places/generate-earth-texture.mjs",
+    "places:measure-globe": "node scripts/places/measure-globe.mjs",
+    "worker:test": "npm run test --workspace services/worker --",
+    "worker:test:postgres": "npm run test:postgres --workspace services/worker --",
+    "worker:typecheck": "npm run typecheck --workspace services/worker",
+    "worker:build": "npm run build --workspace services/worker",
+    "worker:smoke": "npm run smoke --workspace services/worker"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1085.0",
@@ -33,13 +46,17 @@
     "bcryptjs": "^3.0.2",
     "clsx": "^2.1.1",
     "jose": "^6.1.0",
+    "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.468.0",
     "next": "^16.0.0",
     "next-themes": "^0.4.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-globe.gl": "2.38.0",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.3.1",
+    "three": "0.185.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -48,6 +65,8 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@types/bcryptjs": "^2.4.6",
+    "@types/leaflet": "^1.9.21",
+    "@types/leaflet.markercluster": "^1.5.6",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",

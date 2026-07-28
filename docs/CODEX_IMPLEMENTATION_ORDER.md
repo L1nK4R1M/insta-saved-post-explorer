@@ -273,6 +273,33 @@ insta-post-explorer-worker
 - aucun second service backend pour le globe ;
 - comportement stable sur desktop et fallback mobile raisonnable.
 
+**Documents de préparation (Phase I) :**
+
+- `phase-i-places-3d-brief.md` — audit brownfield de la Phase G, exigences FR/NFR
+  mesurables, critères d'acceptation, architecture cible et trois concepts UX ;
+- `adr/ADR-places-3d-engine.md` — comparaison des moteurs et décision (statut
+  `PROPOSED` tant que le propriétaire n'a pas tranché) ;
+- `superpowers/plans/2026-07-25-phase-i-places-3d.md` — tâches ordonnées T0–T10 et
+  matrice de traçabilité.
+
+**Décisions propriétaire du 25 juillet 2026 (ADR `ACCEPTED`) :** moteur
+`react-globe.gl` / `globe.gl` (Three.js), isolé derrière notre contrat de rendu et
+chargé paresseusement ; Concept 2 sobre enrichi d'éléments mesurés du Concept 1 ;
+texture terrestre statique, libre et documentée (aucun fournisseur payant, aucun
+terrain ni bâtiment 3D) ; `view=map|globe` additif avec la 2D par défaut et des
+caméras indépendantes en v1 ; 3D complète sur mobile compatible avec repli WebGL
+vers la 2D ; budgets mesurables (50–60 fps desktop, ≥ 30 fps mobile, premier rendu
+du globe < 3 s, aucune régression significative du bundle 2D).
+
+**État au 25 juillet 2026 :** T1–T10 sont implémentées sur
+`claude/phase-i-places-3d-implementation` et la Phase I est `AWAITING_REVIEW`. La
+carte 2D Leaflet de la Phase G est conservée intacte, aucune migration n'a été
+ajoutée et le moteur 3D n'est pas livré aux utilisateurs 2D. La gate de sortie I
+n'est **pas** encore franchie : les budgets de framerate D6 n'ont pas pu être
+validés faute de GPU dans l'environnement d'intégration, et une décision
+propriétaire reste ouverte. Voir
+`changes/2026-07-25-phase-i-places-3d-implementation.md`.
+
 ### Phase J. MCP et Hermes
 
 **But :** exposer tous les domaines par un seul adaptateur MCP.

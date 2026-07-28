@@ -69,6 +69,33 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Worker typecheck and unit tests
+        run: |
+          npm run worker:typecheck
+          npm run worker:test
+
+      - name: Worker PostgreSQL invariants and smoke
+        env:
+          TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+          WORKER_DATABASE_URL: ${{ env.DATABASE_URL }}
+          WORKER_OWNER_ID: ci-worker-owner
+          WORKER_ID: ci-worker
+          WORKER_TEMP_ROOT: /tmp/ipe-worker-smoke
+          R2_ACCOUNT_ID: ci-account
+          R2_BUCKET_NAME: ci-bucket
+          R2_ACCESS_KEY_ID: ci-access
+          R2_SECRET_ACCESS_KEY: ci-secret
+          NODE_ENV: test
+        run: |
+          npm run worker:test:postgres
+          npm test -- media-identity-postgres.test.ts
+          npm run worker:smoke
+
+      - name: Worker container contract and build
+        run: |
+          npm run worker:test -- container-contract.test.ts
+          docker build -f services/worker/Dockerfile -t insta-post-explorer-worker:ci .
+
       - name: Unit tests
         run: npm test
 
