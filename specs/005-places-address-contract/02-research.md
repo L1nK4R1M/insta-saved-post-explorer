@@ -25,6 +25,13 @@ Geoapify's official Forward Geocoding documentation states:
 - `rank.match_type` identifies the address level and does not alone prove that
   all components are correct.
 
+The authorized real develop dry-run returned a specific `amenity` result with
+`rank.confidence = 1` and `rank.match_type = inner_part`. Geoapify's guidance
+states that confidence evaluates correctness while match type reports the
+address level matched. The safe refinement is therefore to accept `inner_part`
+only with the same textual/house-number/specific-result/no-contradiction gates
+and a stricter confidence floor of 0.95.
+
 Decision: address candidates use free-form `text`; scoring combines textual
 agreement, house-number agreement, provider confidence, match type, result type,
 and existing contradiction checks.

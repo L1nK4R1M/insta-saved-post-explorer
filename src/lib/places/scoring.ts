@@ -46,6 +46,7 @@ export const SCORING_WEIGHTS = {
 // otherwise strong match below the APPROXIMATE floor.
 export const CONTRADICTION_PENALTY = 0.4;
 export const ADDRESS_PROVIDER_EXACT_THRESHOLD = 0.9;
+export const ADDRESS_PROVIDER_INNER_PART_EXACT_THRESHOLD = 0.95;
 
 const ADDRESS_LEVEL_MATCH_TYPES = new Set(["full_match", "match_by_building"]);
 
@@ -194,12 +195,17 @@ export function scoreResolvedCandidate({ candidate, resolved }: ScoringInput): S
   const confidence = round4(clamp01(addressVerifiedBase - CONTRADICTION_PENALTY * contradictions));
 
   const providerMatchType = (resolved.providerMatchType ?? "").trim().toLowerCase();
+  const providerMatchTypeAccepted =
+    ADDRESS_LEVEL_MATCH_TYPES.has(providerMatchType) ||
+    (providerMatchType === "inner_part" &&
+      resolved.providerRank !== null &&
+      resolved.providerRank >= ADDRESS_PROVIDER_INNER_PART_EXACT_THRESHOLD);
   const strongAddressMatch =
     address.match &&
     address.houseNumberMatch &&
     resolved.providerRank !== null &&
     resolved.providerRank >= ADDRESS_PROVIDER_EXACT_THRESHOLD &&
-    ADDRESS_LEVEL_MATCH_TYPES.has(providerMatchType);
+    providerMatchTypeAccepted;
   if (strongAddressMatch) reasons.push("address_provider_verified");
 
   const resultKind = classifyResultType(resolved.providerResultType);

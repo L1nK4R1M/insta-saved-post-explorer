@@ -49,12 +49,31 @@ Raw payloads remain forbidden.
   `rank.confidence` when higher than the legacy score.
 - Strong address verification requires matching house number,
   `providerRank >= 0.90`, and match type `full_match` or `match_by_building`.
+  Geoapify `inner_part` is accepted only at `providerRank >= 0.95`; provider
+  documentation defines match type as the address level matched and rank as the
+  overall correctness signal.
 - `EXACT` requires the existing threshold, a specific provider result, no
   contradiction, and either the legacy name match or strong address
   verification.
 - Differing house number adds one contradiction and
   `address_contradiction`.
 - Provider area/country/unknown result-type handling remains authoritative.
+
+## Link supersession contract
+
+- Trigger only when the current committed analysis persisted an `EXACT` link.
+- Delete only an existing `isPrimary=true`, `isUserConfirmed=false`,
+  `precision=APPROXIMATE` link for the same owner/post when its place is absent
+  from the current analysis results.
+- Never delete user-confirmed or secondary links, canonical places, jobs, or
+  evidence.
+- Run supersession and new-primary assignment in the existing transaction.
+
+## CLI lifecycle contract
+
+The local importer disconnects Prisma in `finally`. It never forces a successful
+`process.exit(0)`; on failure it sets `process.exitCode = 1` and lets Node close
+active handles naturally.
 
 ## Migration and compatibility
 

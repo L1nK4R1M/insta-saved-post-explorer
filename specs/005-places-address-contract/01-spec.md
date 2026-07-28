@@ -34,7 +34,10 @@ to a city and appear as an approximate 10 km zone.
   provider rank confidence.
 - `REQ-005`: Score address agreement deterministically and allow an address to
   authorize `EXACT` only for a specific provider result, a matching house number,
-  provider rank at least 0.90, an address-level match type, and no contradiction.
+  provider rank at least 0.90, an accepted address-level match type, and no
+  contradiction. `inner_part` requires the stricter rank threshold 0.95 because
+  Geoapify documents match type as the matched address level, not overall
+  correctness.
 - `REQ-006`: A differing house number is a contradiction and must not produce
   `EXACT`.
 - `REQ-007`: A provider city/district/region result remains `APPROXIMATE`, even
@@ -42,8 +45,14 @@ to a city and appear as an approximate 10 km zone.
 - `REQ-008`: Change the default analysis version to `places-v2` so previously
   analyzed captions can be reprocessed under the new contract without colliding
   with successful v1 jobs.
-- `REQ-009`: Preserve user-confirmed data and perform no automatic database
-  rewrite or Production re-import in this code change.
+- `REQ-009`: Preserve user-confirmed data and perform no automatic Production
+  re-import in this code change.
+- `REQ-010`: The local candidate importer must disconnect Prisma and terminate
+  naturally with exit code 0 after a successful dry-run.
+- `REQ-011`: When a committed re-analysis produces a new exact primary, remove
+  only the previous unconfirmed automatic approximate primary link if that place
+  was not also produced by the current analysis. Preserve its canonical place,
+  jobs, evidence, secondary links, and every user-confirmed link.
 
 ## Non-functional requirements
 
@@ -67,6 +76,8 @@ to a city and appear as an approximate 10 km zone.
   and 150 km state/region.
 - `INV-006`: Old candidate JSONL without `address` is intentionally rejected;
   operators must regenerate it from the v3 input.
+- `INV-007`: Re-analysis may supersede an automatic approximate primary link,
+  but never deletes a canonical place or historical evidence.
 
 ## Error and edge-case behavior
 
@@ -98,6 +109,12 @@ to a city and appear as an approximate 10 km zone.
   hash differs from v1 for otherwise identical input.
 - `AC-007` verifies compatibility: existing no-address scoring cases and all
   quality gates remain green.
+- `AC-008` verifies the real Geoapify `amenity` / rank 1 / `inner_part` response
+  for hungryconsti scores `EXACT`, while `inner_part` below 0.95 remains non-exact.
+- `AC-009` verifies a committed exact re-analysis removes only the previous
+  automatic approximate primary link and preserves a user-confirmed approximate
+  primary plus all canonical places.
+- `AC-010` verifies the real dry-run exits 0 after printing a successful report.
 
 ## Test seams
 
@@ -108,10 +125,12 @@ to a city and appear as an approximate 10 km zone.
 | `GeoapifyPlaceResolver.resolve` | `REQ-003`, `REQ-004` | Existing | `geoapify-resolver.test.ts` |
 | `scoreResolvedCandidate` | `REQ-005` to `REQ-007` | Existing | `places-scoring.test.ts` |
 | caption export/hash | `REQ-008` | Existing | `places-caption-batch-postgres.test.ts` |
+| `persistMetadataAnalysis` | `REQ-009`, `REQ-011` | Existing | `places-analysis-postgres.test.ts` |
+| candidate importer CLI | `REQ-010` | Existing | real develop dry-run + CI gates |
 
 ## Out of scope
 
-- Automatic Production re-analysis, link deletion, or canonical place cleanup.
+- Automatic Production re-analysis or canonical place cleanup.
 - A second geocoder, batch-geocoding API, deep media analysis, or schema migration.
 - Parsing a free-form address into model-supplied coordinates or provider fields.
 

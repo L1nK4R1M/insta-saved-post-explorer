@@ -36,3 +36,7 @@ before transmission because it would send the exact caption-derived address of
 the selected post to a third party. Explicit owner authorization is required
 before that request and before any develop candidate import. Production code and
 data remain unchanged.
+
+This records the boundary at the time of PR #53. The owner subsequently granted
+explicit authorization; the later bounded evidence is recorded in
+`2026-07-28-real-dry-run-follow-up.md`.

@@ -21,8 +21,15 @@ result and an approximate 10 km zone.
 - a matching house number plus a specific provider result, rank at least 0.90,
   address-level match type, and no contradiction can authorize `EXACT` even when
   the Instagram handle differs from the provider name;
+- Geoapify `inner_part` can authorize exactness only when the address and house
+  number agree, the result is specific, rank is at least 0.95, and no location
+  contradiction exists;
 - a different house number blocks exactness;
 - city-level provider results remain approximate with a 10 km radius;
+- a committed new exact primary narrowly supersedes a previous unconfirmed
+  automatic approximate primary without deleting its place or evidence;
+- the local importer disconnects Prisma and exits naturally so successful
+  Windows dry-runs return exit code 0;
 - the default analysis identity advances to `places-v2`, allowing controlled
   re-analysis without colliding with successful v1 jobs.
 
@@ -33,8 +40,9 @@ without `address` must be regenerated from a v3 export. Addressless candidates
 remain valid by sending `address: null`, and their legacy scores are unchanged.
 
 No Prisma migration, dependency, authentication change, worker change, API
-route, or automatic data rewrite is included. Existing and user-confirmed places
-are untouched.
+route, or broad data rewrite is included. Supersession runs only inside an
+explicit committed re-analysis; existing canonical places, evidence, secondary
+links, and user-confirmed links are untouched.
 
 ## Rollout and rollback
 
