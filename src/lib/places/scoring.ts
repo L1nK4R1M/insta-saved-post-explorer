@@ -12,7 +12,7 @@ import type { ResolvedPlaceCandidate } from "@/server/places/resolvers/types";
 export type PlacePrecisionOutcome = "EXACT" | "PROBABLE" | "APPROXIMATE" | "UNKNOWN";
 
 export type ScoringInput = {
-  candidate: Pick<PlaceCandidate, "name" | "city" | "region" | "country" | "category" | "confidence">;
+  candidate: Pick<PlaceCandidate, "name" | "address" | "city" | "region" | "country" | "category" | "confidence">;
   resolved: ResolvedPlaceCandidate;
 };
 
@@ -45,11 +45,14 @@ export const SCORING_WEIGHTS = {
 // disagreeing with the provider) subtracts this much, which is enough to push an
 // otherwise strong match below the APPROXIMATE floor.
 export const CONTRADICTION_PENALTY = 0.4;
+export const ADDRESS_PROVIDER_EXACT_THRESHOLD = 0.9;
+
+const ADDRESS_LEVEL_MATCH_TYPES = new Set(["full_match", "match_by_building"]);
 
 // Approximation radii by area level (design section 4 / D4).
 export const APPROXIMATION_RADII_METERS = {
   district: 5_000,
-  city: 25_000,
+  city: 10_000,
   county: 50_000,
   state: 150_000,
 } as const;
@@ -102,6 +105,48 @@ function fieldAgreement(candidateValue: string | null, resolvedValue: string | n
     : { match: 0, contradiction: true };
 }
 
+type AddressAgreement = {
+  match: boolean;
+  houseNumberMatch: boolean;
+  contradiction: boolean;
+};
+
+function normalizeAddress(value: string): string {
+  return foldForSearch(value)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function likelyHouseNumber(value: string): string | null {
+  return normalizeAddress(value).match(/\b\d{1,6}[a-z]?(?:[-/]\d{1,6}[a-z]?)?\b/)?.[0] ?? null;
+}
+
+function addressAgreement(candidateValue: string | null, resolvedValue: string | null): AddressAgreement {
+  if (!candidateValue || !resolvedValue) {
+    return { match: false, houseNumberMatch: false, contradiction: false };
+  }
+
+  const candidateAddress = normalizeAddress(candidateValue);
+  const resolvedAddress = normalizeAddress(resolvedValue);
+  const candidateHouseNumber = likelyHouseNumber(candidateValue);
+  const resolvedHouseNumber = likelyHouseNumber(resolvedValue);
+  const houseNumberMatch =
+    candidateHouseNumber !== null && candidateHouseNumber === resolvedHouseNumber;
+  const contradiction =
+    candidateHouseNumber !== null &&
+    resolvedHouseNumber !== null &&
+    candidateHouseNumber !== resolvedHouseNumber;
+  const containsAddress =
+    Math.min(candidateAddress.length, resolvedAddress.length) >= 8 &&
+    (candidateAddress.includes(resolvedAddress) || resolvedAddress.includes(candidateAddress));
+
+  return {
+    match: containsAddress && !contradiction,
+    houseNumberMatch,
+    contradiction,
+  };
+}
+
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
@@ -124,19 +169,38 @@ export function scoreResolvedCandidate({ candidate, resolved }: ScoringInput): S
   const city = fieldAgreement(candidate.city, resolved.city);
   const country = fieldAgreement(candidate.country, resolved.country);
   const region = fieldAgreement(candidate.region, resolved.region);
+  const address = addressAgreement(candidate.address, resolved.address);
   if (city.match) reasons.push("city_match");
   if (country.match) reasons.push("country_match");
+  if (address.match) reasons.push("address_match");
   if (city.contradiction) reasons.push("city_contradiction");
   if (country.contradiction) reasons.push("country_contradiction");
+  if (address.contradiction) reasons.push("address_contradiction");
 
-  const contradictions = (city.contradiction ? 1 : 0) + (country.contradiction ? 1 : 0);
+  const contradictions =
+    (city.contradiction ? 1 : 0) +
+    (country.contradiction ? 1 : 0) +
+    (address.contradiction ? 1 : 0);
   const base =
     SCORING_WEIGHTS.candidateConfidence * candidate.confidence +
     SCORING_WEIGHTS.nameMatch * nameMatch +
     SCORING_WEIGHTS.cityMatch * city.match +
     SCORING_WEIGHTS.countryMatch * country.match +
     SCORING_WEIGHTS.regionMatch * region.match;
-  const confidence = round4(clamp01(base - CONTRADICTION_PENALTY * contradictions));
+  const addressVerifiedBase =
+    address.match && resolved.providerRank !== null
+      ? Math.max(base, resolved.providerRank)
+      : base;
+  const confidence = round4(clamp01(addressVerifiedBase - CONTRADICTION_PENALTY * contradictions));
+
+  const providerMatchType = (resolved.providerMatchType ?? "").trim().toLowerCase();
+  const strongAddressMatch =
+    address.match &&
+    address.houseNumberMatch &&
+    resolved.providerRank !== null &&
+    resolved.providerRank >= ADDRESS_PROVIDER_EXACT_THRESHOLD &&
+    ADDRESS_LEVEL_MATCH_TYPES.has(providerMatchType);
+  if (strongAddressMatch) reasons.push("address_provider_verified");
 
   const resultKind = classifyResultType(resolved.providerResultType);
 
@@ -150,7 +214,11 @@ export function scoreResolvedCandidate({ candidate, resolved }: ScoringInput): S
   }
 
   if (resultKind.kind === "specific") {
-    if (confidence >= PRECISION_THRESHOLDS.EXACT && contradictions === 0 && nameMatch === 1) {
+    if (
+      confidence >= PRECISION_THRESHOLDS.EXACT &&
+      contradictions === 0 &&
+      (nameMatch === 1 || strongAddressMatch)
+    ) {
       reasons.push("exact_specific_match");
       return { confidence, precision: "EXACT", approximationRadiusMeters: null, reasons };
     }

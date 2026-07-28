@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { foldForSearch } from "@/lib/import/normalize";
 import type { PlaceCandidate } from "@/lib/places/candidates";
 import type { PlaceResolutionInput, PlaceResolver, ResolvedPlaceCandidate } from "@/server/places/resolvers/types";
 
@@ -73,7 +74,13 @@ const geoapifyResultSchema = z
     lat: z.number(),
     lon: z.number(),
     result_type: z.string().nullish(),
-    rank: z.object({ confidence: z.number() }).partial().nullish(),
+    rank: z
+      .object({
+        confidence: z.number().min(0).max(1).nullish(),
+        match_type: z.string().trim().min(1).max(100).nullish(),
+      })
+      .passthrough()
+      .nullish(),
     category: z.string().nullish(),
   })
   .passthrough();
@@ -222,14 +229,25 @@ export class GeoapifyPlaceResolver implements PlaceResolver {
     }
   }
 
-  // Structured geocoding request. The API key travels in the query string to
-  // Geoapify but is never logged. Caption text is never included.
+  // Address candidates use Geoapify's free-form address alternative. Other
+  // candidates retain the structured request. The API key travels in the query
+  // string but is never logged, and the full caption is never included.
   private buildUrl(candidate: PlaceCandidate): string {
     const params = new URLSearchParams();
-    if (candidate.name) params.set("name", candidate.name);
-    if (candidate.city) params.set("city", candidate.city);
-    if (candidate.region) params.set("state", candidate.region);
-    if (candidate.country) params.set("country", candidate.country);
+    if (candidate.address) {
+      const addressKey = foldForSearch(candidate.address);
+      const context: string[] = [];
+      for (const value of [candidate.city, candidate.region, candidate.country]) {
+        if (value && !addressKey.includes(foldForSearch(value))) context.push(value);
+      }
+      params.set("text", [candidate.address, ...context].join(", "));
+      params.set("bias", "countrycode:none");
+    } else {
+      if (candidate.name) params.set("name", candidate.name);
+      if (candidate.city) params.set("city", candidate.city);
+      if (candidate.region) params.set("state", candidate.region);
+      if (candidate.country) params.set("country", candidate.country);
+    }
     params.set("limit", String(this.maxResults));
     params.set("format", "json");
     params.set("apiKey", this.apiKey);
@@ -252,6 +270,7 @@ function normalizeResult(result: z.infer<typeof geoapifyResultSchema>): Resolved
     longitude: result.lon,
     providerResultType: result.result_type ?? null,
     providerRank: result.rank?.confidence ?? null,
+    providerMatchType: result.rank?.match_type ?? null,
     attribution: GEOAPIFY_ATTRIBUTION,
   };
 }

@@ -2,8 +2,9 @@
 
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
-Reference branch: `develop`  
-Reference implementation: latest `develop` containing the 4.2.6 DB-first sync correction
+Reference branch: `main`  
+Reference production base: `main` at `bebf6801eecef94001c39887c9a7dd1abda48f5e`
+Reference implementation: `develop` at `67e3c1ba38cf350533c9a7ba27059c3fc368d727`
 
 ## 1. Purpose and authority
 
@@ -38,11 +39,49 @@ Stop and document any conflict between this handoff, an authoritative contract a
 
 ## 3. Current execution pointer
 
+### Places address contract awaiting develop review (28 July 2026)
+
+- active branch: `codex/places-address-contract`, based on current Production
+  `bebf680` so PR targeting `develop` also reconciles its seven already approved
+  Production commits and preserves the 10 km radius correction;
+- VibeSpec: `specs/005-places-address-contract`, Critical;
+- strict candidates now require bounded `address: string | null`; export schema
+  is v3 and default analysis identity is `places-v2`;
+- Geoapify receives a free-form address query when available and returns bounded
+  rank/match-type evidence to deterministic scoring;
+- address-authorized `EXACT` requires matching house number, specific result,
+  provider rank at least 0.90, full/building match type, and no contradiction;
+- no Prisma migration, dependency, Production deployment, Neon write, candidate
+  import, or existing place mutation is included;
+- Production remains unchanged until Preview verification and explicit owner
+  approval.
+
+### Places usability correction released (28 July 2026)
+
+- PR #49 merged on `main` at `8dbfd46`; CI #149 passed and Vercel Production
+  deployment `dpl_HHKuBeSYf5L9izLHqCfMsyxmCNMh` is READY;
+- VibeSpec `specs/004-places-mobile-usability` is Critical with convergence
+  `PASS`;
+- the mobile 2D/3D control is fully visible, `Retour aux posts` is available,
+  public configured-owner post thumbnails load, and new city-like approximate
+  results use 10 km;
+- Neon backup `backup-main-before-places-radius-2026-07-28`
+  (`br-curly-firefly-asy8hqti`) preserves the pre-change state;
+- exactly 29 existing approximate rows were changed from 25 km to 10 km in a
+  guarded transaction; no 25 km row remains and aggregate counts are unchanged;
+- Production health, `/places`, a real 390 x 844 linked-post browser smoke and
+  the initial Vercel runtime-error window all pass.
+
 ```text
-Active review branch: codex/places-analysis-json-export
-Reference: develop at f74302b3bba6bf9bd29ab66d6ef8fbc32d5479b3
+Active review branch: codex/places-address-contract
+Reference: main at bebf680; PR target develop at 67e3c1b
 Mode: critical
 VibeSpec convergence: PASS
+
+Production baseline:
+- PR #45 deployed the DB-first extension convergence to `main` at `64f14cb`;
+- the current promotion merges the complete reviewed `develop` history without
+  discarding either Production hotfix commit.
 
 Verified correction:
 - PR #40 merged the extension/web refresh correction into develop at ba56573;
@@ -197,10 +236,32 @@ Project: `fancy-mud-69762258`
 
 | Environment | Neon branch | Verified schema state |
 | --- | --- | --- |
-| Production | `main` / `br-super-snow-asyrmnbm` | Phase C migration applied. F1 remains intentionally unpromoted. |
+| Production | `main` / `br-super-snow-asyrmnbm` | Phase C, F1 and Phase E queue migrations applied. Application commit `66cfd78` is deployed; the validated Places batch is imported. VPS worker activation remains pending. |
 | Development | `develop` / `br-sparkling-glade-as9gow4m` | Phase C and F1 migrations applied. F2, F3, G and I require no migration. |
 
 Do not run `prisma migrate dev`, `prisma db push` or seeds against either deployed database.
+
+### Places Production release (28 July 2026)
+
+- PR #47 merged after CI #145 passed, including PostgreSQL, worker, browser and
+  production-build jobs;
+- Vercel deployment `dpl_2GFsngT1j5DtoypxtnGFpobUu4Po` is `READY`; `/api/health`
+  reports database connected and version `44b0da0`;
+- the Phase E queue migration was rehearsed on a disposable Neon branch and
+  promoted transactionally with checksum
+  `4c7b1d89faf0690bc9927f5966f12163403544e3a0bbd1159b8de153e7129bae`;
+- rollback branch `backup-main-before-phase-e-2026-07-28`
+  (`br-bold-salad-asxuxn2s`) is retained;
+- candidate file SHA-256:
+  `27d9f9e69631190cbe4cf344a64fe82e7f67a441bf19faba4844770204cc4a87`;
+- import report: 407 valid, 0 invalid, 307 succeeded, 100 need review,
+  0 failed, 154 unknown candidates and 0 errors;
+- final unique aggregates: 51 places, 301 links, 254 linked posts,
+  1,203 evidence rows and 407 analysis jobs;
+- invariants: 0 failed/errored jobs, 0 owner mismatches and 0 approximate
+  places without a radius;
+- Production `/places` returns HTTP 200 and renders 51 places / 254 posts;
+  Vercel reports no runtime error after release.
 
 ## 6. Phase state
 
@@ -208,7 +269,7 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | --- | --- | --- |
 | C — R2 media identity and worker isolation | COMPLETE | PR #24; migration applied to Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | PR #26. Distributed rate limiting remains deferred. |
-| E — Global worker foundation | CODE MERGED, ACTIVATION PENDING | PR #39 is merged into `develop` at `c4e37f6`. No hosted migration or VPS deployment is claimed. |
+| E — Global worker foundation | SCHEMA DEPLOYED, VPS ACTIVATION PENDING | PR #39 code and the additive queue migration are on Production. No VPS deployment or worker activation is claimed. |
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E operational activation and stable worker infrastructure. |
@@ -243,24 +304,25 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Review and merge `codex/places-analysis-json-export` separately; no merge is
-   authorized by this handoff.
-2. Configure the explicit production read-only DSN, then run the command in
-   `docs/places-analysis-json-export.md`.
-3. Send only `.tmp/places/places-analysis-input.json` to ChatGPT, save the
-   returned candidate JSONL, run the existing dry-run, and make `--commit` a
-   separate operator decision.
-4. Replace files in the existing unpacked
+1. Review and merge `codex/places-address-contract` to `develop`; wait for CI and
+   the stable Preview.
+2. Generate a v3 single-post export for
+   `cmrfhnykb000hjs04ndgb3avh`, produce candidate JSONL with the required
+   `address`, and run the importer without `--commit`.
+3. Confirm the real provider result is a strongly verified specific address and
+   audit duplicate/stale automatic links before authorizing any develop write.
+4. Keep Production code and data unchanged until explicit owner approval.
+5. Replace files in the existing unpacked
    extension directory with `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the
    extension and run the Preview smoke in
    `specs/002-extension-web-sync-reconciliation/08-release.md`.
-5. Confirm extension discovery on the stable develop alias, click
+6. Confirm extension discovery on the stable develop alias, click
    **Actualiser les posts**, and compare the extension count with the Preview
    library count.
-6. After Production promotion, reload the exact 4.2.6 package and confirm a
+7. Reload the exact 4.2.6 package against Production and confirm a
    refresh imports DB-missing posts, terminates, and a second refresh reports
    zero only when the DB and extension index are aligned.
-7. Keep Phase H blocked until Phase E operational activation is separately
+8. Keep Phase H blocked until Phase E VPS operational activation is separately
    approved.
-8. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
+9. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
    analysis outside this correction.

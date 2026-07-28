@@ -37,21 +37,14 @@ describe("Places server actions", () => {
   });
 
   describe("loadPlacePostsAction", () => {
-    it("refuses to read anything without a session", async () => {
+    it("reads configured-owner posts for the public Places page without a session", async () => {
       getSession.mockResolvedValue(null);
+      getPlacePosts.mockResolvedValue({ items: [{ postId: "p1" }], nextCursor: null });
       const actions = await loadActions();
 
-      await expect(actions.loadPlacePostsAction("place-1")).resolves.toEqual({ ok: false, code: "FORBIDDEN" });
-      // The read must not even be attempted.
-      expect(getPlacePosts).not.toHaveBeenCalled();
-    });
-
-    it("refuses when the session lookup itself fails", async () => {
-      getSession.mockRejectedValue(new Error("cookie store unavailable"));
-      const actions = await loadActions();
-
-      await expect(actions.loadPlacePostsAction("place-1")).resolves.toEqual({ ok: false, code: "FORBIDDEN" });
-      expect(getPlacePosts).not.toHaveBeenCalled();
+      await expect(actions.loadPlacePostsAction("place-1")).resolves.toEqual({ ok: true, posts: [{ postId: "p1" }] });
+      expect(getPlacePosts).toHaveBeenCalledWith("place-1", { limit: 24 }, "owner-actions");
+      expect(getSession).not.toHaveBeenCalled();
     });
 
     it("reads owner-scoped posts for an authenticated session", async () => {

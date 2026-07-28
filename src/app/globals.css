@@ -570,6 +570,9 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 .places-page-head { padding: 16px 20px 10px; }
 .places-page-head h1 { margin: 0; font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; }
 .places-page-head p { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
+.places-back-link { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--muted); font-size: .78rem; font-weight: 650; text-decoration: none; }
+.places-back-link:hover { color: var(--text); }
+.places-back-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
 .places-shell { flex: 1; padding: 0 20px 20px; }
 .places-stage {
@@ -625,7 +628,7 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 
 /* Top bar */
 .places-topbar { position: absolute; z-index: 400; top: 14px; left: 50%; transform: translateX(-50%); width: min(540px, calc(100% - 28px)); display: flex; gap: 8px; }
-.places-search { flex: 1; display: flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 14px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow); color: var(--muted); }
+.places-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 14px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow); color: var(--muted); }
 .places-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); outline: none; font-size: .85rem; }
 .places-search-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
 .places-button { display: inline-flex; align-items: center; gap: 7px; padding: 9px 13px; border-radius: 14px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow); font-size: .82rem; font-weight: 650; cursor: pointer; white-space: nowrap; }
@@ -774,9 +777,14 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 }
 
 @media (max-width: 640px) {
+  .places-topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .places-search { grid-column: 1 / -1; }
+  .places-button { grid-column: 1; grid-row: 2; justify-self: start; }
+  .places-segmented { grid-column: 2; grid-row: 2; justify-self: end; }
   .places-segmented { padding: 2px; }
   .places-segment { padding: 6px 9px; font-size: .74rem; }
-  .places-webgl-notice { top: 60px; font-size: .74rem; }
+  .places-panel { top: 104px; }
+  .places-webgl-notice { top: 104px; font-size: .74rem; }
 }
 
 /* Reduced motion: the halo and the globe stay, nothing keeps moving. */

@@ -564,6 +564,7 @@ Le score combine :
 
 - localisation Instagram ;
 - caption et hashtags ;
+- adresse postale ou de rue extraite comme texte ;
 - OCR ;
 - transcription ;
 - reconnaissance visuelle ;
@@ -575,6 +576,11 @@ Le score combine :
 Le thème sert à l’éligibilité et au contexte métier. Il ne constitue pas une preuve d’un lieu précis.
 
 Le scoring doit être déterministe et testé.
+
+Une adresse candidate ne peut autoriser `EXACT` qu'après accord textuel incluant
+le numéro, résultat provider spécifique, confiance provider d'au moins `0.90`,
+niveau de correspondance adresse complet ou bâtiment, et absence de
+contradiction. Un résultat provider de niveau ville reste `APPROXIMATE`.
 
 ### 9.7 Persistance
 

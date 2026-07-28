@@ -54,6 +54,7 @@ function resolved(overrides: Partial<ResolvedPlaceCandidate> = {}): ResolvedPlac
     longitude: 55.11,
     providerResultType: "amenity",
     providerRank: 0.95,
+    providerMatchType: "full_match",
     attribution: "Powered by Geoapify",
     ...overrides,
   };
@@ -62,6 +63,7 @@ function resolved(overrides: Partial<ResolvedPlaceCandidate> = {}): ResolvedPlac
 function candidate(overrides: Partial<PlaceCandidate> = {}): PlaceCandidate {
   return {
     name: "Nobu Dubai",
+    address: null,
     city: "Dubai",
     region: null,
     country: "United Arab Emirates",
@@ -129,7 +131,7 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
 
     const place = await prisma.place.findFirstOrThrow({ where: { ownerId: OWNER_A } });
     expect(place.precision).toBe("APPROXIMATE");
-    expect(place.approximationRadiusMeters).toBe(25_000);
+    expect(place.approximationRadiusMeters).toBe(10_000);
     expect(place.continentCode).toBe("AS");
   });
 

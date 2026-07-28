@@ -18,6 +18,7 @@ const SECRET_KEY = "super-secret-geoapify-key";
 function restaurantCandidate(overrides: Partial<PlaceCandidate> = {}): PlaceCandidate {
   return {
     name: "Nobu Dubai",
+    address: null,
     city: "Dubai",
     region: null,
     country: "United Arab Emirates",
@@ -50,7 +51,7 @@ function validGeoapifyBody() {
         lat: 25.13,
         lon: 55.11,
         result_type: "amenity",
-        rank: { confidence: 0.95 },
+        rank: { confidence: 0.95, match_type: "full_match" },
         category: "catering.restaurant",
       },
     ],
@@ -84,6 +85,28 @@ describe("GeoapifyPlaceResolver", () => {
     expect(url).not.toContain("Dinner at Nobu");
   });
 
+  it("uses a free-form address query without sending a handle or caption", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(validGeoapifyBody()));
+    await resolver(fetchMock).resolve(
+      resolutionInput({
+        name: "@airelleschateaudeversailles",
+        address: "12 rue de l'Independance Americaine, 78000 Versailles",
+        city: "Versailles",
+        region: "Ile-de-France",
+        country: "France",
+      }),
+    );
+
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get("text")).toBe(
+      "12 rue de l'Independance Americaine, 78000 Versailles, Ile-de-France, France",
+    );
+    expect(url.searchParams.get("bias")).toBe("countrycode:none");
+    expect(url.searchParams.has("name")).toBe(false);
+    expect(url.toString()).not.toContain("airelleschateaudeversailles");
+    expect(url.toString()).not.toContain("Dinner+at+Nobu");
+  });
+
   it("normalizes a valid response into resolved candidates", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(validGeoapifyBody()));
     const [first] = await resolver(fetchMock).resolve(resolutionInput());
@@ -98,6 +121,7 @@ describe("GeoapifyPlaceResolver", () => {
       longitude: 55.11,
       providerResultType: "amenity",
       providerRank: 0.95,
+      providerMatchType: "full_match",
     });
     expect(first.attribution).toBeTruthy();
   });

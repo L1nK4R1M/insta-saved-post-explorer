@@ -34,6 +34,7 @@ class FakeResolver implements PlaceResolver {
         longitude: 55.11,
         providerResultType: "amenity",
         providerRank: 0.95,
+        providerMatchType: "full_match",
         attribution: "Powered by Geoapify",
       },
     ];
@@ -44,6 +45,7 @@ function nobuCandidates() {
   return [
     {
       name: "Nobu Dubai",
+      address: null,
       city: "Dubai",
       region: null,
       country: "United Arab Emirates",
@@ -104,7 +106,7 @@ describeWithDatabase("Places caption batch workflow on PostgreSQL", () => {
     expect(travel.instagram_location).toBe("Dubai, UAE");
     // Every exported line carries the immutable analysis identity.
     expect(travel.input_hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(travel.analysis_version).toBe("places-v1");
+    expect(travel.analysis_version).toBe("places-v2");
     expect(records.find((record) => record.post_id === "resto")!.main_theme).toBe("Restaurant");
     // No media URL or R2 field is ever emitted.
     expect(JSON.stringify(records)).not.toContain("objectKey");

@@ -9,7 +9,7 @@ import { loadAnalysisPostInputs } from "@/server/places/repository";
 
 // Default analysis version. A caption-content change or a version bump yields a
 // new idempotent job; the same content and version returns the existing job.
-export const PLACES_ANALYSIS_VERSION = process.env.PLACES_ANALYSIS_VERSION?.trim() || "places-v1";
+export const PLACES_ANALYSIS_VERSION = process.env.PLACES_ANALYSIS_VERSION?.trim() || "places-v2";
 
 export type PlacesJobErrorCode =
   | "POST_NOT_FOUND"

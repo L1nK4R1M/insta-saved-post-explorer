@@ -87,6 +87,7 @@ The model-facing contract contains only textual candidates and textual evidence:
 ```ts
 export type PlaceCandidate = {
   name: string | null;
+  address: string | null;
   city: string | null;
   region: string | null;
   country: string | null;
@@ -110,6 +111,10 @@ precision
 ```
 
 Only `PlaceResolver` may return coordinates and a provider identifier.
+
+`address` is bounded text copied from caption or structured-location evidence.
+It is required in the JSON shape and nullable when no street/postal address is
+present. Geoapify verifies it before coordinates or `EXACT` can be persisted.
 
 ### D3 — Temporary caption-only workflow without VPS
 
@@ -150,7 +155,7 @@ The local model command is external to the application. No application service s
 
 `UNKNOWN` is an analysis outcome, not a `Place` row.
 
-- `EXACT`: a specific POI, establishment, building, monument, street address, or equivalent provider result; provider verified; deterministic score at least `0.90`; no major contradiction.
+- `EXACT`: a specific POI, establishment, building, monument, street address, or equivalent provider result; provider verified; deterministic score at least `0.90`; no major contradiction; authorized by a matching name or a strongly verified address.
 - `PROBABLE`: a provider-verified specific result with incomplete or ambiguous context; score at least `0.75`.
 - `APPROXIMATE`: a provider-verified city, district, county, state, or region; score at least `0.50`; `approximationRadiusMeters` is mandatory.
 - `UNKNOWN`: no safe provider match, a country-only match, contradictory evidence, or score below `0.50`; no canonical Place and no map point.
@@ -159,7 +164,7 @@ Initial approximation radii:
 
 ```text
 district/suburb  5,000 m
-city             25,000 m
+city             10,000 m
 county            50,000 m
 state/region     150,000 m
 ```

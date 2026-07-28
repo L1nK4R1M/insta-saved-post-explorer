@@ -118,19 +118,20 @@ hand-edited URL can never widen a filter.
 
 ## 7. Review actions
 
-A Server Action is a directly invocable endpoint, so **every** action verifies the
-session server-side before doing anything — reads included. Neither the `/places`
-route nor a hidden button is a control.
+A Server Action is a directly invocable endpoint. Public reads therefore never
+accept an owner from the browser and always use the configured application owner.
+Neither the `/places` route nor a hidden button is a mutation control.
 
-- `loadPlacePostsAction` requires a valid session (`FORBIDDEN` otherwise) and then
-  queries owner-scoped, so another owner's place behaves as `NOT_FOUND`.
+- `loadPlacePostsAction` supports the public Places page and queries only the
+  configured owner, so another owner's place behaves as `NOT_FOUND`.
 - `confirmPlaceAction` and `rejectPlaceAction` additionally require the **admin**
   role and wrap the audited Phase F3 services.
 
 Each action:
 
-- re-checks the session (and the role for mutations) server-side;
-- asks for an explicit confirmation in the UI before running;
+- keeps every database operation owner-scoped;
+- re-checks the session and role for mutations server-side;
+- asks for an explicit confirmation before a mutation;
 - guards against double submission and shows a loading state;
 - surfaces only a **bounded error code** mapped to a readable message — never an
   actor, a reason or a raw database message.
@@ -141,7 +142,10 @@ Keyboard navigation across search, filters, list and actions; visible focus
 states; real buttons for actions; the list and detail expose the same information
 as the map, so the map is never the only way to reach the data; `aria-expanded` on
 the panel toggles; live region on the summary. On mobile the panels become
-full-width sheets, the drawer takes the screen and touch targets stay large.
+full-width sheets, the drawer takes the screen and touch targets stay large. The
+search uses its own row, with filters and the complete `2D | 3D` control on a
+second row. The page header includes a deterministic `Retour aux posts` link to
+the library, including when `/places` was opened directly.
 
 ## 9. Additive API extension
 
@@ -188,6 +192,10 @@ props on the globe. Removing a view means deleting its component and its branch.
 - `APPROXIMATE` — a geodesic **area** sized from `approximationRadiusMeters`,
   never a point, and a stored radius never widens an `EXACT`/`PROBABLE` place;
 - `UNKNOWN` never exists as a `Place`; `REJECTED` is excluded, as in 2D.
+
+New city-like approximate resolutions use 10 km. Existing rows keep their stored
+radius until an explicitly authorized data correction; the UI never disguises a
+persisted 25 km value as 10 km.
 
 Zoomed out, places aggregate by continent then country through a spherical
 centroid, so a group straddling the antimeridian does not collapse onto the wrong

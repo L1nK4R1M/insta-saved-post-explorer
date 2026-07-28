@@ -26,12 +26,14 @@ Status values:
 | C — R2 media identity and worker isolation | COMPLETE | Reviewed design | PR #24, squash `0870d69` | Additive migration, owner backfill, restricted role and PostgreSQL tests. Migration recorded on Neon `main` and `develop`. |
 | D — External API V1 | COMPLETE | Phase A | PR #26, squash `9e57f93` | Read-only Bearer API, stable errors, six thin routes and tests. |
 | F design and plan | COMPLETE | Phases B and D | PR #28, squash `fd9754e` | Reviewed metadata-first design, Geoapify abstraction and F1/F2/F3 plan. |
-| F1 — Places schema and domain contracts | COMPLETE | F design | PR #29, squash `8bf8523` | 4 Places tables, SQL invariants, strict text candidates, opaque cursor, owner-scoped repository and idempotent jobs. Migration recorded on Neon `develop`. |
+| F1 — Places schema and domain contracts | COMPLETE | F design | PR #29, squash `8bf8523` | 4 Places tables, SQL invariants, strict text candidates, opaque cursor, owner-scoped repository and idempotent jobs. Migration recorded on Neon `develop` and promoted transactionally to Neon `main` on 28 July 2026 after a disposable-branch rehearsal and backup branch creation. |
 | F2 — Geoapify and caption resolution | COMPLETE | F1 merged | PR #30, squash `7cc05e2`; hardening PR #32, squash `216b975` | Server-only resolver, deterministic scoring, JSONL workflow, stale-input guard, atomic persistence, bounded retries with exponential backoff/jitter/Retry-After, quiet idempotent job creation, unit/e2e proof and successful owner-reported local rerun. No migration. |
 | F3 — Read API, statistics and review | COMPLETE | F2 merged | PR #31, squash `15356e9` | Seven read-only Places routes, owner-scoped cursor queries, `source_theme` statistics, durable review decisions, complete audit evidence, exact job ownership validation, conditional Geoapify preflight, CI #94 green and Preview ready. No migration. |
 | F — Places metadata-first domain | COMPLETE | Phases B and D | F1/F2/F3 + hardening PR #32, squash `216b975` | Code and robustness work complete. Exit gate accepted via a successful real local validation: real import succeeded, an identical re-import stayed idempotent with no unwanted duplicates, the expected P2002 no longer appears, transient errors recovered, and `UNKNOWN` was handled correctly. No migration; no public-contract break; no sensitive data committed. |
-| E — Global worker foundation | COMPLETE | Phase C | PR #39, squash `c4e37f6` | Worker code merged into `develop` with VibeSpec convergence PASS. Hosted migration and VPS operational activation remain pending and are not implied by the code merge. |
+| E — Global worker foundation | COMPLETE | Phase C | PR #39, squash `c4e37f6` | Worker code promoted to Production with VibeSpec convergence PASS. The additive queue migration is recorded on Neon `main`; VPS operational activation remains pending. |
 | G — Places 2D UI and contextual navigation | COMPLETE | Phase F complete | PR #34, squash `2bd2098` | `/places`, Leaflet + markercluster, Geoapify raster tiles, synchronized list, complete filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. Review fixes validated: authenticated read Server Action, complete `sourceThemes`, all countries filterable. CI #107 green; 50 files / 440 tests locally; no migration. |
+| Places mobile usability correction | COMPLETE | Phases G and I complete | PR #49, squash `8dbfd46` | Mobile 2D/3D bounds, explicit return link, public configured-owner linked-post reads and 10 km city approximation are on Production. CI #149 and Vercel deployment `dpl_HHKuBeSYf5L9izLHqCfMsyxmCNMh` passed. Neon backup `br-curly-firefly-asy8hqti` was created and exactly 29 existing 25 km rows were transactionally changed to 10 km with unchanged aggregates. Live mobile linked-post smoke and runtime-error checks pass. |
+| Places address contract correction | AWAITING_REVIEW | Phase F2 complete | `codex/places-address-contract` | Strict candidate `address`, export schema v3, places-v2 identity, address-first Geoapify query and conservative provider-verified exact scoring are implemented locally. No migration or data write. Production remains unchanged pending develop/Preview review and explicit approval. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
 | I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | T1–T10 merged: additive `view=map|globe`, pure projection module, renderer seam, WebGL probe and fallback, lazy `react-globe.gl` 2.38.0 / `three` 0.185.1, public-domain Natural Earth texture generated locally with documented licence, segmented `2D | 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. CI #115 green; no migration, no API change, Leaflet preserved. Measured: `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry; first globe render 907–1033 ms on the GPU-less CI baseline. **Performance validated on real GPU** (`FPS_BUDGET_VALIDATED_ON_REAL_GPU`, 25 July 2026): NVIDIA GeForce RTX 5090, 240 fps and 276-326 ms first render at 100/500/1000 places, desktop and mobile viewport — all D6 budgets met. No Phase I follow-up remains open. |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
@@ -50,8 +52,21 @@ Current state
 - CI #121 passed on reviewed head 60e228e7112b12ffaff9330b4ff2337206b7686a.
 - Current test baseline: 54 unit files / 448 tests; 46 E2E scenarios / 46 executions
   (45 desktop + 1 mobile). Critical database and security suites remain intact.
-- Phase E PR #39 is merged at c4e37f6. Hosted migration and VPS operational
-  activation remain pending.
+- Phase E PR #39 is promoted to Production. Its additive queue migration is
+  recorded on Neon `main`; VPS operational activation remains pending.
+- PR #47 and the documentation follow-up PR #48 are merged on `main` at 44b0da0; the corresponding Vercel Production
+  deployment is READY. The validated Places candidate batch imported 407/407
+  posts with zero failures and zero importer errors.
+- Production now contains 51 unique places, 301 post/place links, 254 linked
+  posts, 1,203 evidence rows and 407 jobs (307 SUCCEEDED, 100 NEEDS_REVIEW).
+  Owner-isolation and approximate-radius post-import checks have zero violations.
+- The Places mobile usability correction is released through PR #49 at
+  `8dbfd46`. Production has zero remaining 25 km rows and 29 corrected 10 km
+  rows; backup branch `br-curly-firefly-asy8hqti` retains the prior state.
+- The Places address contract correction is on
+  `codex/places-address-contract`, based on current `main` for a PR back to
+  `develop`. It is not deployed and has not re-imported any post. Preview must
+  prove the real `hungryconsti` address before any Production approval.
 - PR #40 extension/web reconciliation is merged at ba56573 and PR #42 exact
   develop Preview support is merged at 2b877ba. The 4.2.6 DB-first follow-up
   preserves the additive legacy contract, repairs the no-progress watchdog and
@@ -87,5 +102,5 @@ Recorded proof for global test consolidation
 4. Reload extension 4.2.6 from `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`
    in the existing Chrome extension directory and run
    the documented stable develop Preview smoke.
-5. Phase H remains blocked until Phase E operational activation is separately authorized.
+5. Phase H remains blocked until Phase E VPS operational activation is separately authorized.
 6. Keep Phase E activation, H and J in separate changes; do not mix worker operations, deep analysis, Hermes or MCP work.

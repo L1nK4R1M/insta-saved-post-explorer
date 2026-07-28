@@ -275,6 +275,7 @@ async function upsertCanonicalPlace(
       provider: resolved.provider,
       providerResultType: resolved.providerResultType,
       providerRank: resolved.providerRank,
+      providerMatchType: resolved.providerMatchType,
       attribution: resolved.attribution,
     } satisfies Prisma.InputJsonValue,
   };
