@@ -1,6 +1,6 @@
 # Extension web sync reconciliation - Release and Operations
 
-Release gate: READY FOR REVIEW
+Release gate: PREVIEW DEPLOYED — LIVE SMOKE PENDING
 
 ## Change summary
 
@@ -14,7 +14,8 @@ arbitrary Vercel deployments.
 
 ## Prerequisites
 
-- Owner review and explicit commit/push/deploy authorization.
+- PR #42 merged into `develop` at `2b877ba`; hosted checks and Preview
+  deployment are green.
 - Replace files in the same extension installation directory to preserve IDB.
 - Authenticated production admin and Instagram session for smoke testing.
 - Preview and Production `DATABASE_URL` values must remain environment-scoped
@@ -27,8 +28,8 @@ No schema/data migration. MV3 task fields are additive and per-job.
 
 ## Rollout plan
 
-1. Review and merge the correction.
-2. Deploy web copy only with authorization.
+1. PR #42 review and merge completed.
+2. Vercel develop Preview deployment completed successfully.
 3. Replace extension files with the validated 4.2.5 ZIP and reload the existing
    extension, without installing a second copy.
 4. Reload the web page and run one controlled refresh.
