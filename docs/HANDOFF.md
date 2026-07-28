@@ -1,9 +1,9 @@
 # Operational Handoff
 
-Last updated: 23 July 2026  
+Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
-Reference branch: `develop`  
-Reference commit before this documentation branch: `6f1e1be92b5d98012154d72ee339a7232d7d400d`
+Reference branch: `main`  
+Reference production base: `fd9754eb011a5f45a59bc3e5d6a053e9db808e62`
 
 ## 1. Purpose
 
@@ -36,6 +36,13 @@ If this handoff conflicts with an authoritative contract or with the code observ
 No implementation phase is active.
 Phases 0, A, B, C, D are merged and develop CI is green.
 Next executable phase: F — Places metadata-first domain.
+
+Production hotfix in review:
+- branch: codex/hotfix-extension-sync-prod;
+- base: main at fd9754eb011a5f45a59bc3e5d6a053e9db808e62;
+- scope: extension/web refresh reconciliation only;
+- no promotion of the unrelated Places or worker phases from develop;
+- no migration, dependency, permission or new API route.
 
 Phase F has a proposed reviewed design and implementation plan:
 - docs/CODEX_PHASE_F_METADATA_FIRST_DESIGN.md
@@ -194,3 +201,14 @@ Prochaine gate
 ```
 
 Every Phase F PR must explicitly confirm that it did not start another phase and did not store captions, candidate JSONL, API keys, OAuth credentials, or production data in Git.
+
+## 10. Production hotfix handoff
+
+- Goal: deploy only the extension/web refresh reconciliation from PR #40.
+- Mode: critical.
+- Verification: focused 7/7, lint PASS, typecheck PASS, full suite 149 passed
+  and 22 skipped, production build PASS with 27 pages, diff check PASS.
+- Rollback: revert the hotfix merge on `main`; do not delete imported posts or
+  replace the extension archive.
+- Exact next action: open a PR to `main`, wait for every hosted check, merge,
+  then verify Vercel Production and `/api/health`.
