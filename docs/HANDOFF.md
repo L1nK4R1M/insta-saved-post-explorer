@@ -3,7 +3,7 @@
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `develop`  
-Reference implementation commit: `ba56573d66c1bf595a4d8f0551591a5eb423e453`
+Reference implementation commit: `2b877ba043a004b925acdfae3f3decd7fbc89a44`
 
 ## 1. Purpose and authority
 
@@ -39,13 +39,14 @@ Stop and document any conflict between this handoff, an authoritative contract a
 ## 3. Current execution pointer
 
 ```text
-Active review branch: codex/allow-develop-preview-sync
-Base: develop at ba56573d66c1bf595a4d8f0551591a5eb423e453
+Active review branch: none
+Reference: develop at 2b877ba043a004b925acdfae3f3decd7fbc89a44
 Mode: critical
 VibeSpec convergence: PASS
 
 Verified correction:
 - PR #40 merged the extension/web refresh correction into develop at ba56573;
+- PR #42 merged exact develop Preview support into develop at 2b877ba;
 - extension archive and web ownership are separated;
 - archive-only posts become durable reconciliation targets;
 - repeated Instagram cursors terminate;
@@ -66,10 +67,13 @@ Fresh gates:
 - flat extension ZIP SHA-256:
   `9F842FD55066B2E88E981A1B545ABAB101E6AE0AE462D92349863FAE7E94479D`;
 - git diff --check: PASS.
+- PR #42 hosted checks: lint/types/unit/build, browser and Vercel all PASS;
+- Vercel Preview deployment for 2b877ba: SUCCESS.
 
 No migration, dependency, authentication, R2 permission or new API route is
-included. One exact develop Preview host permission is added. Merge, deployment,
-live Preview smoke and Chrome Web Store publication remain separate actions.
+included. One exact develop Preview host permission is added. The merge and
+Preview deployment are complete; live Preview smoke and Chrome Web Store
+publication remain separate actions.
 
 Phase F is CLOSED and COMPLETE.
 Phase G is CLOSED and COMPLETE.
@@ -211,13 +215,13 @@ transactions, worker isolation and audit completeness.
 
 ## 8. Exact next action
 
-1. Review the exact-origin 4.2.5 diff on
-   `codex/allow-develop-preview-sync`, then commit/push/merge only with owner
-   authorization.
-2. After the develop Preview deploys, replace files in the existing unpacked
+1. Replace files in the existing unpacked
    extension directory with `C:\tmp\insta-saved-sync-v4.2.5.zip`, reload the
    extension and run the Preview smoke in
    `specs/002-extension-web-sync-reconciliation/08-release.md`.
+2. Confirm extension discovery on the stable develop alias, click
+   **Actualiser les posts**, and compare the extension count with the Preview
+   library count.
 3. Production promotion remains a separate action; the Preview smoke must not
    be reported as Production validation.
 4. Keep Phase H blocked until Phase E operational activation is separately

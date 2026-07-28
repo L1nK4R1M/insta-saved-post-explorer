@@ -78,5 +78,6 @@ the axes were executed separately against the stabilized diff.
 
 Decision: PASS. No BLOCKER, HIGH or MEDIUM finding remains. Traceability,
 repository gates, exact-origin security checks, documentation and the flat
-4.2.5 package are complete. The change is ready for owner review but is not
-committed, pushed, deployed or published, and no live Preview smoke is claimed.
+4.2.5 package are complete. PR #42 is squash-merged into `develop` at
+`2b877ba043a004b925acdfae3f3decd7fbc89a44`; hosted checks and the Vercel
+Preview deployment pass. No live Preview smoke or store publication is claimed.
