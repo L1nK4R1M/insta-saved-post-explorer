@@ -1,67 +1,47 @@
 # Places mobile usability - Specification
 
-**Mode:** critical
-**Status:** approved
-**Owner:** repository owner
-
 ## Problem
 
-On small screens the 2D/3D control can be clipped, Places has no explicit exit,
-and visitors who can view the public Places map cannot load its associated post
-thumbnails. City-level approximate results also use a 25 km radius instead of
-the requested 10 km.
+The mobile view switch can be clipped, direct Places visits lack an explicit
+exit, public visitors cannot load associated post thumbnails, and city-level
+approximate results use 25 km instead of the requested 10 km.
+
+## Outcome
+
+Production exposes a complete mobile toolbar, deterministic return navigation,
+owner-scoped public linked posts and truthful 10 km city-level approximation.
+
+## Goals
+
+- Repair the four reported Places regressions without a parallel architecture.
+- Preserve authorization, owner isolation, persisted relationships and counts.
+- Promote code and the bounded data correction with reversible evidence.
+
+## Non-goals
+
+- Do not import more posts or reinterpret 646 location candidates as posts.
+- Do not change theme eligibility, review authorization, API, worker or schema.
+- Do not mutate any Production row outside the exact radius predicate.
 
 ## Functional requirements
 
-- `REQ-001`: At supported mobile widths the complete 2D/3D segmented control
-  remains inside the visible Places stage.
-- `REQ-002`: `/places` exposes an explicit link back to the post library.
-- `REQ-003`: A selected public place loads its linked post summaries through
-  the configured owner scope without requiring an administrator session.
-- `REQ-004`: Confirm and reject actions remain administrator-only.
-- `REQ-005`: City, town, village, municipality, locality and postcode provider
-  results use a 10,000 metre approximate radius for new scoring results.
-- `REQ-006`: The operator-facing explanation distinguishes 407 post records
-  from 646 candidate locations.
-- `REQ-007`: Production deployment occurs only after GitHub checks and a READY
-  Preview, and is followed by health, route, browser and runtime-error checks.
-- `REQ-008`: Exactly the existing 25,000 metre approximate rows are corrected
-  to 10,000 metres after a point-in-time Neon branch backup.
+- FR-001: The complete 2D/3D segmented control remains visible at supported mobile widths.
+- FR-002: The Places page provides an explicit labelled link to the post library.
+- FR-003: A public selected place loads linked post summaries through the configured owner scope.
+- FR-004: Place confirmation and rejection remain administrator-only operations.
+- FR-005: New city-like approximate provider results use a 10,000 metre radius.
+- FR-006: Operator documentation distinguishes 407 post records from 646 location candidates.
+- FR-007: Production code is promoted only after successful CI and READY Preview evidence.
+- FR-008: Exactly 29 existing approximate 25,000 metre rows are corrected after a Neon backup.
 
 ## Non-functional requirements
 
-- `NFR-001`: No horizontal page overflow and no control clipping at the mobile
-  Playwright viewport.
-- `NFR-002`: No schema migration or dependency is introduced; the only
-  Production mutation is the reviewed bounded radius correction.
-- `NFR-003`: Rollback retains the previous Vercel deployment and a named Neon
-  branch created immediately before the data update.
+- NFR-001: The mobile page has no view-switch clipping or horizontal overflow.
+- NFR-002: The change adds no schema migration or dependency and preserves aggregate relations.
+- NFR-003: Rollback retains the preceding Vercel deployment and an immutable Neon snapshot.
 
-## Invariants and compatibility
+## Invariants
 
-- `INV-001`: Place reads remain restricted to `getConfiguredOwnerId()`.
-- `INV-002`: Review writes remain admin-authenticated.
-- `INV-003`: Eligibility remains exactly canonical Voyages or Restaurant.
-- `INV-004`: Exact, probable, district, county, state and unknown semantics are
-  unchanged.
-
-## Acceptance criteria
-
-- `AC-001`: A mobile browser proves the segmented control's bounding rectangle
-  is fully inside the stage and viewport.
-- `AC-002`: The back link is visible and navigates to `/`.
-- `AC-003`: The read action calls `getPlacePosts` with the configured owner even
-  when `getSession()` would return null; mutation tests still refuse non-admins.
-- `AC-004`: Focused scoring tests return 10,000 metres for all city-like result
-  types.
-- `AC-005`: GitHub/Vercel report the merged commit as READY in Production and
-  `/api/health` plus `/places` return successful responses.
-- `AC-006`: Neon reports zero remaining 25,000 metre approximate rows, 29 rows at
-  10,000 metres, and unchanged total place/link/evidence/job aggregates.
-
-## Out of scope
-
-- Reinterpreting the 646 candidates as posts; changing theme eligibility;
-  importing more records; changing API authentication; updating existing
-  production rows outside the exact 25,000 metre approximate predicate; any
-  worker, Phase H, MCP, Hermes or unrelated deployment.
+Reads remain limited to `getConfiguredOwnerId()`, review writes remain
+admin-authenticated, Places eligibility remains canonical `Voyages` or
+`Restaurant`, and exact or non-city precision semantics remain unchanged.

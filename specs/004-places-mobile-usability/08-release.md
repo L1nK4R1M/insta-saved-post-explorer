@@ -1,55 +1,63 @@
 # Places mobile usability - Production Release
 
-**Mode:** Critical
-**Status:** Approved, pending execution
-**Authorization:** Repository owner, 28 July 2026
+Release gate: READY
 
-## Preconditions
+## Change summary
 
-- Local focused tests, lint, typecheck, full tests and build pass.
-- `origin/main`, GitHub Production and Vercel Production all identify `44b0da0`
-  as the baseline.
-- Neon Production is project `fancy-mud-69762258`, branch
-  `br-super-snow-asyrmnbm` (`main`).
-- Read-only preflight finds 29 approximate rows at 25,000 m, 10 at 5,000 m and
-  12 exact places.
+Production now contains the mobile toolbar and navigation repairs, public
+configured-owner linked-post loading and 10 km city-like scoring. Exactly 29
+legacy city-level radius records were corrected separately and transactionally.
 
-## Rollout
+## Prerequisites
 
-1. Commit and push the verified branch.
-2. Open a PR to `main`; wait for required GitHub checks and READY Vercel Preview.
-3. Merge with the expected reviewed head SHA.
-4. Wait for the new `main` Production deployment to become READY.
-5. Create Neon branch `backup-main-before-places-radius-2026-07-28` from `main`.
-6. In one transaction, update only rows matching:
-   `precision = 'APPROXIMATE' AND approximation_radius_meters = 25000`.
-7. Assert the update affected exactly 29 rows and validate the final radius and
-   aggregate distributions.
-8. Verify `/api/health`, `/places`, mobile navigation/controls, associated posts
-   and Vercel runtime errors.
-9. Record final deployment, commit, branch and data evidence in a follow-up
-   documentation PR.
+Local focused tests, lint, typecheck, full tests, build and Places E2E passed.
+GitHub CI #149 and Preview deployment `dpl_DVqQRqCUrP9bXWmjobL5SKoPNi18`
+passed before merge. The Neon preflight confirmed exactly 29 eligible rows.
 
-## Rollback triggers
+## Validation after release
 
-- GitHub checks fail or Preview is not READY: do not merge.
-- Production deployment is not READY: keep the current Production alias and
-  inspect build logs.
-- Neon update count is not exactly 29: transaction must fail and roll back.
-- Health, Places rendering, linked-post loading or runtime logs regress after
-  release: roll Vercel back to deployment `dpl_2GFsngT1j5DtoypxtnGFpobUu4Po`.
+Production `/api/health` and `/places` returned HTTP 200. Health identified
+version `8dbfd46` and a connected database. A 390 x 844 Chromium run proved the
+complete switch, return link and one linked post with zero sheet errors. Vercel
+reported no `/places` or `/api/health` runtime error in the initial window.
 
-## Data rollback
+## Migration plan
 
-The named Neon branch preserves the exact pre-update state. If only the bounded
-radius correction must be reversed, retrieve the 29 matching place IDs from the
-backup branch and transactionally restore those IDs to 25,000 m. Do not restore
-the whole branch after new writes without first reconciling them.
+No schema migration exists. The only data transition was a single guarded Neon
+transaction updating approximate 25,000 metre radii to 10,000 metres, with an
+exception and rollback unless exactly 29 rows were affected.
 
-## Observability
+## Rollout plan
 
-- Vercel deployment state and build logs;
-- `/api/health` database/version response;
-- `/places` HTTP response and browser interaction;
-- grouped Vercel runtime errors for the first post-deploy window;
-- Neon before/after distributions and unchanged relation aggregates.
+PR #49 was squash-merged as `8dbfd46b6e1b0ccbd8d20a31007de3814ca2758e`.
+Vercel Production deployment `dpl_HHKuBeSYf5L9izLHqCfMsyxmCNMh` reached READY.
+After health verification, the backup was created and the guarded transaction
+and all post-release checks completed successfully.
+
+## Rollback plan
+
+For a code regression, restore preceding Vercel deployment
+`dpl_2GFsngT1j5DtoypxtnGFpobUu4Po`. For a data-only reversal, read the 29 IDs
+from backup `br-curly-firefly-asy8hqti` and restore only those IDs to 25,000
+metres transactionally after reconciling any later writes.
+
+## Observability and alerts
+
+Signals are GitHub checks, Vercel state/build logs, `/api/health`, `/places`,
+mobile browser interaction, grouped runtime errors and Neon distributions plus
+relationship aggregates. Any unhealthy signal triggers rollback assessment.
+
+## Incident readiness
+
+The previous Vercel deployment and the named Neon point-in-time branch remain
+available. Deployment, commit, project, branch, counts and predicates are
+recorded here so an operator can execute a scoped recovery without guessing.
+
+## Execution evidence
+
+- Production before and after aggregates: 51 places, 301 links, 254 distinct
+  linked posts, 1,203 evidence rows and 407 jobs.
+- Radius distribution after correction: 0 at 25,000 m, 29 at 10,000 m and 10 at
+  5,000 m; zero non-approximate radii and zero invalid approximate radii.
+- Backup `backup-main-before-places-radius-2026-07-28`
+  (`br-curly-firefly-asy8hqti`) retains the 29 pre-change 25,000 metre rows.
