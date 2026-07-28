@@ -39,7 +39,7 @@ lecture et écriture des objets. L’application a besoin de `PutObject` et
 
 ## Installation de l’extension
 
-1. Décompresser `insta-saved-sync-v4.2.4.zip` dans un dossier permanent.
+1. Décompresser `insta-saved-sync-v4.2.6.zip` dans un dossier permanent.
 2. Ouvrir `chrome://extensions`.
 3. Activer **Mode développeur**.
 4. Cliquer **Charger l’extension non empaquetée**.
@@ -76,8 +76,33 @@ l’erreur de cibles non résolues, au lieu de relire indéfiniment la dernière
 Le site observe aussi le job de synchronisation authentifié après le démarrage.
 Si le dernier message de l’extension se perd lors de l’arrêt du service worker,
 le statut serveur `COMPLETED` ou `FAILED` termine quand même le bouton. Si ni le
-pont ni le job ne répondent, le chargement devient une erreur actionnable après
-90 secondes sans signal au lieu de tourner indéfiniment.
+pont ni le job ne montrent un progrès réel, le chargement devient une erreur
+actionnable après 90 secondes sans avancée au lieu de tourner indéfiniment.
+
+La version 4.2.5 autorise aussi la Preview develop stable
+`https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app`
+aux trois barrières de l’extension : injection du content script, validation
+des messages de page et validation de l’origine API. Aucun wildcard
+`*.vercel.app` n’est accepté. Preview et Production utilisent chacune leur
+`DATABASE_URL` Vercel, respectivement vers les branches Neon `develop` et
+`main`; l’extension ne choisit jamais la base elle-même.
+
+La version 4.2.6 verrouille PostgreSQL comme source de vérité et couvre les deux
+ordres de travail :
+
+- si **Actualiser les posts** est lancé sur le Web, l’extension compare le flux
+  Instagram au snapshot DB, envoie les posts réellement absents, puis aligne
+  son index local sur le snapshot DB et les posts acceptés pendant le run ;
+- si l’export est lancé d’abord dans l’extension, il conserve son comportement
+  local normal ; le prochain rafraîchissement Web traite les identifiants locaux
+  absents de la DB comme des cibles de réconciliation ;
+- après une suppression/réinstallation, une archive locale vide est réamorcée
+  à partir des paires DB `externalId` + `postCode` après une synchronisation
+  réussie, sans réintroduire le faux arrêt de la 4.2.1.
+
+Le pont expose aussi un compteur de progression non sensible. Des messages
+`running` identiques prouvent seulement que le transport répond : ils ne
+repoussent plus indéfiniment le délai de 90 secondes sans progression.
 
 ## Limites opérationnelles
 

@@ -3,7 +3,7 @@
 Last updated: 28 July 2026  
 Repository: `L1nK4R1M/insta-saved-post-explorer`  
 Reference branch: `main`  
-Reference production base: `fd9754eb011a5f45a59bc3e5d6a053e9db808e62`
+Reference production base: `55320ffb6199eaf34155c10cd38c24fb46edd0b0`
 
 ## 1. Purpose
 
@@ -38,11 +38,13 @@ Phases 0, A, B, C, D are merged and develop CI is green.
 Next executable phase: F — Places metadata-first domain.
 
 Production hotfix in review:
-- branch: codex/hotfix-extension-sync-prod;
-- base: main at fd9754eb011a5f45a59bc3e5d6a053e9db808e62;
-- scope: extension/web refresh reconciliation only;
+- branch: codex/prod-sync-db-first;
+- base: main at 55320ffb6199eaf34155c10cd38c24fb46edd0b0;
+- scope: exact Preview origin plus DB-first extension/web synchronization 4.2.6;
 - no promotion of the unrelated Places or worker phases from develop;
-- no migration, dependency, permission or new API route.
+- no migration, dependency, authentication, R2 permission or new API route;
+- the existing session response adds paired `knownPosts` while preserving both
+  legacy arrays.
 
 Phase F has a proposed reviewed design and implementation plan:
 - docs/CODEX_PHASE_F_METADATA_FIRST_DESIGN.md
@@ -204,11 +206,14 @@ Every Phase F PR must explicitly confirm that it did not start another phase and
 
 ## 10. Production hotfix handoff
 
-- Goal: deploy only the extension/web refresh reconciliation from PR #40.
+- Goal: deploy only the validated extension/web sync changes through 4.2.6,
+  without promoting unrelated `develop` phases.
 - Mode: critical.
-- Verification: focused 7/7, lint PASS, typecheck PASS, full suite 149 passed
-  and 22 skipped, production build PASS with 27 pages, diff check PASS.
+- Verification: focused 13/13, lint PASS, exact typecheck PASS, full suite 152
+  passed and 22 skipped, production build PASS with 27 pages, VibeSpec 0/0 and
+  diff check PASS.
 - Rollback: revert the hotfix merge on `main`; do not delete imported posts or
   replace the extension archive.
 - Exact next action: open a PR to `main`, wait for every hosted check, merge,
-  then verify Vercel Production and `/api/health`.
+  verify Vercel Production and `/api/health`, then run the authenticated
+  extension/web smoke with the flat 4.2.6 package.

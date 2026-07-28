@@ -16,6 +16,7 @@ import {
 } from "./idb.js";
 import {
   buildWebsiteReconciliationTargets,
+  canonicalizePostIdentities,
   isFeedPageTerminal,
   reconciliationCompletionError,
   selectLocalIncrementalPage,
@@ -480,6 +481,12 @@ async function stepOnce(task, seenSet) {
   const requestedCursor = task.cursor ?? null;
   const data = await client.get(savedPath(task.collectionId), { max_id: requestedCursor });
   const media = (data.items ?? []).map((entry) => entry.media).filter(Boolean);
+  const observedPostsAfterPage = task.webSync
+    ? canonicalizePostIdentities(
+        task.observedPosts ?? [],
+        media.map((post) => ({ pk: post.pk, code: post.code })),
+      )
+    : null;
 
   // Incremental local exports stop on the local archive. Web reconciliation
   // stops only on website-owned identifiers after archive-only gaps are resolved.
@@ -517,7 +524,10 @@ async function stepOnce(task, seenSet) {
   if (task.webSync) {
     await synchronizeWebsitePage(
       rows,
-      (row) => syncPostToExplorer(row, task.webSync),
+      (row) => syncPostToExplorer(row, task.webSync, async () => {
+        task.progressVersion = (task.progressVersion ?? 0) + 1;
+        await TaskStoreRaw.put(task);
+      }),
       async (_row, uploadedCount) => {
         task.stats.synced = (task.stats.synced ?? 0) + 1;
         task.stats.mediaUploaded = (task.stats.mediaUploaded ?? 0) + uploadedCount;
@@ -527,6 +537,10 @@ async function stepOnce(task, seenSet) {
         if (reconciliationTargetIdsAfterPage) {
           task.reconciliationTargetIds = reconciliationTargetIdsAfterPage;
         }
+        if (observedPostsAfterPage) {
+          task.observedPosts = observedPostsAfterPage;
+        }
+        task.progressVersion = (task.progressVersion ?? 0) + 1;
         await TaskStoreRaw.put(task);
       },
     );
@@ -856,32 +870,47 @@ async function clearMediaDownload() {
 // known pk, so a correct archive means it fetches only posts newer than these.
 async function seedArchiveFromPks(pks, newestPk) {
   const archive = await ArchiveStore.get();
-  const merged = new Set(archive.seenPks.map(String));
-  for (const pk of pks) if (pk) merged.add(String(pk));
+  const canonicalPosts = canonicalizePostIdentities(
+    archive.seenPosts?.length
+      ? archive.seenPosts
+      : archive.seenPks.map((pk) => ({ pk })),
+    pks.map((pk) => ({ pk })),
+  );
 
   await ArchiveStore.put({
-    seenPks: [...merged],
+    seenPks: canonicalPosts.map((post) => post.pk ?? post.code).filter(Boolean),
+    seenPosts: canonicalPosts,
     newestPk: newestPk ? String(newestPk) : archive.newestPk,
-    count: merged.size,
+    count: canonicalPosts.length,
     lastExportAt: new Date().toISOString(),
   });
-  return merged.size;
+  return canonicalPosts.length;
 }
 
 // After a successful run, fold this run's pks into the durable archive index.
 async function finalizeArchive(task) {
   const pages = await PageStore.all(task.id);
-  const pks = [];
-  for (const p of pages) for (const r of p.rows) if (r.pk) pks.push(String(r.pk));
-
   const archive = await ArchiveStore.get();
-  const merged = new Set(archive.seenPks.map(String));
-  for (const pk of pks) merged.add(pk);
+  const existingPosts = archive.seenPosts?.length
+    ? archive.seenPosts
+    : archive.seenPks.map((pk) => ({ pk, code: null }));
+  const pagePosts = pages.flatMap((page) =>
+    page.rows.map((row) => ({ pk: row.pk, code: row.code }))
+  );
+  const canonicalPosts = task.webSync && task.knownWebsitePosts?.length
+    ? canonicalizePostIdentities(
+        task.knownWebsitePosts,
+        task.observedPosts ?? [],
+        pagePosts,
+        existingPosts,
+      )
+    : canonicalizePostIdentities(existingPosts, pagePosts);
 
   await ArchiveStore.put({
-    seenPks: [...merged],
+    seenPks: canonicalPosts.map((post) => post.pk ?? post.code).filter(Boolean),
+    seenPosts: canonicalPosts,
     newestPk: task.newestPk ?? archive.newestPk,
-    count: merged.size,
+    count: canonicalPosts.length,
     lastExportAt: new Date().toISOString(),
   });
 }
@@ -915,6 +944,7 @@ async function startExport({
   taskId = TASK_ID,
   knownExternalIds = [],
   knownPostCodes = [],
+  knownWebsitePosts = [],
   reconciliationTargetIds = [],
 }) {
   const competingTaskId = taskId === WEB_SYNC_TASK_ID ? TASK_ID : WEB_SYNC_TASK_ID;
@@ -938,6 +968,7 @@ async function startExport({
     mediaQuality: mediaQuality === "low" ? "low" : "high",
     cursor: null,
     seq: 0,
+    progressVersion: 0,
     processedCount: 0,
     totalCount: null,
     newestPk: null,
@@ -949,6 +980,8 @@ async function startExport({
     webSync,
     knownExternalIds,
     knownPostCodes,
+    knownWebsitePosts,
+    observedPosts: [],
     reconciliationTargetIds,
     createdAt: now,
     updatedAt: now,
@@ -962,7 +995,11 @@ async function startWebSync(data) {
     throw new Error("invalid_sync_session");
   }
   const apiUrl = new URL(data.apiBaseUrl);
-  if (!["https://insta-saved-post-explorer.vercel.app", "http://localhost:3000"].includes(apiUrl.origin)) {
+  if (![
+    "https://insta-saved-post-explorer.vercel.app",
+    "https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app",
+    "http://localhost:3000",
+  ].includes(apiUrl.origin)) {
     throw new Error("invalid_sync_origin");
   }
   const incomingSync = { apiBaseUrl: apiUrl.origin, token: data.token, jobId: String(data.jobId ?? "") };
@@ -991,10 +1028,24 @@ async function startWebSync(data) {
   const knownCodes = Array.isArray(data.knownPostCodes) ? data.knownPostCodes.map(String) : [];
   const known = [...new Set(knownIds)].slice(0, 10_000);
   const postCodes = [...new Set(knownCodes)].slice(0, 10_000);
+  const knownWebsitePosts = Array.isArray(data.knownPosts)
+    ? canonicalizePostIdentities(
+        data.knownPosts.slice(0, 10_000).map((post) => ({
+          pk: post?.externalId,
+          code: post?.postCode,
+        })),
+      )
+    : [];
+  const websiteKnownIdentities = knownWebsitePosts.length
+    ? knownWebsitePosts
+    : canonicalizePostIdentities(
+        known.map((pk) => ({ pk })),
+        postCodes.map((code) => ({ code })),
+      );
   const archive = await ArchiveStore.get();
   const reconciliationTargetIds = buildWebsiteReconciliationTargets(
-    archive.seenPks,
-    known,
+    archive.seenPosts?.length ? archive.seenPosts : archive.seenPks,
+    websiteKnownIdentities,
   );
   await startExport({
     taskId: WEB_SYNC_TASK_ID,
@@ -1003,12 +1054,13 @@ async function startWebSync(data) {
     mediaQuality: "high",
     knownExternalIds: known,
     knownPostCodes: postCodes,
+    knownWebsitePosts,
     reconciliationTargetIds,
     webSync: incomingSync,
   });
 }
 
-async function syncPostToExplorer(row, sync) {
+async function syncPostToExplorer(row, sync, recordProgress = async () => {}) {
   const carousel = row.media_type === "carousel";
   const sources = carousel
     ? row.carousel.map((item) => ({
@@ -1043,6 +1095,7 @@ async function syncPostToExplorer(row, sync) {
       thumbnailObjectKey: thumbnail?.objectKey ?? null,
       thumbnailByteSize: thumbnail?.byteSize ?? null,
     });
+    await recordProgress();
   }
   const response = await syncFetch(sync, "/api/sync/posts", {
     external_id: String(row.pk || row.id),
@@ -1144,6 +1197,7 @@ function publicWebSyncState(task) {
   if (!task) return null;
   return {
     status: task.status,
+    progressVersion: task.progressVersion ?? task.seq ?? 0,
     processedCount: task.processedCount ?? 0,
     totalCount: task.totalCount ?? null,
     stats: task.stats ?? freshStats(),

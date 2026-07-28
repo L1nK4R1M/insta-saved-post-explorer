@@ -16,7 +16,8 @@ owner-scoped identifiers. A successful result cannot hide a known archive gap.
 - Import extension-only saved posts through the existing secure sync path.
 - Preserve fast incremental behavior when no gap exists.
 - Preserve local export behavior, replay safety and MV3 restart safety.
-- Provide a loadable version 4.2.4 package and accurate operator guidance.
+- Provide a loadable version 4.2.6 package and accurate operator guidance.
+- Support the stable develop Preview through the same extension sync flow.
 
 ## Non-goals
 
@@ -39,10 +40,11 @@ is widened.
 
 ## Functional requirements
 
-- FR-001: Web synchronization uses only `knownExternalIds` and
-  `knownPostCodes` supplied by the web session to decide website ownership.
-- FR-002: IDs present in the extension archive but absent from web-known
-  external IDs become durable reconciliation targets.
+- FR-001: Web synchronization uses only the owner-scoped DB identities supplied
+  by the web session (`knownPosts`, or the legacy flat arrays) to decide website
+  ownership.
+- FR-002: Identities present in the extension archive but absent from the
+  web-session DB snapshot become durable reconciliation targets.
 - FR-003: A website-known post does not stop the scan while a reconciliation
   target remains; website-known posts are not uploaded again.
 - FR-004: Local extension-only incremental exports continue to stop on the
@@ -51,13 +53,27 @@ is widened.
   unresolved count instead of reporting success.
 - FR-006: Target resolution commits only after every selected post on the page
   uploads/imports successfully.
-- FR-007: The corrected extension is version 4.2.4 and web recovery copy asks
+- FR-007: The corrected extension is version 4.2.6 and web recovery copy asks
   for the latest extension without a stale hard-coded version.
 - FR-008: A page whose next Instagram cursor equals the cursor just requested
   is terminal, so the task cannot poll the same final page forever.
 - FR-009: After creating a sync session, the web refresh independently observes
   its owner-scoped server job and reaches the same terminal success or failure
   state when the extension-to-page terminal message is lost.
+- FR-010: The exact stable develop Preview origin
+  `https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app`
+  is present in manifest injection/host permissions, content-bridge message
+  validation and background API-origin validation.
+- FR-011: Repeated extension `running` states that carry no new task progress
+  do not reset the web watchdog; the refresh becomes an actionable error after
+  90 seconds without a changed progress checkpoint.
+- FR-012: The sync session supplies owner-scoped DB identities as paired
+  `externalId` and `postCode` values so the extension can canonicalize one
+  archive record per DB post, including legacy rows without an external ID.
+- FR-013: After a successful web sync, the extension archive is aligned to the
+  DB snapshot plus posts accepted during that sync. A fresh empty archive is
+  therefore re-seeded from PostgreSQL without claiming that pre-sync extension
+  entries already exist in the DB.
 
 ## Non-functional requirements
 
@@ -65,8 +81,9 @@ is widened.
   post, preserving the current bounded incremental request path.
 - NFR-002: Reconciliation targets persist in the durable MV3 task and survive a
   worker restart or a failed later upload without premature removal.
-- NFR-003: No Prisma schema, migration, API route, secret, R2 permission,
-  dependency or host permission changes.
+- NFR-003: No Prisma schema, migration, API route, secret, R2 permission or
+  dependency changes. The only permission expansion is the exact develop
+  Preview origin.
 - NFR-004: Focused policy tests, neighboring sync tests, syntax checks, lint,
   typecheck, full tests and production build all pass.
 - NFR-005: Pagination must always make forward progress or transition to a
@@ -74,11 +91,20 @@ is widened.
 - NFR-006: Server polling is same-origin, stops after a terminal result or
   component cleanup, tolerates transient read failures and settles each refresh
   at most once.
+- NFR-007: No wildcard Vercel origin is trusted; production and localhost
+  behavior remain unchanged.
+- NFR-008: The extension exposes a non-sensitive monotonic work checkpoint for
+  page commits and successful media steps so legitimate work remains
+  distinguishable from duplicate state polling without exposing the Instagram
+  cursor.
+- NFR-009: Existing 4.2.5 session arrays remain accepted during rollout; the
+  paired DB identity contract is additive and requires no database migration.
 
 ## Business rules and invariants
 
 - BR-001: PostgreSQL/web session state is authoritative for website ownership;
-  the extension archive is evidence of reconciliation work only.
+  the extension archive is evidence of reconciliation work only and is aligned
+  to the DB only after successful completion.
 - BR-002: Imports remain owner-scoped and idempotent; retry may update but never
   duplicate the canonical post.
 - BR-003: Missing or deleted Instagram posts are never invented or silently
@@ -88,6 +114,10 @@ is widened.
   residual-target check still prevents false success.
 - BR-006: The owner-scoped `SyncJob` is the durable terminal-state fallback;
   extension messages remain the lower-latency progress channel.
+- BR-007: Preview uses its environment-scoped `DATABASE_URL` and separate Neon
+  develop branch; the extension origin change never selects a database itself.
+- BR-008: Transport liveness is not task progress. Only a changed extension
+  checkpoint or server heartbeat may refresh the no-progress watchdog.
 
 ## Failure and edge-case behavior
 
@@ -99,7 +129,9 @@ is widened.
 | Target absent at feed end | Fail with residual count | Actionable incomplete message | Full export, then retry |
 | Instagram repeats the requested cursor | Stop after the processed page | Success or residual-target error | Automatic |
 | Terminal extension message is lost | Read the authenticated server job | Spinner becomes success or error | Automatic |
+| Extension repeats an unchanged running state | Ignore transport-only liveness | Actionable error after 90 seconds | Reload extension, page and retry |
 | Multiple extension installations | Highest discovered version is tried first | Corrected extension wins | Remove/reload stale copy |
+| Untrusted or dynamic Vercel deployment | Reject discovery/start messages | Extension remains unavailable | Add a reviewed exact origin only if required |
 
 ## Data and privacy requirements
 

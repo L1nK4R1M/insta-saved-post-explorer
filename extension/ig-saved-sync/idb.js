@@ -6,15 +6,15 @@
 // page, and downloaded media blobs are written to disk as we go, so a killed
 // run resumes exactly where it stopped instead of starting over.
 //
-// It also keeps a lightweight "seen index" (the pk of every post ever
-// exported, plus the newest pk) so an incremental update can stop as soon as
-// it reaches posts already captured.
+// It also keeps a lightweight "seen index" with canonical pk/code pairs, a
+// compatible flat identifier list and the newest pk. Incremental updates can
+// therefore stop on either identifier while preserving pre-4.2.6 archives.
 //
 // Stores:
 //   tasks   : one record per export run, keyed by TASK_ID
 //   pages   : collected rows, one record per fetched page (taskId + seq)
 //   media   : downloaded binary blobs, keyed by URL
-//   archive : durable cross-run index { id:"index", seenPks:[], newestPk, count }
+//   archive : durable cross-run index { id:"index", seenPks:[], seenPosts:[], newestPk, count }
 
 const DB_NAME = "ig-saved-exporter";
 const DB_VERSION = 2;
@@ -192,7 +192,7 @@ export const MediaStore = {
 export const ArchiveStore = {
   async get() {
     const rec = await tx("archive", "readonly", (store) => reqAsValue(store.get(ARCHIVE_ID)));
-    return rec ?? { id: ARCHIVE_ID, seenPks: [], newestPk: null, count: 0, lastExportAt: null };
+    return rec ?? { id: ARCHIVE_ID, seenPks: [], seenPosts: [], newestPk: null, count: 0, lastExportAt: null };
   },
   async put(record) {
     record.id = ARCHIVE_ID;

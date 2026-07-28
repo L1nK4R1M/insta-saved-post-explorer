@@ -22,11 +22,28 @@ running refresh. The final extension-to-page state message can be lost as the
 content bridge stops, while the existing server job remains available as a
 durable owner-scoped fallback.
 
+The develop Preview then exposed a separate environment boundary: the extension
+only injected and accepted sync messages on production and localhost. The owner
+confirmed that Vercel Preview and Production use separate `DATABASE_URL`
+variables backed by separate Neon branches. The stable develop Preview must be
+allowed explicitly without trusting arbitrary `*.vercel.app` deployments.
+
+The follow-up production smoke exposed two remaining convergence defects. First,
+the web no-progress watchdog was reset by every repeated `running` message, so a
+responsive but stalled extension could keep the spinner alive indefinitely.
+Second, reinstalling the extension removed its local archive and therefore
+prevented extension state from converging back to the authoritative DB snapshot.
+The owner clarified that PostgreSQL is always the source of truth for deciding
+whether a post is new.
+
 ## Desired outcome
 
 A web refresh imports extension-known posts missing from the owner-scoped web
 library, never confuses the extension archive with database ownership, and never
-reports success while a known local gap remains unresolved.
+reports success while a known local gap remains unresolved. After a successful
+web sync, the extension archive must align to the paired DB snapshot plus rows
+accepted during the run. Running the extension first remains valid: the next web
+refresh imports the extension-only rows, after which both sides converge.
 
 ## Existing-system evidence
 
@@ -38,6 +55,10 @@ reports success while a known local gap remains unresolved.
 | Production symptom | Owner report, 2026-07-28 | Exact acceptance scenario |
 | Repeated cursor has no terminal guard | `stepOnce()` pagination before 4.2.4 | Deterministic infinite final-page loop |
 | Completed extension task with running web button | Active Chrome extension IndexedDB and loaded 4.2.4 worker | Demonstrates a lost terminal bridge message |
+| Develop Preview is absent from all extension origin gates | `manifest.json`, `content-bridge.js`, `background.js` | Explains why Preview cannot discover or start the extension |
+| Production and Preview use separate Neon branches | Direct Neon inspection plus owner-confirmed environment-scoped `DATABASE_URL` values | Allows bounded Preview testing without sharing the production database |
+| Duplicate `running` states reset the page watchdog | `refresh-posts-button.tsx` before the 4.2.6 follow-up | Explains the never-ending responsive spinner |
+| v4.2.1 has no repeated-cursor terminal guard | Historical commit `3d59c037aff2a6e00b771f3a87ccb2586baa190a` | Confirms that the older build could loop even though its early-stop behavior often masked gaps |
 
 ## Brownfield baseline
 
@@ -52,7 +73,8 @@ stops on the local archive; web reconciliation must not.
 | ID | Assumption | Evidence | Risk if wrong | Resolution |
 |---|---|---|---|---|
 | ASM-001 | Archive IDs are Instagram post primary keys | `finalizeArchive()` records row `pk` values | Targets could be over-reported | Compare with web external IDs and resolve by URL code during scan |
-| ASM-002 | Corrected extension can use the current production sync payload | Payload fields are unchanged | Coordinated deploy would be required | Preserve `knownExternalIds` and `knownPostCodes` |
+| ASM-002 | Paired DB identities can be added without breaking older extensions | Existing arrays remain present and the new `knownPosts` field is additive | Coordinated deploy could break the rollout | Preserve `knownExternalIds` and `knownPostCodes`; make 4.2.6 accept both representations |
+| ASM-003 | The stable develop deployment remains `https://insta-saved-post-explorer-git-develop-l1nk4r1ms-projects.vercel.app` | Existing Vercel develop alias | A renamed alias would remain blocked | Keep one exact allowlisted origin and update deliberately if the alias changes |
 
 ## Open questions
 
@@ -75,4 +97,6 @@ Selected mode: critical
 
 Critical workflow is required because the defect crosses a production sync
 contract and can silently omit user data. The implementation remains a bounded
-maintenance slice with no schema, permission or deployment change.
+maintenance slice with no schema or authentication change. It adds one
+backward-compatible session response field and deliberately widens the extension
+host permission by one exact trusted origin.
