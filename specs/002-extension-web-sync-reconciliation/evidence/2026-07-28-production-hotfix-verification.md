@@ -1,32 +1,36 @@
 # Production hotfix verification
 
 Date: 2026-07-28
-Branch: `codex/hotfix-extension-sync-prod`
-Production base: `origin/main` at `fd9754eb011a5f45a59bc3e5d6a053e9db808e62`
-Source correction: squash `ba56573d66c1bf595a4d8f0551591a5eb423e453`
+Branch: `codex/prod-sync-db-first`
+Production base: `origin/main` at `55320ffb6199eaf34155c10cd38c24fb46edd0b0`
+Source corrections: develop squashes `2b877ba043a004b925acdfae3f3decd7fbc89a44`
+and `f74302b3bba6bf9bd29ab66d6ef8fbc32d5479b3`
 
 ## Scope decision
 
-Promoting `develop` directly would include 276 files, about 24,700 added lines,
-two Prisma migrations and unrelated Places/worker phases. The hotfix therefore
-ports only the 24-file extension/web reconciliation correction to `main`.
+Promoting `develop` directly would include unrelated Places and worker phases.
+The hotfix therefore ports only the exact-origin compatibility and DB-first
+extension/web synchronization corrections to `main`.
 
-No migration, dependency, new API route, R2 permission, authentication change,
-host permission or worker deployment is included. The existing authenticated
-`GET /api/sync/jobs/{id}` route is reused.
+No migration, dependency, new API route, R2 permission, authentication change
+or worker deployment is included. One exact reviewed Preview origin is added;
+no wildcard is accepted. The existing session response additively returns
+paired `knownPosts` while preserving its two legacy arrays.
 
 ## Fresh local gates on the production base
 
 - `npm ci`: PASS; 572 packages installed. Existing audit output reports 12 high
   findings; no breaking audit fix was applied.
 - `npm run db:generate`: PASS; client generation only, no migration.
-- focused policy and UI tests: PASS, 7/7.
+- focused policy, media, UI and session tests: PASS, 13/13.
 - `npm run lint`: PASS.
-- `npm run typecheck`: the Windows sandbox could not update
-  `tsconfig.tsbuildinfo`; `npx tsc --noEmit --incremental false` passed with no
-  type errors.
-- `npm run test`: PASS, 149 passed and 22 skipped.
+- `npm run typecheck`: PASS exactly; sandbox cache writing required the same
+  command outside the restricted file-write layer.
+- `npm run test`: PASS, 152 passed and 22 skipped.
 - `npm run build`: PASS, 27 pages generated.
+- VibeSpec validation: PASS, 0 errors and 0 warnings.
+- flat extension 4.2.6 package: PASS, SHA-256
+  `E7EF63C70AC5054975A5B07C51BF6388EBC2048797719B6FE93008A237C5A48E`.
 - `git diff --check`: PASS.
 
 ## Rollout and rollback
