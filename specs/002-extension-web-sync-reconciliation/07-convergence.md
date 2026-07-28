@@ -4,43 +4,54 @@ Decision: PASS
 
 ## Artifact consistency
 
-The 4.2.4 reconciliation remains converged. The 4.2.5 develop Preview origin
-follow-up has RED/GREEN evidence, full gates, package inspection and fixed-diff
-review. Intake, specification, design, contracts, tasks and validation agree:
-website state owns imported identity, archive state defines reconciliation work,
-page target progress is atomic, non-advancing pagination is terminal, the server
-job recovers a lost terminal bridge message, and no API/schema/permission change
-exists.
+The 4.2.6 follow-up is converged around one ownership rule: PostgreSQL is the
+source of truth for imported post identity. The extension archive can identify
+reconciliation work, but it never proves DB ownership. Intake, specification,
+design, contracts, tasks and validation agree on the additive paired session
+snapshot, post-success archive alignment, monotonic work checkpoint and
+90-second no-progress termination.
+
+The existing production, localhost and exact stable develop Preview origin
+gates remain unchanged from 4.2.5; arbitrary `*.vercel.app` deployments remain
+blocked.
 
 ## Requirement coverage
 
-FR-001 through FR-010, NFR-001 through NFR-007 and BR-001 through BR-007 map
-to TASK-001 through TASK-007, AT-001 through AT-009 and EV-001 through EV-011.
-The final check reports 24 requirements and zero uncovered.
+FR-001 through FR-013, NFR-001 through NFR-009 and BR-001 through BR-008 map to
+TASK-001 through TASK-008, AT-001 through AT-011 and EV-001 through EV-012.
+Traceability reports zero uncovered requirements.
 
 ## Implementation against specification
 
-PASS. Version 4.2.5 adds the exact stable develop Preview at all three required
-extension gates and adds no unrequested application behavior.
+PASS. The session route derives paired `externalId`/`postCode` values from the
+same owner-scoped DB rows and preserves the legacy flat arrays. Extension 4.2.6
+accepts the paired representation or the legacy arrays, computes archive-only
+targets, advances a public work checkpoint only on actual media/page progress,
+and writes the canonical archive only after terminal success.
 
 ## Contracts against implementation
 
-PASS. Production, localhost and the exact develop Preview are accepted. No
-wildcard Vercel origin, API payload, route or database-selection logic is added.
+PASS. No route, Prisma field, migration, dependency, authentication scheme or R2
+permission is added. `knownPosts` is an additive response field. Existing
+extensions ignore it; 4.2.6 remains compatible with an older web payload.
+`seenPosts` is an additive IndexedDB object property and `seenPks` remains
+populated.
 
 ## Tests against behavior
 
-PASS. Tests exercise the missing-middle case, healthy and local boundaries,
-residual failure, page-atomic failure injection and package identity. Neighbor
-and full suites pass. The production final-page loop is covered by a
-repeated-cursor regression; the lost terminal bridge is covered by the
-server-job component regression.
+PASS. Focused RED/GREEN tests cover identical running snapshots, paired DB
+identity extraction, empty/local-advanced archive convergence, pagination
+termination and package identity. The final focused run passed 13/13. Lint,
+exact typecheck, the full suite (329 passed, 129 skipped), the 32-page production
+build, MV3 syntax checks and `git diff --check` pass.
 
 ## Documentation and operational readiness
 
-PASS for review readiness. Operator docs name 4.2.5, installation preserves the
-existing IndexedDB archive, rollback is code/package-only, and production smoke
-is explicitly unverified pending deployment authorization.
+PASS for release readiness. Operator docs name 4.2.6, explain DB-first behavior,
+preserve the exact Preview boundary and provide rollback without deleting
+imported posts. The flat package and hash are recorded. Controlled Chromium
+discovered a loaded 4.2.6 extension on Production. Authenticated Preview and
+Instagram scans remain explicit post-deployment smoke checks.
 
 ## Findings
 
@@ -48,15 +59,18 @@ is explicitly unverified pending deployment authorization.
 |---|---|---|---|---|---|
 | HIGH | REV-001 | Per-selection target removal could allow false completion | Second RED/GREEN cycle | Add residual completion error | Closed |
 | HIGH | REV-002 | Per-post target commit could skip a later failed row after restart | Failure-injection review/test | Commit target state only after full page | Closed |
-| HIGH | REV-004 | A repeated Instagram cursor leaves the final page running forever | Owner production smoke plus missing progress guard in `stepOnce()` | Treat an unchanged requested cursor as terminal and retain residual-target failure | Closed |
-| HIGH | REV-005 | Chrome persisted a completed 4.2.4 task while the web button remained running after the terminal bridge message was lost | Direct production browser state inspection | Add owner-scoped server-job fallback and idempotent UI settlement | Closed |
-| MEDIUM | REV-006 | AT-009 specified preserved Production/localhost support but initially asserted only Preview and no wildcard | Fixed-diff engineering review | Parameterize the package contract across all three trusted origins | Closed |
-| LOW | REV-003 | npm audit reports 12 high dependency findings in existing lockfile | `npm ci` | Track separately; do not run breaking audit fix in this bug | Open, non-blocking |
+| HIGH | REV-004 | A repeated Instagram cursor leaves the final page running forever | Owner production smoke and historical 4.2.1 comparison | Treat an unchanged requested cursor as terminal and retain residual-target failure | Closed |
+| HIGH | REV-005 | A lost terminal bridge message leaves the web button running | Direct browser/IndexedDB inspection | Add owner-scoped server-job fallback and idempotent UI settlement | Closed |
+| HIGH | REV-007 | Repeated identical `running` states reset the old watchdog forever | RED fake-timer regression | Reset the watchdog only when the work checkpoint or server heartbeat changes | Closed |
+| HIGH | REV-008 | A reinstalled extension has no paired local index to converge to the DB | DB-first contract review and RED policy test | Return paired DB identities and finalize the archive only after successful sync | Closed |
+| MEDIUM | REV-006 | Origin regression initially asserted Preview only | Fixed-diff review | Parameterize Production, localhost and exact Preview boundaries | Closed |
+| MEDIUM | REV-009 | A page-only checkpoint could time out a legitimate long carousel upload | Engineering quality review | Advance `progressVersion` after each successful media source as well as page commit | Closed |
+| LOW | REV-003 | npm audit reports existing dependency findings | Existing install evidence | Track separately; do not run a breaking audit fix in this bug | Open, non-blocking |
 
 Severity meanings:
 
 - `BLOCKER`: unsafe or fundamentally incorrect; release prohibited.
-- `HIGH`: material correctness, security, data, or compatibility gap; release prohibited.
+- `HIGH`: material correctness, security, data or compatibility gap; release prohibited.
 - `MEDIUM`: meaningful quality or maintainability gap; owner and resolution required.
 - `LOW`: improvement that does not invalidate the feature.
 
@@ -64,20 +78,21 @@ Severity meanings:
 
 Two separate fixed-diff axes were performed:
 
-- Specification compliance: all FR/NFR/BR behaviors are implemented and tested;
-  no scope creep or evidence gap remains.
-- Engineering quality/security: state ownership, MV3 restart, later-upload
-failure, idempotent replay, API/R2 permissions, capacity and package contents
-were reviewed. REV-001, REV-002, REV-004 and REV-005 were found and closed with
-RED/GREEN tests.
+- Specification compliance: the DB-authority rule, both execution orders,
+  backward compatibility, loop termination and documented limitations map to
+  implementation and evidence.
+- Engineering quality/security: owner scoping, additive contracts, MV3 restart,
+  atomic page progress, slow media progress, idempotent replay, exact origins,
+  package contents and rollback were reviewed.
 
-No subagent was used because repository instructions did not request delegation;
-the axes were executed separately against the stabilized diff.
+REV-007, REV-008 and REV-009 were found and closed during this follow-up. No
+subagent was used because repository instructions did not request delegation;
+the two review axes were performed separately against the stabilized diff.
 
 ## Final decision rationale
 
-Decision: PASS. No BLOCKER, HIGH or MEDIUM finding remains. Traceability,
-repository gates, exact-origin security checks, documentation and the flat
-4.2.5 package are complete. PR #42 is squash-merged into `develop` at
-`2b877ba043a004b925acdfae3f3decd7fbc89a44`; hosted checks and the Vercel
-Preview deployment pass. No live Preview smoke or store publication is claimed.
+Decision: PASS. No BLOCKER, HIGH or MEDIUM finding remains. The implementation
+preserves DB ownership, supports extension-first and web-first convergence,
+terminates non-progressing UI/Instagram loops, maintains legacy compatibility,
+passes all local gates and produces a verified flat 4.2.6 package. Live
+authenticated smoke is a rollout check and is not represented as local proof.

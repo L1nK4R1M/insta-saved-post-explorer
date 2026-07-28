@@ -3,7 +3,9 @@
 ## Task rules
 
 - Each task maps requirements, tests and evidence.
-- No task may expand into schema, API, permission, deployment or store work.
+- No task may expand into schema, new-route, broad permission, deployment or
+  store work. Additive compatibility fields on the existing session response
+  remain in scope when required by the accepted contract.
 - Critical completion requires dual review, rollback and convergence.
 
 ## Phase 1 - Foundations
@@ -34,7 +36,7 @@
   - Files: manifest, README, refresh button, `docs/instagram-extension-sync.md`, tests
   - Tests: AT-006
   - Evidence: EV-004, EV-005
-  - Done: Version 4.2.3 was coherent and flat; package identity advances to 4.2.4 in TASK-005.
+  - Done: Version 4.2.3 was coherent and flat; later maintenance tasks advance package identity.
 
 ## Phase 4 - Release readiness
 
@@ -72,6 +74,18 @@
   - Evidence: EV-010, EV-011
   - Done: RED/GREEN, all repository gates, exact-origin review and flat 4.2.5
     package verification pass; live Preview smoke remains a rollout action.
+
+- [x] TASK-008: Converge the DB-owned extension index and stop transport-only spinner liveness
+  - Requirements: FR-007, FR-011, FR-012, FR-013, NFR-006, NFR-008,
+    NFR-009, BR-001, BR-006, BR-008
+  - Dependencies: TASK-006
+  - Files: background public task state, refresh button, manifest, focused test,
+    operator docs and VibeSpec evidence
+  - Tests: AT-010, AT-011
+  - Evidence: EV-012
+  - Done: Repeated identical `running` snapshots become an actionable error
+    after 90 seconds, changed page checkpoints keep legitimate scans alive, and
+    a successful sync aligns a fresh or locally advanced archive to the DB.
 
 ## Dependency graph
 

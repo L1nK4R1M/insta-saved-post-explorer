@@ -2,11 +2,13 @@
 
 ## Validation strategy
 
-Use one focused policy suite for selection, incomplete completion and injected
-page failure, plus one component test for the lost-message fallback. Reuse
-neighboring sync/import tests for contract safety, then run repository lint,
-typecheck, full tests and production build. No DB or end-to-end browser test is
-needed because the existing authenticated job contract is reused.
+Use focused policy tests for selection, incomplete completion, DB/archive
+identity convergence and injected page failure, plus component tests for the
+lost-message fallback and stalled-progress watchdog. Verify the additive session
+mapping through a pure server helper. Reuse the full sync/import suite for
+contract safety, then run repository lint, typecheck, full tests and production
+build. No database migration test is needed because the Prisma schema is
+unchanged.
 
 ## Acceptance scenarios
 
@@ -56,7 +58,7 @@ Requirements: FR-007, NFR-003, NFR-004
 
 Given the corrected source
 When package identity and web copy are inspected
-Then manifest/README are 4.2.5 and the UI asks for the latest extension
+Then manifest/README are 4.2.6 and the UI asks for the latest extension
 
 ### AT-007: Non-advancing Instagram cursor
 
@@ -78,27 +80,53 @@ Then the spinner stops, the synchronized count is shown and completion fires onc
 
 Requirements: FR-010, NFR-003, NFR-007, BR-007
 
-Given extension 4.2.5 source and manifest
+Given extension 4.2.6 source and manifest
 When the three origin boundaries are inspected
 Then production, localhost and the exact stable develop Preview are accepted,
 and no wildcard Vercel origin is present
 
+### AT-010: Responsive bridge without task progress
+
+Requirements: FR-011, NFR-006, NFR-008, BR-008
+
+Given the extension repeatedly returns the same non-terminal `running` snapshot
+When more than 90 seconds pass without a changed progress checkpoint or server heartbeat
+Then the web refresh stops spinning and displays the stalled-sync recovery error
+
+Given the page checkpoint changes before the watchdog expires
+When polling continues
+Then the watchdog remains active for the legitimate advancing scan
+
+### AT-011: DB-owned archive convergence
+
+Requirements: FR-012, FR-013, NFR-009, BR-001
+
+Given an empty extension archive and paired identities from the owner-scoped DB
+When web synchronization succeeds
+Then the extension stores one canonical archive entry per DB post
+
+Given a local export contains a post absent from the DB snapshot
+When the DB accepts that post during web synchronization
+Then the final archive and DB snapshot converge without a duplicate code-only entry
+
 ## Unit tests
 
 `tests/unit/extension-sync-policy.test.ts` covers AT-001 through AT-007 and
-AT-009 in six risk-focused tests. `tests/unit/refresh-posts-button.test.tsx`
-covers AT-008.
+AT-009 and AT-011 in seven risk-focused tests. `tests/unit/refresh-posts-button.test.tsx`
+covers AT-008 and AT-010.
 
 ## Integration and contract tests
 
-The focused neighboring run includes media upload, sync token, enrichment and
-import normalization: 5 files, 28 tests.
+The focused final run covers extension policy, media upload, refresh UI and
+session identity mapping: 4 files, 13 tests. The full suite covers the remaining
+sync token, enrichment and import normalization contracts.
 
 ## End-to-end tests
 
 Not added. Chrome extension execution is not part of the Playwright application
-harness; the policy/failure seam is deterministic and the web message contract
-is unchanged. A production smoke is reserved for authorized rollout.
+harness. A controlled Chromium probe loaded unpacked 4.2.6 and received a valid
+Production `DISCOVER` response. Authenticated end-to-end Instagram/Preview smoke
+remains a rollout check because the controlled profile has neither session.
 
 ## Security and abuse tests
 
@@ -123,13 +151,12 @@ Rollback is package/code replacement with no data deletion.
 | Install | `npm ci` | Clean install | EV-001 |
 | Prisma client only | `npm run db:generate` | Generated, no migration | EV-001 |
 | Syntax | `node --check` on both MV3 JS files | Exit 0 | EV-002 |
-| Focused | policy and refresh-button component tests | 7/7 | EV-002, EV-008, EV-009, EV-010 |
-| Neighboring | focused 5-file run | 29/29 | EV-003, EV-008 |
+| Focused | policy, media-upload, refresh-button and session tests | 13/13 | EV-002, EV-008, EV-009, EV-010, EV-012 |
 | Lint | `npm run lint` | Exit 0 | EV-004 |
 | Types | `npm run typecheck` | Exit 0 | EV-004 |
-| Full tests | `npm run test` | 326 pass, 129 skip | EV-004, EV-008, EV-009 |
+| Full tests | `npm run test` | 329 pass, 129 skip | EV-004, EV-008, EV-009, EV-012 |
 | Build | `npm run build` | 32 pages | EV-004 |
-| Package | ZIP listing and SHA-256 | Flat, required files | EV-005, EV-011 |
+| Package | ZIP listing and SHA-256 | Flat, required files | EV-005, EV-011, EV-012 |
 | Diff | `git diff --check` | Exit 0 | EV-006 |
 
 ## Evidence ledger
@@ -147,11 +174,13 @@ Rollback is package/code replacement with no data deletion.
 | EV-009 | Lost terminal bridge message | RED/GREEN refresh-button component test and fresh gates | PASS; 1/1 focused, 326 pass full suite | command output |
 | EV-010 | Preview origin contract | RED/GREEN manifest/source contract test | PASS; Production, localhost and exact Preview allowed, wildcard rejected | command output and Preview-origin report |
 | EV-011 | Installable extension 4.2.5 | ZIP listing, manifest inspection and SHA-256 | PASS; flat ZIP, SHA-256 `9F842FD55066B2E88E981A1B545ABAB101E6AE0AE462D92349863FAE7E94479D` | `C:\tmp` |
+| EV-012 | DB-first convergence and non-progress termination | RED/GREEN tests, syntax, lint, exact typecheck, full suite, build, Chrome discovery and 4.2.6 package inspection | PASS; focused 13/13, full 329/129, 32-page build, flat ZIP SHA-256 `E7EF63C70AC5054975A5B07C51BF6388EBC2048797719B6FE93008A237C5A48E` | `evidence/2026-07-28-db-first-sync-loop-verification.md`, `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip` |
 
 ## Manual validation
 
-After authorized rollout only: replace files in the existing extension folder,
-reload it, refresh the production page, click **Actualiser les posts**, then
-compare web and extension counts. This is not claimed as executed locally.
-Also confirm that reloading the page clears the previously stale visual state
-and that a new refresh terminates from either the extension event or server job.
+After rollout: replace files in the existing extension folder, reload it,
+refresh the production page, click **Actualiser les posts**, then compare DB/web
+and extension counts. Confirm that a second refresh completes with zero new
+posts, and that repeated identical task snapshots become an actionable error
+instead of an endless spinner. The authenticated Instagram flow is not claimed
+by the controlled-profile discovery probe.
