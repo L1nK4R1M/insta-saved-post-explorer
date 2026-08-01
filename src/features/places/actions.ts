@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getConfiguredOwnerId } from "@/auth/config";
 import { getSession } from "@/auth/session";
-import type { PlacePostSummaryDto } from "@/contracts/api/places";
-import { getPlacePosts } from "@/server/places/queries";
+import { getPlacePostDetails, type PlacePostDetailSummary } from "@/server/places/queries";
 import { confirmPlace, PlaceReviewError, rejectPlaceResult } from "@/server/places/review";
 
 // Internal Server Actions for the Places UI. Review writes go through the
@@ -64,8 +63,9 @@ export async function rejectPlaceAction(placeId: string): Promise<PlaceActionRes
 }
 
 export type PlacePostsResult =
-  | { ok: true; posts: PlacePostSummaryDto[] }
+  | { ok: true; posts: PlacePostDetailSummary[] }
   | { ok: false; code: string };
+export type PlacePostDetailDto = PlacePostDetailSummary;
 
 // Load the posts of a place on demand for the detail sheet. The query stays
 // restricted to the configured owner, so another owner's place behaves as
@@ -74,7 +74,7 @@ export type PlacePostsResult =
 export async function loadPlacePostsAction(placeId: string): Promise<PlacePostsResult> {
   const ownerId = getConfiguredOwnerId();
   try {
-    const page = await getPlacePosts(placeId, { limit: 24 }, ownerId);
+    const page = await getPlacePostDetails(placeId, { limit: 24 }, ownerId);
     if (!page) return { ok: false, code: "NOT_FOUND" };
     return { ok: true, posts: page.items };
   } catch {

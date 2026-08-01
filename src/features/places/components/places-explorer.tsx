@@ -105,6 +105,7 @@ export function PlacesExplorer({
 
   const mappable = useMemo(() => places.filter(isMappable), [places]);
   const visible = useMemo(() => filterPlaces(mappable, filters), [mappable, filters]);
+  const renderedPoints = useMemo(() => visible.filter((place) => place.precision !== "APPROXIMATE"), [visible]);
   const selected = useMemo(
     () => visible.find((place) => place.id === selectedId) ?? places.find((place) => place.id === selectedId) ?? null,
     [visible, places, selectedId],
@@ -204,7 +205,7 @@ export function PlacesExplorer({
             filters, statistics, list, detail and summary — is shared. */}
         <PlacesRenderer
           view={resolvedView}
-          places={visible}
+          places={renderedPoints}
           selectedId={selectedId}
           onSelect={handleSelect}
           onHover={handleHover}

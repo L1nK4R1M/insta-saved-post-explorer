@@ -135,6 +135,26 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
     expect(place.continentCode).toBe("AS");
   });
 
+  it("keeps matching APPROXIMATE areas isolated to their source posts", async () => {
+    await seedPost("kyoto-first", OWNER_A, "Voyages");
+    await seedPost("kyoto-second", OWNER_A, "Restaurant");
+    const resolver = new FakeResolver({
+      Kyoto: [resolved({ providerPlaceId: "geo-kyoto", displayName: "Kyoto", city: "Kyoto", country: "Japan", countryCode: "JP", providerResultType: "city" })],
+    });
+
+    for (const postId of ["kyoto-first", "kyoto-second"]) {
+      await analysis.analyzeCandidateBatchRecord({
+        ownerId: OWNER_A,
+        record: await freshRecord(OWNER_A, postId, [candidate({ name: "Kyoto", city: "Kyoto", country: "Japan", confidence: 0.7 })]),
+        resolver,
+        commit: true,
+      });
+    }
+
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A, precision: "APPROXIMATE" } })).toBe(2);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A, precision: "APPROXIMATE" } })).toBe(2);
+  });
+
   it("records an UNKNOWN candidate as evidence only and creates no place", async () => {
     await seedPost("country-post", OWNER_A, "Voyages");
     const resolver = new FakeResolver({

@@ -196,7 +196,7 @@ export async function persistMetadataAnalysis(
     }
 
     const { resolved, scored } = plan.best;
-    const place = await upsertCanonicalPlace(tx, { ownerId, resolved, scored });
+    const place = await upsertCanonicalPlace(tx, { ownerId, postId, resolved, scored });
     persistedPlaceIds.add(place.id);
 
     const link = await upsertPostPlace(tx, { ownerId, postId, placeId: place.id, jobId, scored });
@@ -255,20 +255,26 @@ export async function persistMetadataAnalysis(
 
 async function upsertCanonicalPlace(
   tx: TxClient,
-  { ownerId, resolved, scored }: { ownerId: string; resolved: ResolvedPlaceCandidate; scored: ScoredResolution },
+  { ownerId, postId, resolved, scored }: { ownerId: string; postId: string; resolved: ResolvedPlaceCandidate; scored: ScoredResolution },
 ) {
+  const precision = scored.precision as "EXACT" | "PROBABLE" | "APPROXIMATE";
+  // Exact/provider-verified places remain canonical. An approximate area is an
+  // uncertainty envelope for one post, never a shared canonical destination.
+  const providerPlaceId =
+    precision === "APPROXIMATE"
+      ? `${resolved.providerPlaceId}:post:${postId}`
+      : resolved.providerPlaceId;
   const existing = await tx.place.findUnique({
     where: {
       ownerId_provider_providerPlaceId: {
         ownerId,
         provider: resolved.provider,
-        providerPlaceId: resolved.providerPlaceId,
+        providerPlaceId,
       },
     },
   });
 
   // scored.precision is never UNKNOWN here (UNKNOWN plans have best === null).
-  const precision = scored.precision as "EXACT" | "PROBABLE" | "APPROXIMATE";
   const descriptive = {
     displayName: resolved.displayName,
     normalizedName: foldForSearch(resolved.displayName),
@@ -286,6 +292,7 @@ async function upsertCanonicalPlace(
     approximationRadiusMeters: scored.approximationRadiusMeters,
     metadata: {
       provider: resolved.provider,
+      sourceProviderPlaceId: resolved.providerPlaceId,
       providerResultType: resolved.providerResultType,
       providerRank: resolved.providerRank,
       providerMatchType: resolved.providerMatchType,
@@ -298,7 +305,7 @@ async function upsertCanonicalPlace(
       data: {
         ownerId,
         provider: resolved.provider,
-        providerPlaceId: resolved.providerPlaceId,
+        providerPlaceId,
         reviewStatus: "UNREVIEWED",
         isUserConfirmed: false,
         ...descriptive,

@@ -3,10 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import { ExternalLink, Loader2, MapPin, X } from "lucide-react";
 
-import type { PlacePostSummaryDto } from "@/contracts/api/places";
 import type { PlacesMapItem } from "@/server/places/map-view";
 import { cn } from "@/lib/utils";
-import { confirmPlaceAction, loadPlacePostsAction, rejectPlaceAction } from "@/features/places/actions";
+import { confirmPlaceAction, loadPlacePostsAction, rejectPlaceAction, type PlacePostDetailDto } from "@/features/places/actions";
 
 // Detail sheet for the selected place. Review writes call the internal Server
 // Actions (never the read-only external API); each action is guarded against
@@ -36,7 +35,8 @@ export function PlaceDetailSheet(props: SheetProps) {
 }
 
 function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
-  const [posts, setPosts] = useState<PlacePostSummaryDto[] | null>(null);
+  const [posts, setPosts] = useState<PlacePostDetailDto[] | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [postsError, setPostsError] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -51,7 +51,10 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
     (async () => {
       const result = await loadPlacePostsAction(place.id);
       if (cancelled) return;
-      if (result.ok) setPosts(result.posts);
+      if (result.ok) {
+        setPosts(result.posts);
+        setSelectedPostId(result.posts[0]?.postId ?? null);
+      }
       else setPostsError(true);
     })();
     return () => {
@@ -116,13 +119,12 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
         ) : null}
         {postsError ? <span className="places-sheet-error">Impossible de charger les posts.</span> : null}
         {posts?.slice(0, 6).map((post) => (
-          <a
+          <button
+            type="button"
             key={post.postId}
-            className="places-post-thumb"
-            href={post.postUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Ouvrir le post de ${post.authorUsername} sur Instagram`}
+            className={cn("places-post-thumb", post.postId === selectedPostId && "is-selected")}
+            aria-label={`Afficher le post de ${post.authorUsername}`}
+            onClick={() => setSelectedPostId(post.postId)}
           >
             {post.thumbnailUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -130,10 +132,26 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
             ) : (
               <MapPin size={16} aria-hidden="true" />
             )}
-          </a>
+          </button>
         ))}
         {posts?.length === 0 ? <span className="places-sheet-error">Aucun post lié.</span> : null}
       </div>
+
+      {posts?.find((post) => post.postId === selectedPostId) ? (() => {
+        const post = posts.find((candidate) => candidate.postId === selectedPostId)!;
+        return (
+        <article className="places-post-card">
+          {post.thumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={post.thumbnailUrl} alt="" loading="lazy" />
+          ) : null}
+          <div className="places-post-card-copy">
+            <strong>@{post.authorUsername}</strong>
+            {post.mainTheme ? <span>{post.mainTheme}</span> : null}
+            <p>{post.caption || "Aucune légende disponible."}</p>
+          </div>
+        </article>);
+      })() : null}
 
       {actionError ? (
         <p className="places-sheet-error" role="alert">
@@ -142,8 +160,8 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
       ) : null}
 
       <div className="places-sheet-actions">
-        {posts && posts.length > 0 ? (
-          <a className="places-primary" href={posts[0].postUrl} target="_blank" rel="noreferrer">
+        {posts?.find((post) => post.postId === selectedPostId) ? (
+          <a className="places-primary" href={posts.find((post) => post.postId === selectedPostId)!.postUrl} target="_blank" rel="noreferrer">
             <ExternalLink size={14} aria-hidden="true" /> Voir le post
           </a>
         ) : null}
