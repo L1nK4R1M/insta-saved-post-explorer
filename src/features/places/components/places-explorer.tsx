@@ -198,6 +198,26 @@ export function PlacesExplorer({
     setHover(place && point ? { place, x: point.x, y: point.y } : null);
   }, []);
 
+  const toggleFilters = useCallback(() => {
+    setFiltersOpen((open) => {
+      if (!open) {
+        setListOpen(false);
+        setStatsOpen(false);
+      }
+      return !open;
+    });
+  }, []);
+
+  const toggleList = useCallback(() => {
+    setListOpen((open) => {
+      if (!open) {
+        setFiltersOpen(false);
+        setStatsOpen(false);
+      }
+      return !open;
+    });
+  }, []);
+
   return (
     <section className="places-shell" aria-label="Lieux sauvegardés">
       <div className="places-stage">
@@ -273,7 +293,7 @@ export function PlacesExplorer({
             className={cn("places-button", activeFilterCount > 0 && "is-active")}
             aria-expanded={filtersOpen}
             aria-controls="places-filters"
-            onClick={() => setFiltersOpen((open) => !open)}
+            onClick={toggleFilters}
           >
             <SlidersHorizontal size={15} aria-hidden="true" />
             Filtres
@@ -504,7 +524,7 @@ export function PlacesExplorer({
             <BarChart3 size={13} aria-hidden="true" /> Statistiques
           </button>
           <span aria-hidden="true">·</span>
-          <button type="button" className="places-link" aria-expanded={listOpen} onClick={() => setListOpen((open) => !open)}>
+          <button type="button" className="places-link" aria-expanded={listOpen} onClick={toggleList}>
             <ListFilter size={13} aria-hidden="true" /> Liste
           </button>
         </div>

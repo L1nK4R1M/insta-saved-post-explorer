@@ -20,6 +20,20 @@ const { PlaceDetailSheet } = await import("@/features/places/components/place-de
 afterEach(cleanup);
 
 describe("Place detail sheet", () => {
+  it("does not duplicate the post thumbnail when only one post is linked", async () => {
+    loadPlacePostsAction.mockResolvedValueOnce({
+      ok: true,
+      posts: [
+        { postId: "post-1", postUrl: "https://instagram.com/p/1", thumbnailUrl: "/one.jpg", authorUsername: "first", caption: "Première caption", mainTheme: "Restaurant", isPrimary: true, precision: "EXACT" as const, confidence: 1, linkedAt: "2026-01-01" },
+      ],
+    });
+
+    render(<PlaceDetailSheet place={{ id: "place-1", displayName: "Fraté", city: "Paris", region: null, country: "France", precision: "EXACT", approximationRadiusMeters: null, isUserConfirmed: false, sourceThemes: ["Restaurant"], postCount: 1, confidence: 1 } as never} isAdmin={false} onClose={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText("Première caption")).toBeDefined());
+    expect(screen.queryByRole("button", { name: "Afficher le post de first" })).toBeNull();
+  });
+
   it("shows full post details and lets desktop users switch between linked posts", async () => {
     render(<PlaceDetailSheet place={{ id: "place-1", displayName: "Fraté", city: "Paris", region: null, country: "France", precision: "EXACT", approximationRadiusMeters: null, isUserConfirmed: false, sourceThemes: ["Restaurant"], postCount: 2, confidence: 1 } as never} isAdmin={false} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText("Première caption")).toBeDefined());

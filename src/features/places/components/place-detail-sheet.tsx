@@ -78,6 +78,8 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
     place.precision === "APPROXIMATE" && place.approximationRadiusMeters
       ? Math.round(place.approximationRadiusMeters / 1000)
       : null;
+  const selectedPost = posts?.find((post) => post.postId === selectedPostId) ?? null;
+  const showPostSelector = posts === null || postsError || posts.length !== 1;
 
   return (
     <aside className="places-sheet" role="dialog" aria-label={`Détail de ${place.displayName}`}>
@@ -111,47 +113,49 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
         {place.confidence ? ` · confiance ${place.confidence.toFixed(2)}` : ""}
       </p>
 
-      <div className="places-sheet-posts">
-        {posts === null && !postsError ? (
-          <span className="places-sheet-loading">
-            <Loader2 className="places-spin" size={15} aria-hidden="true" /> Chargement des posts…
-          </span>
-        ) : null}
-        {postsError ? <span className="places-sheet-error">Impossible de charger les posts.</span> : null}
-        {posts?.slice(0, 6).map((post) => (
-          <button
-            type="button"
-            key={post.postId}
-            className={cn("places-post-thumb", post.postId === selectedPostId && "is-selected")}
-            aria-label={`Afficher le post de ${post.authorUsername}`}
-            onClick={() => setSelectedPostId(post.postId)}
-          >
-            {post.thumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={post.thumbnailUrl} alt="" loading="lazy" />
-            ) : (
-              <MapPin size={16} aria-hidden="true" />
-            )}
-          </button>
-        ))}
-        {posts?.length === 0 ? <span className="places-sheet-error">Aucun post lié.</span> : null}
-      </div>
+      {showPostSelector ? (
+        <div className="places-sheet-posts">
+          {posts === null && !postsError ? (
+            <span className="places-sheet-loading">
+              <Loader2 className="places-spin" size={15} aria-hidden="true" /> Chargement des posts…
+            </span>
+          ) : null}
+          {postsError ? <span className="places-sheet-error">Impossible de charger les posts.</span> : null}
+          {posts && posts.length > 1
+            ? posts.slice(0, 6).map((post) => (
+                <button
+                  type="button"
+                  key={post.postId}
+                  className={cn("places-post-thumb", post.postId === selectedPostId && "is-selected")}
+                  aria-label={`Afficher le post de ${post.authorUsername}`}
+                  onClick={() => setSelectedPostId(post.postId)}
+                >
+                  {post.thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={post.thumbnailUrl} alt="" loading="lazy" />
+                  ) : (
+                    <MapPin size={16} aria-hidden="true" />
+                  )}
+                </button>
+              ))
+            : null}
+          {posts?.length === 0 ? <span className="places-sheet-error">Aucun post lié.</span> : null}
+        </div>
+      ) : null}
 
-      {posts?.find((post) => post.postId === selectedPostId) ? (() => {
-        const post = posts.find((candidate) => candidate.postId === selectedPostId)!;
-        return (
+      {selectedPost ? (
         <article className="places-post-card">
-          {post.thumbnailUrl ? (
+          {selectedPost.thumbnailUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.thumbnailUrl} alt="" loading="lazy" />
+            <img src={selectedPost.thumbnailUrl} alt="" loading="lazy" />
           ) : null}
           <div className="places-post-card-copy">
-            <strong>@{post.authorUsername}</strong>
-            {post.mainTheme ? <span>{post.mainTheme}</span> : null}
-            <p>{post.caption || "Aucune légende disponible."}</p>
+            <strong>@{selectedPost.authorUsername}</strong>
+            {selectedPost.mainTheme ? <span>{selectedPost.mainTheme}</span> : null}
+            <p>{selectedPost.caption || "Aucune légende disponible."}</p>
           </div>
-        </article>);
-      })() : null}
+        </article>
+      ) : null}
 
       {actionError ? (
         <p className="places-sheet-error" role="alert">
@@ -160,8 +164,8 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
       ) : null}
 
       <div className="places-sheet-actions">
-        {posts?.find((post) => post.postId === selectedPostId) ? (
-          <a className="places-primary" href={posts.find((post) => post.postId === selectedPostId)!.postUrl} target="_blank" rel="noreferrer">
+        {selectedPost ? (
+          <a className="places-primary" href={selectedPost.postUrl} target="_blank" rel="noreferrer">
             <ExternalLink size={14} aria-hidden="true" /> Voir le post
           </a>
         ) : null}
