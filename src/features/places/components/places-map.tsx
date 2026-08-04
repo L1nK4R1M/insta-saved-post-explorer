@@ -35,7 +35,7 @@ const PIN_LAYER_ID = "places-pins";
 const PIN_ICON_LAYER_ID = "places-pin-icons";
 
 function isBenchmarkEnabled(): boolean {
-  if (typeof window === "undefined") return false;
+  if (process.env.NODE_ENV === "production" || typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem("places-benchmark") === "1";
   } catch {
@@ -56,18 +56,12 @@ const PRECISION_COLOR: Record<string, string> = {
 
 type PlaceProperties = {
   id: string;
-  icon: string;
   iconImage: string;
   color: string;
   selected: boolean;
 };
 
 export type PlacesGeoJson = FeatureCollection<Point, PlaceProperties>;
-
-function iconFor(place: PlacesMapItem): string {
-  const group = PLACE_CATEGORY_GROUPS.find((candidate) => candidate.key === place.categoryGroup);
-  return group?.icon ?? "📍";
-}
 
 function iconImageFor(place: PlacesMapItem): string {
   const group = PLACE_CATEGORY_GROUPS.find((candidate) => candidate.key === place.categoryGroup);
@@ -118,7 +112,7 @@ export function buildMapStyle(
       id: RASTER_LAYER_ID,
       type: "raster",
       source: RASTER_SOURCE_ID,
-      layout: { visibility: "visible" },
+      layout: { visibility: projection === "mercator" ? "visible" : "none" },
       paint: {
         "raster-saturation": -0.28,
         "raster-contrast": -0.04,
@@ -126,7 +120,7 @@ export function buildMapStyle(
     });
   }
 
-  if (textureUrl && projection === "globe" && !tileUrl) {
+  if (textureUrl) {
     sources[EARTH_SOURCE_ID] = {
       type: "image",
       url: textureUrl,
@@ -141,7 +135,7 @@ export function buildMapStyle(
       id: EARTH_LAYER_ID,
       type: "raster",
       source: EARTH_SOURCE_ID,
-      layout: { visibility: projection === "globe" && !tileUrl ? "visible" : "none" },
+      layout: { visibility: projection === "globe" ? "visible" : "none" },
       paint: { "raster-opacity": 1 },
     });
   }
@@ -159,15 +153,17 @@ function syncProjection(
   projection: PlacesProjection,
   places: readonly PlacesMapItem[],
   selectedId: string | null,
-  tileUrl: string,
   reducedMotion: boolean | undefined,
 ): boolean {
   if (map.getProjection().type === projection) return false;
 
   map.setRenderWorldCopies(projection !== "globe");
   map.setProjection({ type: projection });
+  if (map.getLayer(RASTER_LAYER_ID)) {
+    map.setLayoutProperty(RASTER_LAYER_ID, "visibility", projection === "mercator" ? "visible" : "none");
+  }
   if (map.getLayer(EARTH_LAYER_ID)) {
-    map.setLayoutProperty(EARTH_LAYER_ID, "visibility", projection === "globe" && !tileUrl ? "visible" : "none");
+    map.setLayoutProperty(EARTH_LAYER_ID, "visibility", projection === "globe" ? "visible" : "none");
   }
   if (projection === "mercator" && places.length > 0) return true;
   const selected = selectedId ? places.find((place) => place.id === selectedId) : null;
@@ -196,7 +192,6 @@ export function buildPlacesGeoJson(places: readonly PlacesMapItem[], selectedId:
       geometry: { type: "Point", coordinates: [place.longitude, place.latitude] },
       properties: {
         id: place.id,
-        icon: iconFor(place),
         iconImage: iconImageFor(place),
         color: PRECISION_COLOR[place.precision] ?? "#6f6878",
         selected: place.id === selectedId,
@@ -434,7 +429,6 @@ export function PlacesMap({
           projectionRef.current,
           placesRef.current,
           selectedIdRef.current,
-          tileUrl,
           reducedMotionRef.current,
         );
       });
@@ -459,7 +453,7 @@ export function PlacesMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
-    syncProjection(map, projection, places, selectedId, tileUrl, reducedMotion);
+    syncProjection(map, projection, places, selectedId, reducedMotion);
   }, [places, projection, reducedMotion, selectedId, tileUrl]);
 
   useEffect(() => {
@@ -506,7 +500,7 @@ export function PlacesMap({
         role="application"
         aria-label={projection === "globe" ? "Globe des lieux" : "Carte des lieux"}
       />
-      {projection === "globe" && !tileUrl && textureAttribution ? (
+      {projection === "globe" && textureAttribution ? (
         <p className="places-globe-attribution">{textureAttribution}</p>
       ) : null}
     </>

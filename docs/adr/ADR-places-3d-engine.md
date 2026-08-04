@@ -245,7 +245,7 @@ wording; it does not reopen the 3D engine decision.
 
 The current 2D implementation uses MapLibre's native GeoJSON clustering and keeps
 the existing Places renderer contract, Geoapify raster tiles, attribution, filters,
-selection, hover callouts, fit-to-results behavior and approximation zones.
+selection, hover callouts and fit-to-results behavior.
 Because MapLibre requires WebGL2 for both projections, the shared renderer now gates
 the 2D map as well as the globe; unsupported browsers keep the list, filters and
 selection usable but do not receive a map canvas.

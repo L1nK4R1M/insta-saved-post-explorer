@@ -70,14 +70,19 @@ describe("MapLibre Places data", () => {
     expect(style.projection).toEqual({ type: "globe" });
   });
 
-  it("does not add the local Earth image when raster tiles are configured", () => {
+  it("keeps the local Earth base and hides provider tiles on the globe", () => {
     const style = buildMapStyle("https://tiles.example/{z}/{x}/{y}.png", "© tiles", {
-      projection: "mercator",
+      projection: "globe",
       textureUrl: "/places/earth-dark.png",
     });
 
-    expect(style.sources.placesEarth).toBeUndefined();
-    expect(style.layers.map((layer) => layer.id)).not.toContain("places-earth");
+    expect(style.sources.placesEarth).toMatchObject({ type: "image", url: "/places/earth-dark.png" });
+    expect(style.layers).toContainEqual(
+      expect.objectContaining({ id: "places-raster", layout: { visibility: "none" } }),
+    );
+    expect(style.layers).toContainEqual(
+      expect.objectContaining({ id: "places-earth", layout: { visibility: "visible" } }),
+    );
   });
 
   it("serializes pins with stable ids, icons, precision colors and selection", () => {
@@ -86,7 +91,7 @@ describe("MapLibre Places data", () => {
     expect(data.features).toHaveLength(1);
     expect(data.features[0]).toMatchObject({
       geometry: { type: "Point", coordinates: [55.1, 25.1] },
-      properties: { id: "place-1", icon: "🍽️", iconImage: "places-icon-restaurant", color: "#16794b", selected: false },
+      properties: { id: "place-1", iconImage: "places-icon-restaurant", color: "#16794b", selected: false },
     });
     expect(data.features.find((feature) => feature.properties.id === "place-2")).toBeUndefined();
   });
