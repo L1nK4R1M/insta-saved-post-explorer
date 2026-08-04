@@ -12,6 +12,9 @@
 //
 //   node scripts/places/measure-globe.mjs --counts 100,500,1000 --url http://127.0.0.1:3000
 //
+// Build the app with `NEXT_PUBLIC_PLACES_BENCHMARK=1` before starting it; normal
+// production builds keep the benchmark-only window instrumentation disabled.
+//
 // Results are reported as measured. If a budget is missed, report the number —
 // do not relax the budget.
 

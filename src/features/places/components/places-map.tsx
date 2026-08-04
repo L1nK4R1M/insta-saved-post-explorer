@@ -35,7 +35,7 @@ const PIN_LAYER_ID = "places-pins";
 const PIN_ICON_LAYER_ID = "places-pin-icons";
 
 function isBenchmarkEnabled(): boolean {
-  if (process.env.NODE_ENV === "production" || typeof window === "undefined") return false;
+  if (process.env.NEXT_PUBLIC_PLACES_BENCHMARK !== "1" || typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem("places-benchmark") === "1";
   } catch {

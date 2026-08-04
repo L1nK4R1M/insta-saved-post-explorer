@@ -260,7 +260,9 @@ physical phone GPU benchmark; rerun the same harness on a real GPU before treati
 D6 as accepted. This configured-raster run counted 144/99, 153/96 and 148/96
 MapLibre render events over roughly 4 s (desktop/mobile, respectively), using one
 fixed-duration camera animation per profile. `places:measure-globe` accepts `PLAYWRIGHT_EXECUTABLE_PATH`
-so the check does not require a separately downloaded Playwright browser.
+so the check does not require a separately downloaded Playwright browser. Compile
+the measurement build with `NEXT_PUBLIC_PLACES_BENCHMARK=1`; normal production
+builds keep the benchmark-only window instrumentation disabled.
 
 With a raster provider configured, the initial `/places` navigation loaded 12 JS
 scripts totaling 492,335 encoded wire bytes; switching to 3D requested zero new JS
