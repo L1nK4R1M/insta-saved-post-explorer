@@ -1,7 +1,8 @@
 # Earth texture — source, licence and attribution
 
-File: `earth-dark.png` (2048 × 1024, indexed PNG, ~36 KiB)
-Used by: the Places 3D globe (`src/features/places/components/places-globe.tsx`)
+File: `earth-dark.png` (2048 × 1024, indexed PNG, 33,418 bytes)
+Used by: the Places 3D globe (`src/features/places/components/places-map.tsx`)
+The 2:1 raster deliberately trades polar vertical resolution for a compact local fallback; Web Mercator still uses its correct ±85.051129° extent.
 Added: 25 July 2026, Phase I, decision D3 of `docs/adr/ADR-places-3d-engine.md`
 
 ## Source data
@@ -43,18 +44,17 @@ npm run places:generate-earth-texture
 ```
 
 `scripts/places/generate-earth-texture.mjs` rasterizes the 177 Admin 0 country
-polygons into an equirectangular image — deep navy ocean, slate landmass, lighter
-country borders — and encodes it as an indexed PNG with a built-in encoder (no
-image-processing dependency).
+polygons into a Web Mercator image matching MapLibre's world extent — deep navy
+ocean, slate landmass, lighter country borders — and encodes it as an indexed PNG
+with a built-in encoder (no image-processing dependency).
 
-The GeoJSON input is read from `three-globe/example/country-polygons/` — the
-`three-globe` package is MIT-licensed and is already a transitive dependency of
-`react-globe.gl`, so the input is pinned by `package-lock.json` and the output is
-reproducible.
+The GeoJSON input is read from the build-only `three-globe` package — it is a
+versioned source-data dependency, not part of the Places runtime. The package is
+MIT-licensed and the output is reproducible from the locked package version.
 
 ## Replacing it
 
 The globe reads the texture through a single prop (`textureUrl`). Any other
-equirectangular image can replace this file without touching the globe
-architecture — but per decision D3, **only** if its licence is clearly compatible
-and is documented here first.
+MapLibre-compatible Web Mercator image can replace this file without touching the
+globe architecture — but per decision D3, **only** if its licence is clearly
+compatible and is documented here first.

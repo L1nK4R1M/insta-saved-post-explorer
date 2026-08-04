@@ -5,7 +5,7 @@ import { BarChart3, Check, ListFilter, MapPin, Search, SlidersHorizontal, X } fr
 
 import { PLACE_CATEGORY_GROUPS } from "@/lib/places/categories";
 import { PLACES_ELIGIBLE_THEMES } from "@/lib/places/eligibility";
-import { WEBGL_FALLBACK_MESSAGE, isWebGlUsable } from "@/lib/places/webgl";
+import { isWebGlUsable } from "@/lib/places/webgl";
 import { usePrefersReducedMotion, useWebGlSupport } from "@/features/places/capabilities";
 import type { PlacesStatsDto } from "@/contracts/api/places";
 import type { PlacesMapItem } from "@/server/places/map-view";
@@ -27,7 +27,7 @@ import {
   type ReviewFilter,
 } from "@/features/places/query-state";
 import { PlaceDetailSheet } from "@/features/places/components/place-detail-sheet";
-import { PlacesRenderer, type ResolvedPlacesView } from "@/features/places/components/places-renderer";
+import { PlacesMapA11yList, PlacesRenderer, type ResolvedPlacesView } from "@/features/places/components/places-renderer";
 import type { ScreenPoint } from "@/features/places/renderer-contract";
 
 const PRECISION_LABEL: Record<string, string> = {
@@ -75,7 +75,7 @@ export function PlacesExplorer({
   // The view the user asked for. What actually renders can differ when the
   // device cannot run WebGL — see `resolvedView` below.
   const [view, setView] = useState<PlacesViewMode>(initialState.view);
-  const [noticeDismissed, setNoticeDismissed] = useState(false);
+
   // "unknown" until the client has answered: the globe must not be offered — nor
   // its chunk requested — before then (FR-I-12).
   const webgl = useWebGlSupport();
@@ -86,20 +86,22 @@ export function PlacesExplorer({
   // globe branch is reachable **only** on a proven `true`, so the engine chunk is
   // never requested on an unproven capability (FR-I-12). `null` is not "probably
   // fine": during SSR and the hydration pass the client has not answered yet, and
-  // rendering the globe there would start the 1.86 MiB import before the answer.
+  // rendering MapLibre there would request the shared engine before the answer.
   //
-  // - view=map            → the 2D map, never gated on the probe;
+  // - view=map + true     → the 2D map;
+  // - view=map + null     → a light map waiting state;
+  // - view=map + false    → an unavailable-map message;
   // - globe + true        → the globe;
   // - globe + null        → a light waiting state; the URL keeps view=globe,
   //                         because nothing is known yet and rewriting it would
   //                         lose a legitimate deep link;
-  // - globe + false       → the 2D map, URL rewritten, message shown, everything
+  // - globe + false       → an unavailable-map message, URL rewritten, everything
   //                         else preserved.
   const resolvedView: ResolvedPlacesView =
     view !== "globe" ? "map" : globeAvailable === true ? "globe" : globeAvailable === false ? "map" : "probing";
   // Only a proven refusal rewrites the URL.
   const urlView: PlacesViewMode = view === "globe" && globeAvailable === false ? "map" : view;
-  const showWebglNotice = view === "globe" && globeAvailable === false && !noticeDismissed;
+
   const [, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -152,11 +154,9 @@ export function PlacesExplorer({
     (next: PlacesViewMode) => {
       if (next === view) return;
       if (next === "globe" && globeAvailable !== true) {
-        setNoticeDismissed(false);
         setView("globe");
         return;
       }
-      setNoticeDismissed(false);
       setView(next);
       if (typeof window !== "undefined") {
         window.history.pushState(null, "", urlFor({ filters, placeId: selectedId, view: next }));
@@ -175,7 +175,6 @@ export function PlacesExplorer({
       setFilters(nextFilters);
       setSelectedId(placeId);
       setView(nextView);
-      setNoticeDismissed(false);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -235,6 +234,7 @@ export function PlacesExplorer({
           textureUrl={textureUrl}
           textureAttribution={textureAttribution}
           reducedMotion={reducedMotion}
+          webglAvailable={globeAvailable}
         />
 
         {/* Hover callout: photo + arrow pointing at the marker. Informative only. */}
@@ -304,16 +304,16 @@ export function PlacesExplorer({
           <div className="places-segmented" role="group" aria-label="Type de vue">
             <button
               type="button"
-              className={cn("places-segment", view === "map" && "is-active")}
-              aria-pressed={view === "map"}
+              className={cn("places-segment", urlView === "map" && "is-active")}
+              aria-pressed={urlView === "map"}
               onClick={() => switchView("map")}
             >
               2D
             </button>
             <button
               type="button"
-              className={cn("places-segment", view === "globe" && "is-active")}
-              aria-pressed={view === "globe"}
+              className={cn("places-segment", urlView === "globe" && "is-active")}
+              aria-pressed={urlView === "globe"}
               disabled={globeAvailable === false}
               onClick={() => switchView("globe")}
             >
@@ -322,14 +322,7 @@ export function PlacesExplorer({
           </div>
         </div>
 
-        {showWebglNotice ? (
-          <p className="places-webgl-notice" role="status">
-            {WEBGL_FALLBACK_MESSAGE}
-            <button type="button" className="places-link" onClick={() => setNoticeDismissed(true)}>
-              Fermer
-            </button>
-          </p>
-        ) : null}
+        <PlacesMapA11yList places={renderedPoints} selectedId={selectedId} onSelect={handleSelect} />
 
         {filtersOpen ? (
           <div className="places-panel" id="places-filters" role="dialog" aria-label="Filtres">

@@ -33,14 +33,9 @@ export function probeWebGl(createCanvas?: () => ContextProvider | null): WebGlSu
         : (document.createElement("canvas") as ContextProvider);
     if (!canvas) return "unsupported";
 
-    // `webgl2` first: it is what the engine actually wants. `webgl` and the
-    // legacy experimental name keep older devices on the fast path instead of
-    // dropping them to 2D unnecessarily.
-    for (const contextName of ["webgl2", "webgl", "experimental-webgl"] as const) {
-      const context = canvas.getContext(contextName);
-      if (context) return "supported";
-    }
-    return "unsupported";
+    // MapLibre GL JS 6 requires WebGL2. A WebGL1 context is not enough to
+    // construct the renderer, so accepting it would produce a blank globe.
+    return canvas.getContext("webgl2") ? "supported" : "unsupported";
   } catch {
     // A throwing getContext is a refusal, not a crash to propagate: the caller
     // falls back to 2D and the page stays usable.
@@ -49,4 +44,4 @@ export function probeWebGl(createCanvas?: () => ContextProvider | null): WebGlSu
 }
 
 export const WEBGL_FALLBACK_MESSAGE =
-  "Votre navigateur ne peut pas afficher le globe 3D (WebGL indisponible). La carte 2D, la liste et les filtres restent utilisables.";
+  "Votre navigateur ne peut pas afficher la carte ou le globe 3D (WebGL2 indisponible). La liste et les filtres restent utilisables.";

@@ -7,7 +7,7 @@ import type { PlacesMapItem } from "@/server/places/map-view";
 // Pure filter state for the Places page: parsed from the URL, serialized back to
 // it, and applied in the browser over the full owner-scoped set (the owner capped
 // Places at ~1000 canonical places, so filtering never needs a round trip).
-// Keeping this module free of React and Leaflet makes every rule directly
+// Keeping this module free of React and MapLibre makes every rule directly
 // testable and keeps deep links, history and rendering consistent.
 
 export const PLACE_PRECISION_VALUES = ["EXACT", "PROBABLE", "APPROXIMATE"] as const;

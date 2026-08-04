@@ -186,7 +186,7 @@ Phase G owner decisions remain final for the 2D implementation:
 - brunch provisionally folded into the café group;
 - multi-select filters enabled.
 
-Phase I owner decisions remain final and implemented:
+Phase I owner decisions remain recorded as historical project context:
 
 - `react-globe.gl` / `globe.gl` with Three.js underneath;
 - Concept 2 sober with restrained Concept 1 elements;
@@ -196,6 +196,14 @@ Phase I owner decisions remain final and implemented:
 - accessible fallback to 2D;
 - shared filters, search, selection, list, statistics and detail;
 - no replacement of Leaflet.
+
+The current unmerged follow-up supersedes the engine and map decisions above:
+
+- MapLibre GL JS now powers both Mercator 2D and native globe projection;
+- one MapLibre canvas/source is retained across 2D ↔ 3D switching when MapLibre is
+  active; the no-raster 2D view intentionally remains on its no-map fallback;
+- Leaflet, `react-globe.gl` and the old Three.js scene are no longer runtime dependencies;
+- the local Natural Earth texture and the shared Places contract remain.
 
 ## 4. Merge proof
 
@@ -312,7 +320,7 @@ transactions, worker isolation and audit completeness.
 
 ## 7. Open decisions and operational follow-ups
 
-- ~~**Phase I GPU measurement**~~ — **closed 25 July 2026**, status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`. Measured on an NVIDIA GeForce RTX 5090: 240 fps and 276-326 ms first render at every place count, desktop and mobile viewport. This confirmed the recorded diagnosis — the CI figures (20 fps desktop, 18 fps mobile) were fill-rate bound on a SwiftShader software rasterizer, not scene bound. Both runs are kept in the change record. One honest limit stands: the mobile figures come from a mobile **viewport** on desktop-class hardware, not from a phone GPU, so low-end phone behaviour remains a reasoned expectation rather than a measurement — which is why the WebGL fallback and the pixel-ratio cap stay in place.
+- ~~**Historical Phase I GPU measurement**~~ — **closed 25 July 2026** for the superseded Three.js renderer, status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`. Measured on an NVIDIA GeForce RTX 5090: 240 fps and 276-326 ms first render at every place count, desktop and mobile viewport. That evidence does not validate the current unmerged MapLibre renderer. **Current MapLibre D6 measurement remains open**: local system Chromium reported 35–38 fps desktop and 23–24 fps mobile viewport on SwiftShader, with first render below 1.2 s; rerun on a real GPU before accepting the FPS budget.
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups, alerting and deployment authorization for Phase E;
 - final confirmation model for sensitive Phase J commands.
@@ -342,3 +350,13 @@ transactions, worker isolation and audit completeness.
    approved.
 9. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
    analysis outside this correction.
+
+## 9. Unmerged follow-up — MapLibre 2D + globe renderer
+
+The current working-tree change supersedes the historical Phase G Leaflet and
+Phase I Three.js renderers in `src/features/places/components/places-map.tsx`. It
+is not part of PR #34/#36 or their merge proofs until separately reviewed and
+merged. The current renderer uses MapLibre GL JS, native GeoJSON clustering and
+the same raster tile/attribution contract; the Places server contracts are
+unchanged. Its first-render budget is locally met, but its FPS budget is open
+pending a real-GPU measurement.

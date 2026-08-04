@@ -1,184 +1,516 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
-import type { Map as LeafletMap, LayerGroup, Marker } from "leaflet";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { FeatureCollection, Point } from "geojson";
+import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent, StyleSpecification } from "maplibre-gl";
 
 import { PLACE_CATEGORY_GROUPS } from "@/lib/places/categories";
 import type { PlacesRendererProps } from "@/features/places/renderer-contract";
 import type { PlacesMapItem } from "@/server/places/map-view";
 
-// Leaflet is loaded lazily on the client only: it touches `window` at import
-// time and must never run during SSR. Everything Leaflet-specific stays inside
-// this component — the rest of the feature talks to it through the shared
-// renderer contract, so swapping the engine later means rewriting this file
-// alone. The tile props are raster-specific and deliberately stay here.
+// MapLibre is loaded lazily on the client only. Everything engine-specific stays
+// in this component; the rest of Places talks to it through the shared renderer
+// contract. Raster tiles remain a prop so the public provider configuration stays
+// outside the renderer.
 
 export type PlacesMapProps = PlacesRendererProps & {
   tileUrl: string;
   tileAttribution: string;
+  projection?: PlacesProjection;
+  textureUrl?: string;
+  textureAttribution?: string;
+  reducedMotion?: boolean;
 };
+
+export type PlacesProjection = "mercator" | "globe";
+
+const RASTER_SOURCE_ID = "placesRaster";
+const RASTER_LAYER_ID = "places-raster";
+const EARTH_SOURCE_ID = "placesEarth";
+const EARTH_LAYER_ID = "places-earth";
+const PLACES_SOURCE_ID = "places";
+const CLUSTER_LAYER_ID = "places-clusters";
+const CLUSTER_COUNT_LAYER_ID = "places-cluster-count";
+const PIN_LAYER_ID = "places-pins";
+const PIN_ICON_LAYER_ID = "places-pin-icons";
+
+function isBenchmarkEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem("places-benchmark") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+}
 
 const PRECISION_COLOR: Record<string, string> = {
   EXACT: "#16794b",
   PROBABLE: "#b7791f",
-  APPROXIMATE: "#2563eb",
 };
+
+type PlaceProperties = {
+  id: string;
+  icon: string;
+  iconImage: string;
+  color: string;
+  selected: boolean;
+};
+
+export type PlacesGeoJson = FeatureCollection<Point, PlaceProperties>;
 
 function iconFor(place: PlacesMapItem): string {
   const group = PLACE_CATEGORY_GROUPS.find((candidate) => candidate.key === place.categoryGroup);
   return group?.icon ?? "📍";
 }
 
-export function PlacesMap({ places, selectedId, onSelect, onHover, tileUrl, tileAttribution }: PlacesMapProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const markerLayerRef = useRef<LayerGroup | null>(null);
-  const zoneLayerRef = useRef<LayerGroup | null>(null);
-  const markersRef = useRef<Map<string, Marker>>(new Map());
-  const readyRef = useRef(false);
-  // Keep the latest callbacks without re-creating markers on every render. The
-  // ref is written in an effect, never during render.
-  const handlersRef = useRef({ onSelect, onHover });
-  useEffect(() => {
-    handlersRef.current = { onSelect, onHover };
-  }, [onSelect, onHover]);
+function iconImageFor(place: PlacesMapItem): string {
+  const group = PLACE_CATEGORY_GROUPS.find((candidate) => candidate.key === place.categoryGroup);
+  return `places-icon-${group?.key ?? "default"}`;
+}
 
-  // Build markers for the current set. Kept in a ref-driven effect so filtering
-  // re-renders do not tear the map down.
-  const render = useCallback(async () => {
-    const map = mapRef.current;
-    const markerLayer = markerLayerRef.current;
-    const zoneLayer = zoneLayerRef.current;
-    if (!map || !markerLayer || !zoneLayer) return;
+function addPlaceIconImages(map: MapLibreMap): void {
+  if (typeof document === "undefined") return;
+  const icons = [...PLACE_CATEGORY_GROUPS, { key: "default", icon: "📍" }];
+  for (const { key, icon } of icons) {
+    const id = `places-icon-${key}`;
+    if (map.hasImage(id)) continue;
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext("2d");
+    if (!context) continue;
+    context.font = '32px "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(icon, 32, 32);
+    map.addImage(id, context.getImageData(0, 0, 64, 64), { pixelRatio: 2 });
+  }
+}
 
-    const L = (await import("leaflet")).default;
-    await import("leaflet.markercluster");
+export type PlacesMapStyleOptions = {
+  projection?: PlacesProjection;
+  textureUrl?: string;
+};
 
-    markerLayer.clearLayers();
-    zoneLayer.clearLayers();
-    markersRef.current.clear();
+export function buildMapStyle(
+  tileUrl: string,
+  tileAttribution: string,
+  { projection = "mercator", textureUrl }: PlacesMapStyleOptions = {},
+): StyleSpecification {
+  const sources: StyleSpecification["sources"] = {};
+  const layers: StyleSpecification["layers"] = [];
 
-    // A cluster group keeps thousands of pins responsive without one DOM node per
-    // point at low zoom.
-    const cluster = (L as unknown as { markerClusterGroup: (options: object) => LayerGroup }).markerClusterGroup({
-      showCoverageOnHover: false,
-      maxClusterRadius: 48,
-      spiderfyOnMaxZoom: true,
+  if (tileUrl) {
+    sources[RASTER_SOURCE_ID] = {
+      type: "raster",
+      tiles: [tileUrl],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: tileAttribution,
+    };
+    layers.push({
+      id: RASTER_LAYER_ID,
+      type: "raster",
+      source: RASTER_SOURCE_ID,
+      layout: { visibility: "visible" },
+      paint: {
+        "raster-saturation": -0.28,
+        "raster-contrast": -0.04,
+      },
     });
+  }
 
-    for (const place of places) {
-      const color = PRECISION_COLOR[place.precision] ?? "#6f6878";
-      const selected = place.id === selectedId;
-      const marker = L.marker([place.latitude, place.longitude], {
-        keyboard: true,
-        title: place.displayName,
-        alt: place.displayName,
-        icon: L.divIcon({
-          className: "places-pin-wrapper",
-          html: `<span class="places-pin${selected ? " is-selected" : ""}" style="--pin-color:${color}"><span>${iconFor(place)}</span></span>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 28],
-        }),
-      });
+  if (textureUrl && projection === "globe" && !tileUrl) {
+    sources[EARTH_SOURCE_ID] = {
+      type: "image",
+      url: textureUrl,
+      coordinates: [
+        [-180, 85.051129],
+        [180, 85.051129],
+        [180, -85.051129],
+        [-180, -85.051129],
+      ],
+    };
+    layers.push({
+      id: EARTH_LAYER_ID,
+      type: "raster",
+      source: EARTH_SOURCE_ID,
+      layout: { visibility: projection === "globe" && !tileUrl ? "visible" : "none" },
+      paint: { "raster-opacity": 1 },
+    });
+  }
 
-      marker.on("click", () => handlersRef.current.onSelect(place.id));
-      marker.on("keypress", () => handlersRef.current.onSelect(place.id));
-      marker.on("mouseover", (event) => {
-        const point = map.latLngToContainerPoint(event.target.getLatLng());
-        handlersRef.current.onHover(place, { x: point.x, y: point.y });
-      });
-      marker.on("mouseout", () => handlersRef.current.onHover(null, null));
+  return {
+    version: 8,
+    projection: { type: projection },
+    sources,
+    layers,
+  };
+}
 
-      markersRef.current.set(place.id, marker);
-      cluster.addLayer(marker);
+function syncProjection(
+  map: MapLibreMap,
+  projection: PlacesProjection,
+  places: readonly PlacesMapItem[],
+  selectedId: string | null,
+  tileUrl: string,
+  reducedMotion: boolean | undefined,
+): boolean {
+  if (map.getProjection().type === projection) return false;
 
-      // APPROXIMATE never renders as an exact pin: draw its uncertainty area.
-      if (place.precision === "APPROXIMATE" && place.approximationRadiusMeters) {
-        zoneLayer.addLayer(
-          L.circle([place.latitude, place.longitude], {
-            radius: place.approximationRadiusMeters,
-            color: PRECISION_COLOR.APPROXIMATE,
-            weight: 2,
-            dashArray: "6 5",
-            fillOpacity: 0.12,
-            interactive: false,
-          }),
-        );
-      }
+  map.setRenderWorldCopies(projection !== "globe");
+  map.setProjection({ type: projection });
+  if (map.getLayer(EARTH_LAYER_ID)) {
+    map.setLayoutProperty(EARTH_LAYER_ID, "visibility", projection === "globe" && !tileUrl ? "visible" : "none");
+  }
+  if (projection === "mercator" && places.length > 0) return true;
+  const selected = selectedId ? places.find((place) => place.id === selectedId) : null;
+  const reduceMotion = reducedMotion ?? prefersReducedMotion();
+  map.easeTo({
+    center: selected ? [selected.longitude, selected.latitude] : map.getCenter(),
+    zoom:
+      projection === "globe"
+        ? selected
+          ? 3.5
+          : Math.min(map.getZoom(), 1.15)
+        : selected
+          ? Math.max(map.getZoom(), 12)
+          : Math.max(map.getZoom(), 2),
+    duration: reduceMotion || projection !== "globe" ? 0 : 700,
+  });
+  return true;
+}
+
+export function buildPlacesGeoJson(places: readonly PlacesMapItem[], selectedId: string | null): PlacesGeoJson {
+  return {
+    type: "FeatureCollection",
+    features: places.filter((place) => place.precision !== "APPROXIMATE").map((place) => ({
+      type: "Feature",
+      id: place.id,
+      geometry: { type: "Point", coordinates: [place.longitude, place.latitude] },
+      properties: {
+        id: place.id,
+        icon: iconFor(place),
+        iconImage: iconImageFor(place),
+        color: PRECISION_COLOR[place.precision] ?? "#6f6878",
+        selected: place.id === selectedId,
+      },
+    })),
+  };
+}
+
+function placeIdFromFeature(feature: { properties?: Record<string, unknown> } | undefined): string | null {
+  const id = feature?.properties?.id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+export function PlacesMap({
+  places,
+  selectedId,
+  onSelect,
+  onHover,
+  tileUrl,
+  tileAttribution,
+  projection = "mercator",
+  textureUrl,
+  textureAttribution,
+  reducedMotion,
+}: PlacesMapProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const readyRef = useRef(false);
+  const initialProjectionRef = useRef<PlacesProjection>(projection);
+  const projectionRef = useRef<PlacesProjection>(projection);
+  const lastViewportProjectionRef = useRef<PlacesProjection>(projection);
+  const placesRef = useRef<readonly PlacesMapItem[]>(places);
+  const selectedIdRef = useRef(selectedId);
+  const handlersRef = useRef({ onSelect, onHover });
+  const reducedMotionRef = useRef(reducedMotion);
+  const hoveredPlaceIdRef = useRef<string | null>(null);
+  const renderRef = useRef<() => void>(() => undefined);
+  const [mapReadyVersion, setMapReadyVersion] = useState(0);
+
+  useEffect(() => {
+    placesRef.current = places;
+    selectedIdRef.current = selectedId;
+    projectionRef.current = projection;
+    handlersRef.current = { onSelect, onHover };
+    reducedMotionRef.current = reducedMotion;
+  }, [places, selectedId, projection, onSelect, onHover, reducedMotion]);
+
+  const render = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    const placesSource = map.getSource(PLACES_SOURCE_ID) as GeoJSONSource | undefined;
+    placesSource?.setData(buildPlacesGeoJson(places, selectedId));
+    if (hoveredPlaceIdRef.current && !places.some((place) => place.id === hoveredPlaceIdRef.current)) {
+      hoveredPlaceIdRef.current = null;
+      handlersRef.current.onHover(null, null);
     }
-
-    markerLayer.addLayer(cluster);
   }, [places, selectedId]);
 
-  // Create the map once.
+  useEffect(() => {
+    renderRef.current = render;
+  }, [render]);
+
   useEffect(() => {
     let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
+    let mapInstance: MapLibreMap | null = null;
+    let benchmarkRenderHandler: (() => void) | null = null;
+    const container = containerRef.current;
+    if (!container) return;
     (async () => {
-      if (mapRef.current || !containerRef.current) return;
-      const L = (await import("leaflet")).default;
+      if (mapRef.current) return;
+      const maplibre = await import("maplibre-gl");
       if (cancelled || !containerRef.current) return;
+      const initialProjection = initialProjectionRef.current;
 
-      const map = L.map(containerRef.current, {
-        center: [30, 10],
-        zoom: 2,
-        worldCopyJump: true,
-        zoomControl: true,
-        attributionControl: true,
+      const map = new maplibre.Map({
+        container: containerRef.current,
+        style: buildMapStyle(tileUrl, tileAttribution, { projection: initialProjection, textureUrl }),
+        center: initialProjection === "globe" ? [0, 20] : [10, 30],
+        zoom: initialProjection === "globe" ? 1.15 : 2,
+        renderWorldCopies: initialProjection !== "globe",
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchPitch: false,
+        touchZoomRotate: true,
+        attributionControl: {
+          compact: false,
+        },
       });
-      L.tileLayer(tileUrl, { attribution: tileAttribution, maxZoom: 19 }).addTo(map);
-
+      mapInstance = map;
       mapRef.current = map;
-      zoneLayerRef.current = L.layerGroup().addTo(map);
-      markerLayerRef.current = L.layerGroup().addTo(map);
-      readyRef.current = true;
-      await render();
-    })();
+      benchmarkRenderHandler =
+        isBenchmarkEnabled()
+          ? () => window.dispatchEvent(new Event("places-map-render"))
+          : null;
+      if (benchmarkRenderHandler) {
+        map.on("render", benchmarkRenderHandler);
+        window.dispatchEvent(new CustomEvent("places-map-ready", { detail: map }));
+      }
+      map.touchZoomRotate.disableRotation();
+      map.addControl(new maplibre.NavigationControl({ showCompass: false }), "top-left");
+      if (typeof ResizeObserver !== "undefined") {
+        resizeObserver = new ResizeObserver(() => map.resize());
+        resizeObserver.observe(container);
+      }
+
+      map.once("load", () => {
+        if (cancelled) return;
+        map.addSource(PLACES_SOURCE_ID, {
+          type: "geojson",
+          data: buildPlacesGeoJson(placesRef.current, null),
+          cluster: true,
+          clusterMaxZoom: 14,
+          clusterRadius: 48,
+        });
+        addPlaceIconImages(map);
+
+        map.addLayer({
+          id: CLUSTER_LAYER_ID,
+          type: "circle",
+          source: PLACES_SOURCE_ID,
+          filter: ["has", "point_count"],
+          paint: {
+            "circle-color": ["step", ["get", "point_count"], "#6f6878", 10, "#4c4660", 50, "#302b45"],
+            "circle-radius": ["step", ["get", "point_count"], 18, 10, 22, 50, 28],
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 2,
+          },
+        });
+        // Numeric cluster labels use MapLibre's bundled TinySDF fallback; no
+        // remote glyph endpoint is needed for this local style.
+        map.addLayer({
+          id: CLUSTER_COUNT_LAYER_ID,
+          type: "symbol",
+          source: PLACES_SOURCE_ID,
+          filter: ["has", "point_count"],
+          layout: { "text-field": ["get", "point_count_abbreviated"], "text-size": 12 },
+          paint: { "text-color": "#ffffff" },
+        });
+        map.addLayer({
+          id: PIN_LAYER_ID,
+          type: "circle",
+          source: PLACES_SOURCE_ID,
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-color": ["get", "color"],
+            "circle-radius": ["case", ["get", "selected"], 9, 7],
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": ["case", ["get", "selected"], 3, 2],
+          },
+        });
+        map.addLayer({
+          id: PIN_ICON_LAYER_ID,
+          type: "symbol",
+          source: PLACES_SOURCE_ID,
+          filter: ["!", ["has", "point_count"]],
+          layout: {
+            "icon-image": ["get", "iconImage"],
+            "icon-size": 0.65,
+            "icon-anchor": "bottom",
+            "icon-offset": [0, -4],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint: { "icon-opacity": 1 },
+        });
+
+        const interactiveLayers = [PIN_LAYER_ID, PIN_ICON_LAYER_ID];
+        const clickLayers = [...interactiveLayers, CLUSTER_LAYER_ID];
+        const interactiveFeature = (event: MapLayerMouseEvent) =>
+          event.features?.find(
+            (feature) => feature.layer?.id === PIN_LAYER_ID || feature.layer?.id === PIN_ICON_LAYER_ID,
+          ) ?? event.features?.[0];
+        const selectPlace = (event: MapLayerMouseEvent) => {
+          const feature = interactiveFeature(event);
+          const id = placeIdFromFeature(feature);
+          if (id) handlersRef.current.onSelect(id);
+        };
+        const expandCluster = (event: MapLayerMouseEvent) => {
+          const feature = event.features?.find((candidate) => candidate.layer?.id === CLUSTER_LAYER_ID);
+          const clusterId = Number(feature?.properties?.cluster_id);
+          if (!Number.isFinite(clusterId)) return;
+          const source = map.getSource(PLACES_SOURCE_ID) as GeoJSONSource;
+          void source
+            .getClusterExpansionZoom(clusterId)
+            .then((zoom) => {
+              if (!cancelled && mapRef.current) {
+                map.easeTo({
+                  center: (feature?.geometry as Point).coordinates as [number, number],
+                  zoom,
+                  duration:
+                    (reducedMotionRef.current ?? prefersReducedMotion())
+                      ? 0
+                      : 450,
+                });
+              }
+            })
+            .catch(() => undefined);
+        };
+        const selectOrExpand = (event: MapLayerMouseEvent) => {
+          if (event.features?.[0]?.layer?.id === CLUSTER_LAYER_ID) {
+            expandCluster(event);
+            return;
+          }
+          selectPlace(event);
+        };
+        const hoverPlace = (event: MapLayerMouseEvent) => {
+          const feature = interactiveFeature(event);
+          const id = placeIdFromFeature(feature);
+          const place = id ? placesRef.current.find((candidate) => candidate.id === id) : undefined;
+          if (!place) return;
+          map.getCanvas().style.cursor = "pointer";
+          if (id === hoveredPlaceIdRef.current) return;
+          hoveredPlaceIdRef.current = id;
+          const geometry = feature?.geometry;
+          const point = geometry?.type === "Point" ? map.project(geometry.coordinates as [number, number]) : event.point;
+          handlersRef.current.onHover(place, { x: point.x, y: point.y });
+        };
+        const clearHover = () => {
+          if (hoveredPlaceIdRef.current === null) return;
+          hoveredPlaceIdRef.current = null;
+          map.getCanvas().style.cursor = "";
+          handlersRef.current.onHover(null, null);
+        };
+
+        map.on("click", clickLayers, selectOrExpand);
+        map.on("mousemove", interactiveLayers, hoverPlace);
+        map.on("mouseleave", interactiveLayers, clearHover);
+        map.resize();
+        readyRef.current = true;
+        renderRef.current();
+        setMapReadyVersion((version) => version + 1);
+        syncProjection(
+          map,
+          projectionRef.current,
+          placesRef.current,
+          selectedIdRef.current,
+          tileUrl,
+          reducedMotionRef.current,
+        );
+      });
+    })().catch((error: unknown) => {
+      if (!cancelled) console.error("Places map failed to initialize", error);
+    });
 
     return () => {
       cancelled = true;
-      mapRef.current?.remove();
+      resizeObserver?.disconnect();
+      if (benchmarkRenderHandler && mapInstance) mapInstance.off("render", benchmarkRenderHandler);
+      mapInstance?.remove();
       mapRef.current = null;
-      markerLayerRef.current = null;
-      zoneLayerRef.current = null;
       readyRef.current = false;
     };
-    // The map instance is created once; tiles come from immutable config.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tileAttribution, tileUrl, textureUrl]);
 
-  // Re-render markers whenever the visible set or the selection changes.
   useEffect(() => {
-    if (!readyRef.current) return;
-    void render();
+    render();
   }, [render]);
 
-  // Fit the map to the current results, or fly to the selected place.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || places.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const L = (await import("leaflet")).default;
-      if (cancelled || !mapRef.current) return;
-      const reduceMotion =
-        typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!map || !readyRef.current) return;
+    syncProjection(map, projection, places, selectedId, tileUrl, reducedMotion);
+  }, [places, projection, reducedMotion, selectedId, tileUrl]);
 
+  useEffect(() => {
+    const projectionChanged = lastViewportProjectionRef.current !== projection;
+    lastViewportProjectionRef.current = projection;
+    const map = mapRef.current;
+    if (!map || !readyRef.current || places.length === 0 || (projectionChanged && projection === "globe")) return;
+    let cancelled = false;
+
+    const applyViewport = async () => {
+      const { LngLatBounds } = await import("maplibre-gl");
+      if (cancelled || !mapRef.current) return;
+      const reduceMotion = reducedMotion ?? prefersReducedMotion();
       const selected = selectedId ? places.find((place) => place.id === selectedId) : null;
       if (selected) {
-        map.setView([selected.latitude, selected.longitude], Math.max(map.getZoom(), 12), {
-          animate: !reduceMotion,
+        map.easeTo({
+          center: [selected.longitude, selected.latitude],
+          zoom: projection === "globe" ? 3.5 : Math.max(map.getZoom(), 12),
+          duration: reduceMotion ? 0 : 450,
         });
         return;
       }
-      const bounds = L.latLngBounds(places.map((place) => [place.latitude, place.longitude]));
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [56, 56], maxZoom: 13, animate: !reduceMotion });
-    })();
+
+      if (projection === "globe") return;
+
+      const bounds = new LngLatBounds();
+      for (const place of places) bounds.extend([place.longitude, place.latitude]);
+      if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, { padding: 56, maxZoom: 13, duration: reduceMotion ? 0 : 450 });
+      }
+    };
+
+    void applyViewport();
     return () => {
       cancelled = true;
     };
-  }, [places, selectedId]);
+  }, [mapReadyVersion, places, projection, reducedMotion, selectedId]);
 
-  return <div ref={containerRef} className="places-map-canvas" role="application" aria-label="Carte des lieux" />;
+  return (
+    <>
+      <div
+        ref={containerRef}
+        className={`places-map-canvas${projection === "globe" ? " places-globe-canvas" : ""}`}
+        role="application"
+        aria-label={projection === "globe" ? "Globe des lieux" : "Carte des lieux"}
+      />
+      {projection === "globe" && !tileUrl && textureAttribution ? (
+        <p className="places-globe-attribution">{textureAttribution}</p>
+      ) : null}
+    </>
+  );
 }
 
 export default PlacesMap;

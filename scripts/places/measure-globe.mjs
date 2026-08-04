@@ -76,57 +76,56 @@ async function seed(count) {
 }
 
 async function measure(page, count) {
-  await page.goto(`${BASE_URL}/places`, { waitUntil: "networkidle" });
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem("places-benchmark", "1");
+    } catch {}
+    window.__placesBenchmarkRenderCount = 0;
+    window.__placesBenchmarkMap = null;
+    window.addEventListener("places-map-ready", (event) => {
+      window.__placesBenchmarkMap = event.detail;
+    });
+    window.addEventListener("places-map-render", () => {
+      window.__placesBenchmarkRenderCount += 1;
+    });
+  });
+  await page.goto(`${BASE_URL}/places`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "3D" }).waitFor({ state: "visible", timeout: 30_000 });
 
   // Time to first globe render: from the click that requests the 3D view until
   // the engine has actually presented a frame.
+  await page.evaluate(() => {
+    window.__placesBenchmarkRenderCount = 0;
+  });
   const startedAt = Date.now();
   await page.getByRole("button", { name: "3D" }).click();
   await page.locator(".places-globe-canvas canvas").waitFor({ state: "visible", timeout: 30_000 });
   await page.waitForFunction(
-    () => {
-      const canvas = document.querySelector(".places-globe-canvas canvas");
-      return canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
-    },
+    () => window.__placesBenchmarkMap && window.__placesBenchmarkRenderCount > 0,
     { timeout: 30_000 },
   );
   const firstRenderMs = Date.now() - startedAt;
 
-  // Frame rate while the camera is actually moving: a static globe would report
-  // a flattering number that says nothing about interaction.
-  const fps = await page.evaluate(async (sampleMs) => {
-    const canvas = document.querySelector(".places-globe-canvas canvas");
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-
-    const drag = (type, x, y) =>
-      canvas.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, bubbles: true, pointerId: 1, button: 0 }));
-
-    let frames = 0;
-    const start = performance.now();
-    let running = true;
-    const tick = () => {
-      frames += 1;
-      if (running) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-
-    drag("pointerdown", cx, cy);
-    const steps = Math.floor(sampleMs / 16);
-    for (let i = 0; i < steps; i += 1) {
-      drag("pointermove", cx + Math.sin(i / 12) * 160, cy + Math.cos(i / 18) * 60);
-      await new Promise((resolve) => setTimeout(resolve, 16));
-    }
-    drag("pointerup", cx, cy);
-
-    running = false;
-    const elapsed = performance.now() - start;
-    return Math.round((frames / elapsed) * 1000);
+  // Animate the real MapLibre camera for a fixed duration and count its render events.
+  await page.evaluate(() => {
+    window.__placesBenchmarkRenderCount = 0;
+  });
+  const start = Date.now();
+  await page.evaluate((duration) => {
+    const map = window.__placesBenchmarkMap;
+    if (!map) throw new Error("Benchmark map was not exposed");
+    map.easeTo({ bearing: map.getBearing() + 180, duration, easing: (value) => value });
   }, SAMPLE_MS);
+  await page.waitForFunction(() => !window.__placesBenchmarkMap?.isMoving(), { timeout: SAMPLE_MS + 5_000 });
+  const elapsed = Date.now() - start;
+  const frames = await page.evaluate(() => {
+    const count = window.__placesBenchmarkRenderCount;
+    window.__placesBenchmarkRenderCount = 0;
+    return count;
+  });
+  const fps = Math.round((frames / elapsed) * 1000);
 
-  return { count, firstRenderMs, fps };
+  return { count, firstRenderMs, fps, frames, elapsedMs: elapsed };
 }
 
 const profiles = [
@@ -138,20 +137,20 @@ const results = [];
 for (const count of COUNTS) {
   await seed(count);
   for (const [label, options] of profiles) {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH });
     const context = await browser.newContext(options);
     const page = await context.newPage();
     const result = await measure(page, count);
     results.push({ profile: label, ...result });
     console.log(
-      `${label.padEnd(8)} ${String(count).padStart(5)} places   first render ${String(result.firstRenderMs).padStart(5)} ms   ${String(result.fps).padStart(3)} fps`,
+      `${label.padEnd(8)} ${String(count).padStart(5)} places   first render ${String(result.firstRenderMs).padStart(5)} ms   ${String(result.fps).padStart(3)} fps   ${result.frames} renders / ${result.elapsedMs} ms`,
     );
     await browser.close();
   }
 }
 
 const renderer = await (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH });
   const page = await browser.newPage();
   const info = await page.evaluate(() => {
     const gl = document.createElement("canvas").getContext("webgl2");
