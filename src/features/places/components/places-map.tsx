@@ -24,6 +24,10 @@ export type PlacesMapProps = PlacesRendererProps & {
 
 export type PlacesProjection = "mercator" | "globe";
 
+// Served from public/maplibre, kept in sync with the installed maplibre-gl by
+// scripts/places/sync-maplibre-worker.mjs so the vendored copy cannot drift.
+export const PLACES_MAPLIBRE_WORKER_URL = "/maplibre/maplibre-gl-worker.mjs";
+
 const RASTER_SOURCE_ID = "placesRaster";
 const RASTER_LAYER_ID = "places-raster";
 const EARTH_SOURCE_ID = "placesEarth";
@@ -265,6 +269,17 @@ export function PlacesMap({
       if (mapRef.current) return;
       const maplibre = await import("maplibre-gl");
       if (cancelled || !containerRef.current) return;
+
+      // MapLibre 6 ships its worker as a separate ESM file and locates it from
+      // `import.meta.url`. Turbopack does not expose an http(s) `import.meta.url`
+      // inside the bundled chunk, so MapLibre's own resolver returns an empty
+      // string and constructs `new Worker("", { type: "module" })`. That does not
+      // throw: the worker loads the HTML document as a module, dies on the parse
+      // error, and every GeoJSON source stays unloaded forever — a blank map with
+      // no console error. Pointing MapLibre at the copies served from /maplibre
+      // keeps the worker alive. See scripts/places/sync-maplibre-worker.mjs.
+      if (!maplibre.getWorkerUrl()) maplibre.setWorkerUrl(PLACES_MAPLIBRE_WORKER_URL);
+
       const initialProjection = initialProjectionRef.current;
 
       const map = new maplibre.Map({
