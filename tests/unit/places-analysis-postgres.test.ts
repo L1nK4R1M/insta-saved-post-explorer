@@ -54,6 +54,7 @@ function resolved(overrides: Partial<ResolvedPlaceCandidate> = {}): ResolvedPlac
     longitude: 55.11,
     providerResultType: "amenity",
     providerRank: 0.95,
+    providerMatchType: "full_match",
     attribution: "Powered by Geoapify",
     ...overrides,
   };
@@ -62,6 +63,7 @@ function resolved(overrides: Partial<ResolvedPlaceCandidate> = {}): ResolvedPlac
 function candidate(overrides: Partial<PlaceCandidate> = {}): PlaceCandidate {
   return {
     name: "Nobu Dubai",
+    address: null,
     city: "Dubai",
     region: null,
     country: "United Arab Emirates",
@@ -131,6 +133,26 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
     expect(place.precision).toBe("APPROXIMATE");
     expect(place.approximationRadiusMeters).toBe(10_000);
     expect(place.continentCode).toBe("AS");
+  });
+
+  it("keeps matching APPROXIMATE areas isolated to their source posts", async () => {
+    await seedPost("kyoto-first", OWNER_A, "Voyages");
+    await seedPost("kyoto-second", OWNER_A, "Restaurant");
+    const resolver = new FakeResolver({
+      Kyoto: [resolved({ providerPlaceId: "geo-kyoto", displayName: "Kyoto", city: "Kyoto", country: "Japan", countryCode: "JP", providerResultType: "city" })],
+    });
+
+    for (const postId of ["kyoto-first", "kyoto-second"]) {
+      await analysis.analyzeCandidateBatchRecord({
+        ownerId: OWNER_A,
+        record: await freshRecord(OWNER_A, postId, [candidate({ name: "Kyoto", city: "Kyoto", country: "Japan", confidence: 0.7 })]),
+        resolver,
+        commit: true,
+      });
+    }
+
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A, precision: "APPROXIMATE" } })).toBe(2);
+    expect(await prisma.postPlace.count({ where: { ownerId: OWNER_A, precision: "APPROXIMATE" } })).toBe(2);
   });
 
   it("records an UNKNOWN candidate as evidence only and creates no place", async () => {
@@ -242,6 +264,81 @@ describeWithDatabase("Places metadata analysis persistence on PostgreSQL", () =>
     expect(link.isUserConfirmed).toBe(true);
     expect(link.confidence).toBe(1);
     expect(link.isPrimary).toBe(true);
+  });
+
+  it("supersedes only the previous automatic approximate primary when an exact primary is persisted", async () => {
+    for (const [postId, confirmed] of [
+      ["upgrade-auto-post", false],
+      ["upgrade-confirmed-post", true],
+    ] as const) {
+      await seedPost(postId, OWNER_A, "Voyages");
+      const oldPlace = await prisma.place.create({
+        data: {
+          ownerId: OWNER_A,
+          displayName: "Dubai",
+          normalizedName: "dubai",
+          provider: "geoapify",
+          providerPlaceId: `geo-old-${postId}`,
+          city: "Dubai",
+          latitude: 25.2,
+          longitude: 55.3,
+          precision: "APPROXIMATE",
+          confidence: 0.7,
+          approximationRadiusMeters: 10_000,
+        },
+      });
+      await prisma.postPlace.create({
+        data: {
+          ownerId: OWNER_A,
+          postId,
+          placeId: oldPlace.id,
+          isPrimary: true,
+          isUserConfirmed: confirmed,
+          precision: "APPROXIMATE",
+          confidence: 0.7,
+        },
+      });
+
+      await analysis.analyzeCandidateBatchRecord({
+        ownerId: OWNER_A,
+        record: await freshRecord(OWNER_A, postId, [candidate()]),
+        resolver: new FakeResolver({
+          "Nobu Dubai": [resolved({ providerPlaceId: `geo-exact-${postId}` })],
+        }),
+        commit: true,
+      });
+    }
+
+    const automaticLinks = await prisma.postPlace.findMany({
+      where: { ownerId: OWNER_A, postId: "upgrade-auto-post" },
+      orderBy: { precision: "asc" },
+    });
+    expect(automaticLinks).toHaveLength(1);
+    expect(automaticLinks[0]).toMatchObject({
+      precision: "EXACT",
+      isPrimary: true,
+      isUserConfirmed: false,
+    });
+
+    const confirmedLinks = await prisma.postPlace.findMany({
+      where: { ownerId: OWNER_A, postId: "upgrade-confirmed-post" },
+    });
+    expect(confirmedLinks).toHaveLength(2);
+    expect(confirmedLinks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          precision: "APPROXIMATE",
+          isPrimary: true,
+          isUserConfirmed: true,
+        }),
+        expect.objectContaining({
+          precision: "EXACT",
+          isPrimary: false,
+          isUserConfirmed: false,
+        }),
+      ]),
+    );
+    expect(await prisma.place.count({ where: { ownerId: OWNER_A } })).toBe(4);
   });
 
   it("rolls back and marks the job FAILED on a provider failure", async () => {

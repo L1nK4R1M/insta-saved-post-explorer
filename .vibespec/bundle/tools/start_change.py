@@ -16,7 +16,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from vibespec_common import read_project_config  # noqa: E402
+from vibespec_common import (  # noqa: E402
+    add_target_arguments,
+    fail,
+    read_project_config,
+    resolve_target_argument,
+)
 
 
 def valid_slug(value: str) -> str:
@@ -108,15 +113,16 @@ def scaffold(target: Path, mode: str, slug: str, title: str | None = None) -> Pa
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target", type=Path, default=Path.cwd())
+    add_target_arguments(parser)
     parser.add_argument("--mode", choices=["patch", "standard", "critical"], required=True)
     parser.add_argument("--slug", type=valid_slug, required=True)
     parser.add_argument("--title")
     args = parser.parse_args()
     try:
-        output = scaffold(args.target.resolve(), args.mode, args.slug, args.title)
+        target = resolve_target_argument(args.target_positional, args.target_option)
+        output = scaffold(target, args.mode, args.slug, args.title)
     except (FileExistsError, FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
-        parser.error(str(exc))
+        return fail(str(exc))
     print(output)
     return 0
 

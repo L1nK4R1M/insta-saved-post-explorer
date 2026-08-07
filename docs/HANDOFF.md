@@ -1,10 +1,10 @@
 # Operational Handoff
 
-Last updated: 28 July 2026  
-Repository: `L1nK4R1M/insta-saved-post-explorer`  
+Last updated: 7 August 2026  
+Repository: `OlympusForgeHQ/insta-post-explorer`  
 Reference branch: `main`  
-Reference production base: `main` at `44b0da02fe89396ac43fe6b29ff4a13b247674f1`
-Reference implementation: `develop` at `67e3c1ba38cf350533c9a7ba27059c3fc368d727`
+Reference production base: `main` at `31b3e92` (PR #56, standardized CI)
+Reference implementation: `develop` at `78b3bbf` (PR #57, MapLibre renderer)
 
 ## 1. Purpose and authority
 
@@ -36,8 +36,94 @@ Stop and document any conflict between this handoff, an authoritative contract a
 | G — Places 2D UI and contextual navigation | PR #34, squash `2bd2098`. `/places`, Leaflet clustering, Geoapify raster tiles, synchronized list, filters, statistics, detail sheet, review actions, deep links, responsive and keyboard-accessible UI. |
 | I design — Places 3D globe | PR #35, squash `3fef818`. ADR `ACCEPTED`, six decisions closed, T0 satisfied. |
 | I implementation — Places 3D globe | PR #36, squash `08be9f0`. T1–T10 merged after two review rounds. WebGL-gated lazy loading, risk-based test consolidation, local Natural Earth texture, shared 2D/3D state and documented performance evidence. |
+| Places points-only map detail | Direct push on `develop` at `626aee5` (spec `007`). Exact points and post detail refinement. No PR — see the git-discipline note in section 3. |
+| Places panel coordination | Direct push on `develop` at `0a933a1` (spec `008`). Detail sheet and explorer panel coordination, post preview. No PR — see the git-discipline note in section 3. |
+| VibeSpec cloud bundle 2.3.0 | PR #58, squash `9e3a749`. Tooling-only migration; the repository test policy moved out of the managed block byte-for-byte. |
+| CI standardization on `develop` | PR #59, squash `439ec57`. Cherry-picks `4fb05e3`, `85a70f5` and `bb77f56` from `main` (PR #56) so both branches validate identically. |
+| MapLibre 2D + globe renderer | PR #57, squash `78b3bbf`. Supersedes the Leaflet and Three.js renderers. Merged with an explicit D6 FPS derogation — see section 7. |
 
 ## 3. Current execution pointer
+
+### develop consolidated (7 August 2026)
+
+`develop` is at `78b3bbf` and carries, in order: `626aee5`, `0a933a1`, PR #58
+(`9e3a749`), PR #59 (`439ec57`) and PR #57 (`78b3bbf`).
+
+Four facts a previous session left unrecorded, corrected here:
+
+- `626aee5` and `0a933a1` were **pushed directly to `develop` without a pull
+  request** on 1 August 2026, contrary to `AGENTS.md` §8. Both are CI-green and
+  both carry a spec with convergence `PASS` (`007` and `008`), so they are not
+  reverted; the process deviation is recorded rather than hidden. Future work
+  goes through a branch and a PR;
+- `main` had received the CI standardization through PR #56 on 30 July 2026 and
+  it had never come down to `develop`. The two branches validated with different
+  pipelines, so a green `develop` PR was not evidence for Production. PR #59
+  fixes this;
+- PR #59 **cherry-picks** rather than back-merges. A trial `git merge origin/main`
+  was run and rejected: the merge base is `67e3c1b` (PR #46), so every Production
+  squash since — `66cfd78`, `8dbfd46`, `bebf680` — reads as new work on `main` and
+  the merge produced four conflicts, two of which would have re-applied the
+  pre-address-contract `places-scoring.test.ts` and `places-actions.test.ts` over
+  the work merged by PR #52/#54. Do not back-merge `main` into `develop`;
+- `bb77f56` is part of that cherry-pick and is not optional. `scripts/ci/check.sh`
+  fails the job when validation modifies repository state, and `develop` shipped
+  the `.next/dev/types` variant of `next-env.d.ts`, so every `npm run build`
+  dirtied the tree.
+
+Fresh gates on `develop` at `78b3bbf`:
+
+```text
+eslint . --max-warnings=0 ...... exit 0, zero findings
+tsc --noEmit ................... exit 0
+npm run test ................... 369 passed, 132 environment-bound skips (60 files)
+npm run build .................. PASS
+check.sh state guard ........... PASS, tree identical before and after
+playwright --list .............. 47 scenarios in 6 files
+```
+
+The 132 skips are the PostgreSQL suites, which need `TEST_DATABASE_URL`. They are
+not counted as executed. CI runs them, together with the worker PostgreSQL
+invariants, the worker smoke and the Docker container contract, none of which are
+runnable in the agent environment.
+
+`git diff origin/main origin/develop -- .github/ scripts/ci/ next-env.d.ts` is now
+**empty**: both branches validate with byte-identical CI. The remaining commit
+divergence is SHA-level only, caused by squash merges and this cherry-pick, and
+must not be read as missing work. Production promotion is prepared but not
+performed — see section 8.
+
+### Places address contract merged on develop (28 July 2026)
+
+- PR #52 was squash-merged into `develop` at `71106cc`; the merge also
+  reconciles the seven already approved Production commits and preserves the
+  10 km radius correction;
+- GitHub CI #153 passed, including PostgreSQL invariants, worker checks, unit
+  tests, build and Playwright;
+- Vercel Preview deployment `dpl_632ZKgw3HdT6XwuCfynP3RQkBZBc` is READY and
+  its immutable deployment URL returns HTTP 200;
+- VibeSpec: `specs/005-places-address-contract`, Critical;
+- strict candidates now require bounded `address: string | null`; export schema
+  is v3 and default analysis identity is `places-v2`;
+- Geoapify receives a free-form address query when available and returns bounded
+  rank/match-type evidence to deterministic scoring;
+- address-authorized `EXACT` requires matching house number, specific result,
+  provider rank at least 0.90, full/building match type (or `inner_part` at
+  rank 0.95+), and no contradiction;
+- a schema-v3 export of the single `hungryconsti` post from Neon develop passed
+  with `business_writes=false`; the temporary export was removed afterward;
+- the owner authorized the live single-post Geoapify dry-run. The real response
+  is `amenity`, rank 1, `inner_part`; the refined scoring returns `EXACT`,
+  confidence 1, radius null, and the importer exits 0 without writing;
+- Neon develop still has the original single automatic approximate primary for
+  this post after the dry-run, proving rollback. PR #54, squash `f98da30`, adds
+  narrow atomic supersession for the later committed re-analysis while
+  preserving user-confirmed links and historical places/evidence;
+- CI #157 passed, including the PostgreSQL supersession invariant and
+  Playwright. Vercel develop deployment `dpl_GWMGkdvQptBCz1icJidE6zUJM8vL` is
+  READY and its immutable root returns HTTP 200;
+- no Prisma migration, dependency, Production deployment, Neon write, candidate
+  import, or existing place mutation is included. Production remains unchanged.
 
 ### Places usability correction released (28 July 2026)
 
@@ -56,10 +142,10 @@ Stop and document any conflict between this handoff, an authoritative contract a
   the initial Vercel runtime-error window all pass.
 
 ```text
-Active review branch: codex/places-analysis-json-export
-Reference: develop at f74302b3bba6bf9bd29ab66d6ef8fbc32d5479b3
+Active code review branch: none; PR #52 is merged
+Reference: main at bebf680; develop at 71106cc
 Mode: critical
-VibeSpec convergence: PASS
+VibeSpec convergence: PASS for develop; Production gate remains pending
 
 Production baseline:
 - PR #45 deployed the DB-first extension convergence to `main` at `64f14cb`;
@@ -154,7 +240,7 @@ Phase G owner decisions remain final for the 2D implementation:
 - brunch provisionally folded into the café group;
 - multi-select filters enabled.
 
-Phase I owner decisions remain final and implemented:
+Phase I owner decisions remain recorded as historical project context:
 
 - `react-globe.gl` / `globe.gl` with Three.js underneath;
 - Concept 2 sober with restrained Concept 1 elements;
@@ -164,6 +250,14 @@ Phase I owner decisions remain final and implemented:
 - accessible fallback to 2D;
 - shared filters, search, selection, list, statistics and detail;
 - no replacement of Leaflet.
+
+The current unmerged follow-up supersedes the engine and map decisions above:
+
+- MapLibre GL JS now powers both Mercator 2D and native globe projection;
+- one MapLibre canvas/source is retained across 2D ↔ 3D switching when MapLibre is
+  active; the no-raster 2D view intentionally remains on its no-map fallback;
+- Leaflet, `react-globe.gl` and the old Three.js scene are no longer runtime dependencies;
+- the local Natural Earth texture and the shared Places contract remain.
 
 ## 4. Merge proof
 
@@ -256,8 +350,10 @@ Do not run `prisma migrate dev`, `prisma db push` or seeds against either deploy
 | F — Places metadata-first domain | COMPLETE | F1/F2/F3 and hardening merged; exit gate accepted. |
 | G — Places 2D UI | COMPLETE | PR #34, squash `2bd2098`; CI #107 green. |
 | H — Deep Places analysis | BLOCKED | Requires Phase E operational activation and stable worker infrastructure. |
-| I — Places 3D globe | COMPLETE | PR #35 design + PR #36 implementation merged. CI #115 green; WebGL lazy loading corrected; tests consolidated; no migration. |
+| I — Places 3D globe | COMPLETE | PR #35 design + PR #36 implementation merged. CI #115 green; WebGL lazy loading corrected; tests consolidated; no migration. Its Three.js runtime is superseded on `develop` by PR #57. |
+| I follow-up — MapLibre 2D + globe renderer | MERGED ON DEVELOP, D6 DEROGATED | PR #57, squash `78b3bbf`. CI green under the standardized pipeline. The FPS budget is **not** measured on real hardware — see section 7. |
 | J — Unified MCP and Hermes | BLOCKED | Requires later orchestration decisions and confirmations. |
+| Places v5 international addresses | CONTRACT DRAFTED ONLY | Spec `006`, convergence `PENDING`. No implementation, no model call, no data write. Blocked on Phase H activation, an OpenAI key, an owner-approved spend cap and an explicit caption-egress authorization. |
 
 ## 6.1 Test suite baseline (25 July 2026)
 
@@ -265,9 +361,15 @@ The global suite was audited and consolidated in a dedicated PR (documentation:
 `changes/2026-07-25-global-test-suite-consolidation.md`). Current baseline:
 
 ```text
-unit ...... 54 files, 448 tests, ~15-21 s
-e2e ....... 46 scenarios, 46 executions (45 desktop + 1 mobile), ~69 s
+unit ...... 60 files, 369 passed + 132 environment-bound skips, ~20-56 s
+e2e ....... 47 scenarios in 6 files
 ```
+
+Measured on `develop` at `78b3bbf` on 7 August 2026. The 25 July figures below
+(54 files / 448 tests, 46 scenarios) describe the consolidation itself and are
+kept as the rationale, not as the current count. The renderer migration replaced
+the Three.js globe suites with MapLibre equivalents, which is why the file count
+rose while the executed-test count fell.
 
 Desktop is the default Playwright project and runs everything; the mobile project
 runs only `@mobile`-tagged scenarios. Every viewport-sensitive test sets its own
@@ -280,24 +382,96 @@ transactions, worker isolation and audit completeness.
 
 ## 7. Open decisions and operational follow-ups
 
-- ~~**Phase I GPU measurement**~~ — **closed 25 July 2026**, status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`. Measured on an NVIDIA GeForce RTX 5090: 240 fps and 276-326 ms first render at every place count, desktop and mobile viewport. This confirmed the recorded diagnosis — the CI figures (20 fps desktop, 18 fps mobile) were fill-rate bound on a SwiftShader software rasterizer, not scene bound. Both runs are kept in the change record. One honest limit stands: the mobile figures come from a mobile **viewport** on desktop-class hardware, not from a phone GPU, so low-end phone behaviour remains a reasoned expectation rather than a measurement — which is why the WebGL fallback and the pixel-ratio cap stay in place.
+- ~~**Historical Phase I GPU measurement**~~ — **closed 25 July 2026** for the superseded Three.js renderer, status `FPS_BUDGET_VALIDATED_ON_REAL_GPU`. Measured on an NVIDIA GeForce RTX 5090: 240 fps and 276-326 ms first render at every place count, desktop and mobile viewport. That evidence does **not** validate the MapLibre renderer, which replaced that runtime.
+- **MapLibre D6 FPS budget — OPEN, EXPLICITLY DEROGATED on 7 August 2026.** PR #57
+  was merged into `develop` with this gate unsatisfied, on an explicit owner
+  decision, so the renderer work is not held hostage to hardware the agent
+  environment does not have. What is and is not proven:
+  - **proven**: first render stays below 1.2 s; lint, typecheck, 369 unit tests,
+    build, browser tests and the repository state guard are green under the
+    standardized CI;
+  - **not proven**: the D6 frame-rate budget of 50–60 fps desktop and at least
+    30 fps mobile. The only figures that exist are software-rasterized — 35–38 fps
+    desktop and 23–24 fps mobile viewport on SwiftShader;
+  - **why no better figure exists**: the agent host has a paravirtualized
+    Red Hat Virtio 1.0 GPU. Chromium was probed under three configurations —
+    defaults, `--use-angle=vulkan --enable-features=Vulkan`, and
+    `--use-gl=egl --ignore-gpu-blocklist --enable-gpu-rasterization`. The first
+    and third both report
+    `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)`;
+    the second loses WebGL2 entirely. There is no hardware path, so re-running
+    the harness here can only reproduce the numbers already recorded;
+  - **how to close it**: on a machine with a real GPU, point `DATABASE_URL` at a
+    local throwaway PostgreSQL, build with `NEXT_PUBLIC_PLACES_BENCHMARK=1`,
+    serve it, then run `npm run places:measure-globe`. The harness refuses any
+    `DATABASE_URL` that does not look local. Report the measured number as
+    measured; do not relax the budget;
+  - **risk accepted**: a genuine frame-rate regression in the MapLibre renderer
+    would not be caught by CI until that measurement is run.
 - server-side AI providers, models, budgets and escalation thresholds for Phase H;
 - VPS credentials, firewall, backups, alerting and deployment authorization for Phase E;
 - final confirmation model for sensitive Phase J commands.
 
 ## 8. Exact next action
 
-1. Replace files in the existing unpacked
-   extension directory with `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the
-   extension and run the Preview smoke in
-   `specs/002-extension-web-sync-reconciliation/08-release.md`.
-2. Confirm extension discovery on the stable develop alias, click
+Ordered. Items 1 and 2 gate the Production promotion; nothing below item 3 may be
+used to bypass them. The previous revision listed the same instruction twice as
+items 3 and 4; that duplicate is removed.
+
+1. **Provide credentials.** No `.env` file exists in the repository — only
+   `.env.example`. The dry-run cannot run without `DATABASE_URL` (Neon `develop`)
+   and `GEOAPIFY_API_KEY`. Never infer a Production DSN from a generic
+   `DATABASE_URL`.
+2. **Re-run the single hungryconsti dry-run from merged `develop` at `78b3bbf`**,
+   read-only, before any data write. The earlier run at `f98da30` returned
+   `amenity` / rank 1 / `inner_part`, scored `EXACT` at confidence 1 with no
+   radius, and the importer exited 0 without writing. A merged-revision rerun is
+   required because `develop` has moved since.
+3. **Then promote `develop` → `main`.** Prepare it as a pull request; the merge is
+   a Production deployment and needs explicit owner authorization at that moment,
+   not inherited from an earlier one.
+4. Treat any single-post `--commit` on Neon develop as a separate owner decision;
+   verify one exact primary, zero stale automatic approximate link, and preserved
+   historical place/evidence after any approved write.
+5. Replace files in the existing unpacked extension directory with
+   `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`, reload the extension and run the
+   Preview smoke in `specs/002-extension-web-sync-reconciliation/08-release.md`.
+   Operator action; it cannot be performed from the agent environment.
+6. Confirm extension discovery on the stable develop alias, click
    **Actualiser les posts**, and compare the extension count with the Preview
    library count.
-3. Reload the exact 4.2.6 package against Production and confirm a
-   refresh imports DB-missing posts, terminates, and a second refresh reports
-   zero only when the DB and extension index are aligned.
-4. Keep Phase H blocked until Phase E VPS operational activation is separately
+7. Reload the exact 4.2.6 package against Production and confirm a refresh imports
+   DB-missing posts, terminates, and a second refresh reports zero only when the DB
+   and extension index are aligned.
+8. Close the MapLibre D6 FPS derogation on real hardware — see section 7.
+9. Keep Phase H blocked until Phase E VPS operational activation is separately
    approved.
-5. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
-   analysis outside this correction.
+10. Keep spec `006` (Places v5 international addresses) blocked until an OpenAI
+    key, an approved spend cap and an explicit caption-egress authorization exist.
+11. Keep worker activation, Hermes, MCP, OCR, transcription and multimodal
+    analysis outside this correction.
+12. Use a branch and a pull request for every change. Two commits reached
+    `develop` directly on 1 August 2026; that must not recur.
+
+## 9. MapLibre 2D + globe renderer — merged on develop
+
+PR #57, squash `78b3bbf`, merged 7 August 2026. This supersedes the historical
+Phase G Leaflet and Phase I Three.js renderers in
+`src/features/places/components/places-map.tsx`. It is **not** part of the PR #34
+or PR #36 merge proofs, which stay as historical records of the runtime it
+replaced.
+
+The renderer uses MapLibre GL JS with native Mercator 2D and globe projections,
+native GeoJSON clustering and the same raster tile and attribution contract. One
+MapLibre canvas and source is retained across 2D ↔ 3D switching; the no-raster 2D
+view intentionally stays on its no-map fallback. Leaflet, `react-globe.gl` and the
+Three.js scene are no longer runtime dependencies; `three-globe` remains only as a
+build-time source of texture data. The local Natural Earth texture, the WebGL2
+gate and the shared Places server contracts are unchanged.
+
+Merged with the D6 FPS budget derogated, not satisfied. Section 7 records exactly
+what is proven, what is not, why no better measurement exists here, and how to
+close it.
+
+This renderer is on `develop` only. Production still serves the Three.js and
+Leaflet runtime until the promotion in section 8 is performed.

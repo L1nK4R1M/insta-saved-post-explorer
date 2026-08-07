@@ -40,15 +40,18 @@ Prochaine gate
 If the code, handoff, and phase documents disagree, stop and document the conflict instead of choosing a new architecture.
 
 <!-- BEGIN VIBESPEC CLOUD -->
-# VibeSpec Pro Cloud Bundle
+# VibeSpec Pro for Claude Code Cloud
 
-Use the repository-managed VibeSpec skills for software changes.
+Claude Code natively loads this `CLAUDE.md` file and discovers project skills in `.claude/skills/`. The VibeSpec preflight, router, `.vibespec/project.yaml`, profiles, and document lifecycle are VibeSpec conventions and must be applied explicitly.
 
-Before implementation:
-1. Read `.vibespec/project.yaml` when present.
-2. Treat `.vibespec/bundle` as the active VibeSpec root.
-3. Route the change as Patch, Standard, or Critical.
-4. Load only the skills, profiles, and templates needed for the selected route.
+For every request that may change source code, tests, architecture, schemas, dependencies, CI, infrastructure, or implementation documentation:
 
-Never claim completion without fresh verification evidence. Never commit, push, deploy, migrate, or run destructive operations unless explicitly authorized. Repository-specific instructions outside this managed block override these defaults.
+1. Invoke `/vibespec-preflight` before planning or editing. Stop when it reports `Status: BLOCKED`.
+2. Let preflight read `.vibespec/project.yaml`, call `/vibespec-routing-changes`, and name the required skills and gates.
+3. Treat `.vibespec/bundle` as the active VibeSpec root.
+4. Follow the Patch, Standard, or Critical route the preflight report selected.
+5. Load only the required VibeSpec skills and references; do not preload the full pack.
+6. Run fresh verification before claiming completion.
+
+Never commit, push, deploy, migrate production data, rotate secrets, or perform destructive actions unless explicitly authorized. Repository-specific instructions outside this managed block override these defaults.
 <!-- END VIBESPEC CLOUD -->

@@ -7,7 +7,7 @@ import type { PlacesMapItem } from "@/server/places/map-view";
 // Pure filter state for the Places page: parsed from the URL, serialized back to
 // it, and applied in the browser over the full owner-scoped set (the owner capped
 // Places at ~1000 canonical places, so filtering never needs a round trip).
-// Keeping this module free of React and Leaflet makes every rule directly
+// Keeping this module free of React and MapLibre makes every rule directly
 // testable and keeps deep links, history and rendering consistent.
 
 export const PLACE_PRECISION_VALUES = ["EXACT", "PROBABLE", "APPROXIMATE"] as const;
@@ -166,8 +166,8 @@ export function filterPlaces(places: readonly PlacesMapItem[], filters: PlacesFi
   });
 }
 
-// REJECTED places stay out of the map and the list: a rejected result is not a
-// place the user keeps. They remain reachable through the review filters only.
+// Rejected places stay out of the map and list. Approximate results remain
+// available to the review/list UI and are filtered only at renderer boundaries.
 export function isMappable(place: PlacesMapItem): boolean {
   return place.reviewStatus !== "REJECTED";
 }

@@ -3,10 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import { ExternalLink, Loader2, MapPin, X } from "lucide-react";
 
-import type { PlacePostSummaryDto } from "@/contracts/api/places";
 import type { PlacesMapItem } from "@/server/places/map-view";
 import { cn } from "@/lib/utils";
-import { confirmPlaceAction, loadPlacePostsAction, rejectPlaceAction } from "@/features/places/actions";
+import { confirmPlaceAction, loadPlacePostsAction, rejectPlaceAction, type PlacePostDetailDto } from "@/features/places/actions";
 
 // Detail sheet for the selected place. Review writes call the internal Server
 // Actions (never the read-only external API); each action is guarded against
@@ -36,7 +35,8 @@ export function PlaceDetailSheet(props: SheetProps) {
 }
 
 function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
-  const [posts, setPosts] = useState<PlacePostSummaryDto[] | null>(null);
+  const [posts, setPosts] = useState<PlacePostDetailDto[] | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [postsError, setPostsError] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -51,7 +51,10 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
     (async () => {
       const result = await loadPlacePostsAction(place.id);
       if (cancelled) return;
-      if (result.ok) setPosts(result.posts);
+      if (result.ok) {
+        setPosts(result.posts);
+        setSelectedPostId(result.posts[0]?.postId ?? null);
+      }
       else setPostsError(true);
     })();
     return () => {
@@ -75,6 +78,8 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
     place.precision === "APPROXIMATE" && place.approximationRadiusMeters
       ? Math.round(place.approximationRadiusMeters / 1000)
       : null;
+  const selectedPost = posts?.find((post) => post.postId === selectedPostId) ?? null;
+  const showPostSelector = posts === null || postsError || posts.length !== 1;
 
   return (
     <aside className="places-sheet" role="dialog" aria-label={`Détail de ${place.displayName}`}>
@@ -108,32 +113,49 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
         {place.confidence ? ` · confiance ${place.confidence.toFixed(2)}` : ""}
       </p>
 
-      <div className="places-sheet-posts">
-        {posts === null && !postsError ? (
-          <span className="places-sheet-loading">
-            <Loader2 className="places-spin" size={15} aria-hidden="true" /> Chargement des posts…
-          </span>
-        ) : null}
-        {postsError ? <span className="places-sheet-error">Impossible de charger les posts.</span> : null}
-        {posts?.slice(0, 6).map((post) => (
-          <a
-            key={post.postId}
-            className="places-post-thumb"
-            href={post.postUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Ouvrir le post de ${post.authorUsername} sur Instagram`}
-          >
-            {post.thumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={post.thumbnailUrl} alt="" loading="lazy" />
-            ) : (
-              <MapPin size={16} aria-hidden="true" />
-            )}
-          </a>
-        ))}
-        {posts?.length === 0 ? <span className="places-sheet-error">Aucun post lié.</span> : null}
-      </div>
+      {showPostSelector ? (
+        <div className="places-sheet-posts">
+          {posts === null && !postsError ? (
+            <span className="places-sheet-loading">
+              <Loader2 className="places-spin" size={15} aria-hidden="true" /> Chargement des posts…
+            </span>
+          ) : null}
+          {postsError ? <span className="places-sheet-error">Impossible de charger les posts.</span> : null}
+          {posts && posts.length > 1
+            ? posts.slice(0, 6).map((post) => (
+                <button
+                  type="button"
+                  key={post.postId}
+                  className={cn("places-post-thumb", post.postId === selectedPostId && "is-selected")}
+                  aria-label={`Afficher le post de ${post.authorUsername}`}
+                  onClick={() => setSelectedPostId(post.postId)}
+                >
+                  {post.thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={post.thumbnailUrl} alt="" loading="lazy" />
+                  ) : (
+                    <MapPin size={16} aria-hidden="true" />
+                  )}
+                </button>
+              ))
+            : null}
+          {posts?.length === 0 ? <span className="places-sheet-error">Aucun post lié.</span> : null}
+        </div>
+      ) : null}
+
+      {selectedPost ? (
+        <article className="places-post-card">
+          {selectedPost.thumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={selectedPost.thumbnailUrl} alt="" loading="lazy" />
+          ) : null}
+          <div className="places-post-card-copy">
+            <strong>@{selectedPost.authorUsername}</strong>
+            {selectedPost.mainTheme ? <span>{selectedPost.mainTheme}</span> : null}
+            <p>{selectedPost.caption || "Aucune légende disponible."}</p>
+          </div>
+        </article>
+      ) : null}
 
       {actionError ? (
         <p className="places-sheet-error" role="alert">
@@ -142,8 +164,8 @@ function PlaceDetailSheetContent({ place, isAdmin, onClose }: SheetProps) {
       ) : null}
 
       <div className="places-sheet-actions">
-        {posts && posts.length > 0 ? (
-          <a className="places-primary" href={posts[0].postUrl} target="_blank" rel="noreferrer">
+        {selectedPost ? (
+          <a className="places-primary" href={selectedPost.postUrl} target="_blank" rel="noreferrer">
             <ExternalLink size={14} aria-hidden="true" /> Voir le post
           </a>
         ) : null}

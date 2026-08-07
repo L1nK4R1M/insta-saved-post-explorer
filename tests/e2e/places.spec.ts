@@ -92,6 +92,23 @@ test.describe("page Places", () => {
     await expect(drawer).toBeHidden();
   });
 
+  test("n'affiche qu'un panneau entre la liste et les filtres", async ({ page }) => {
+    await page.getByRole("button", { name: /Liste/ }).click();
+    const drawer = page.getByRole("complementary", { name: "Liste des lieux" });
+    await expect(drawer).toBeVisible();
+
+    await page.getByRole("button", { name: "Filtres" }).click();
+
+    await expect(drawer).toBeHidden();
+    const filters = page.getByRole("dialog", { name: "Filtres" });
+    await expect(filters).toBeVisible();
+
+    await page.getByRole("button", { name: /Liste/ }).click();
+
+    await expect(filters).toBeHidden();
+    await expect(drawer).toBeVisible();
+  });
+
   test("reste navigable au clavier sans déborder horizontalement", async ({ page }) => {
     const search = page.getByRole("searchbox", { name: "Rechercher un lieu" });
     await search.focus();

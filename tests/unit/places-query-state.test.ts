@@ -193,6 +193,7 @@ describe("places filtering", () => {
 
   it("keeps rejected places off the map and list", () => {
     expect(isMappable(place({ reviewStatus: "REJECTED" }))).toBe(false);
+    expect(isMappable(place({ precision: "APPROXIMATE" }))).toBe(true);
     expect(isMappable(nobu)).toBe(true);
   });
 });

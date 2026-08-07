@@ -1,39 +1,29 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRef } from "react";
+import type { KeyboardEvent } from "react";
 import { Globe2, MapPin } from "lucide-react";
 
 import type { PlacesRendererProps } from "@/features/places/renderer-contract";
+import { WEBGL_FALLBACK_MESSAGE } from "@/lib/places/webgl";
 
 // What the shell has *resolved*, not what the URL asked for. `probing` is the
 // state where the user asked for the globe but the WebGL probe has not answered
-// yet — it renders a placeholder and, crucially, does not reference the globe
-// component at all, so the engine chunk is never requested on an unproven
-// capability (FR-I-12).
+// yet — it renders a placeholder and does not request the shared MapLibre chunk
+// until a real renderer can be mounted (FR-I-12).
 export type ResolvedPlacesView = "map" | "globe" | "probing";
 
-// The renderer seam. The shell keeps every piece of state — filters, search,
-// selection, panels, statistics, list and detail — and delegates only the canvas
-// to whichever renderer the current view asks for. Both renderers are lazy and
-// client-only, so a session that never opens the globe never downloads the 3D
-// engine (NFR-I-01), and removing a view means deleting one branch here plus its
-// component file (NFR-I-06).
+// The shell keeps every piece of state — filters, search, selection, panels,
+// statistics, list and detail — and delegates only the canvas to MapLibre. The
+// same component instance changes projection, so switching 2D ↔ globe does not
+// tear down the WebGL context or restart the data sources.
 
 const PlacesMap = dynamic(() => import("@/features/places/components/places-map"), {
   ssr: false,
   loading: () => <div className="places-map-canvas places-map-loading" aria-hidden="true" />,
 });
 
-// The 3D engine lives in its own chunk, requested only when this branch renders.
-const PlacesGlobe = dynamic(() => import("@/features/places/components/places-globe"), {
-  ssr: false,
-  loading: () => (
-    <div className="places-globe-canvas places-globe-loading" role="status">
-      <Globe2 aria-hidden="true" />
-      <span>Chargement du globe…</span>
-    </div>
-  ),
-});
 
 export type PlacesRendererShellProps = PlacesRendererProps & {
   view: ResolvedPlacesView;
@@ -43,6 +33,7 @@ export type PlacesRendererShellProps = PlacesRendererProps & {
   textureUrl: string;
   textureAttribution: string;
   reducedMotion: boolean;
+  webglAvailable: boolean | null;
 };
 
 export function PlacesRenderer({
@@ -53,31 +44,115 @@ export function PlacesRenderer({
   textureUrl,
   textureAttribution,
   reducedMotion,
+  webglAvailable,
   ...rendererProps
 }: PlacesRendererShellProps) {
-  // Nothing 3D is referenced on this branch — not even the dynamic wrapper —
-  // so no chunk request can escape while the capability is unproven.
-  if (view === "probing") return <GlobeProbing />;
+  if (webglAvailable === null) return <CapabilityProbing globe={view === "probing"} />;
+  if (webglAvailable === false) return <MapUnavailable />;
 
   if (view === "globe") {
     return (
-      <PlacesGlobe
+      <PlacesMap
         {...rendererProps}
+        tileUrl={tileUrl}
+        tileAttribution={tileAttribution}
+        projection="globe"
         textureUrl={textureUrl}
-        attribution={textureAttribution}
+        textureAttribution={textureAttribution}
         reducedMotion={reducedMotion}
       />
     );
   }
   if (!tilesConfigured) return <MapNotConfigured />;
-  return <PlacesMap {...rendererProps} tileUrl={tileUrl} tileAttribution={tileAttribution} />;
+  return (
+    <PlacesMap
+      {...rendererProps}
+      tileUrl={tileUrl}
+      tileAttribution={tileAttribution}
+      projection="mercator"
+      textureUrl={textureUrl}
+      textureAttribution={textureAttribution}
+      reducedMotion={reducedMotion}
+    />
+  );
 }
 
-function GlobeProbing() {
+export function PlacesMapA11yList({
+  places,
+  selectedId,
+  onSelect,
+}: Pick<PlacesRendererProps, "places" | "selectedId" | "onSelect">) {
+  const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const focusButton = (index: number) => buttonRefs.current[index]?.focus();
+  const handleGroupKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowRight" || event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      focusButton(0);
+    }
+  };
+  const handleButtonKeyDown = (index: number, event: KeyboardEvent<HTMLButtonElement>) => {
+    const nextIndex =
+      event.key === "ArrowDown" || event.key === "ArrowRight"
+        ? Math.min(index + 1, places.length - 1)
+        : event.key === "ArrowUp" || event.key === "ArrowLeft"
+          ? Math.max(index - 1, 0)
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? places.length - 1
+              : null;
+    if (nextIndex == null) return;
+    event.preventDefault();
+    focusButton(nextIndex);
+  };
+  if (places.length === 0) return null;
   return (
-    <div className="places-globe-canvas places-globe-loading" role="status" data-testid="places-globe-probing">
-      <Globe2 aria-hidden="true" />
-      <span>Préparation du globe…</span>
+    <div
+      className="places-map-a11y-list"
+      role="group"
+      aria-label="Lieux affichés sur la carte"
+      tabIndex={0}
+      onKeyDown={handleGroupKeyDown}
+    >
+      {places.map((place, index) => (
+        <button
+          key={place.id}
+          ref={(element) => {
+            buttonRefs.current[index] = element;
+          }}
+          type="button"
+          tabIndex={-1}
+          aria-label={`Sélectionner ${place.displayName}`}
+          aria-pressed={selectedId === place.id}
+          onKeyDown={(event) => handleButtonKeyDown(index, event)}
+          onClick={() => onSelect(place.id)}
+        >
+          {place.displayName}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CapabilityProbing({ globe }: { globe: boolean }) {
+  return (
+    <div
+      className={globe ? "places-globe-canvas places-globe-loading" : "places-map-canvas places-map-loading"}
+      role="status"
+      data-testid={globe ? "places-globe-probing" : "places-map-probing"}
+    >
+      {globe ? <Globe2 aria-hidden="true" /> : <MapPin aria-hidden="true" />}
+      <span>{globe ? "Préparation du globe…" : "Préparation de la carte…"}</span>
+    </div>
+  );
+}
+
+function MapUnavailable() {
+  return (
+    <div className="places-map-canvas places-map-missing" role="status" data-testid="places-map-unavailable">
+      <MapPin aria-hidden="true" />
+      <p>{WEBGL_FALLBACK_MESSAGE}</p>
     </div>
   );
 }
