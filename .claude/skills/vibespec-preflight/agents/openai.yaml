@@ -1,0 +1,3 @@
+interface:
+  display_name: "Preflight"
+  short_description: "Use when a request may change source code, tests, architecture, schemas, depe"

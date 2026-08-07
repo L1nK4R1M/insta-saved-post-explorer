@@ -174,7 +174,6 @@ Arrêter l’implémentation et documenter le blocage si :
 
 Ne pas improviser une nouvelle architecture pour contourner le blocage.
 
-<!-- BEGIN VIBESPEC CLOUD -->
 ## 10. Discipline de test
 
 Les tests protègent des risques, pas des statistiques. Une suite trop grosse coûte
@@ -206,15 +205,17 @@ Règles :
 Chaque pull request qui ajoute un fichier de test doit indiquer, en une ligne par
 fichier, pourquoi ce fichier est nécessaire et quel risque il couvre.
 
+<!-- BEGIN VIBESPEC CLOUD -->
 # VibeSpec Pro Cloud Bundle
 
 Use the repository-managed VibeSpec skills for software changes.
 
 Before implementation:
-1. Read `.vibespec/project.yaml` when present.
-2. Treat `.vibespec/bundle` as the active VibeSpec root.
-3. Route the change as Patch, Standard, or Critical.
-4. Load only the skills, profiles, and templates needed for the selected route.
+1. Run the `vibespec-preflight` skill before planning or editing. Stop when it reports a blocking code.
+2. Read `.vibespec/project.yaml` when present.
+3. Treat `.vibespec/bundle` as the active VibeSpec root.
+4. Route the change as Patch, Standard, or Critical.
+5. Load only the skills, profiles, and templates needed for the selected route.
 
 Never claim completion without fresh verification evidence. Never commit, push, deploy, migrate, or run destructive operations unless explicitly authorized. Repository-specific instructions outside this managed block override these defaults.
 <!-- END VIBESPEC CLOUD -->

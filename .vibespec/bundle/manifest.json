@@ -1,6 +1,6 @@
 {
   "name": "VibeSpec Pro Generic",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "schema_version": 3,
   "project_config_version": 1,
   "minimum_python": "3.10",
@@ -15,6 +15,7 @@
     "agents_bootstrap_max_words": 220,
     "frequent_skill_max_words": 220,
     "other_skill_max_words": 500,
+    "preflight_skill_max_words": 350,
     "frequent_skills": [
       "vibespec-routing-changes",
       "vibespec-implementing-changes",
@@ -22,7 +23,9 @@
       "vibespec-handing-off"
     ]
   },
+  "entrypoint_skill": "vibespec-preflight",
   "skills": [
+    "vibespec-preflight",
     "vibespec-routing-changes",
     "vibespec-discovering-codebases",
     "vibespec-clarifying-changes",
@@ -77,6 +80,15 @@
     "vibespec.cmd",
     "vibespec.sh",
     "vibespec_common.py",
+    "vibespec_json.py",
+    "vibespec_atomic.py",
+    "vibespec_git.py",
+    "project_status.py",
+    "project_registry.py",
+    "project_inspection.py",
+    "project_audit.py",
+    "evidence.py",
+    "drift.py",
     "install_global.ps1",
     "install_global.sh",
     "cloud_bundle.py",
@@ -84,5 +96,5 @@
     "bootstrap_github_repo.sh"
   ],
   "repository": "L1nK4R1M/vibespec-pro",
-  "release_tag": "v2.2.0"
+  "release_tag": "v2.3.0"
 }
