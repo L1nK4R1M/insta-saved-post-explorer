@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 28 July 2026
+Last updated: 7 August 2026 — `develop` at `78b3bbf`, `main` at `31b3e92`
 
 This file is the compact state ledger. Detailed scope, dependencies and exit gates remain authoritative in `CODEX_IMPLEMENTATION_ORDER.md` and `HANDOFF.md`.
 
@@ -35,9 +35,14 @@ Status values:
 | Places mobile usability correction | COMPLETE | Phases G and I complete | PR #49, squash `8dbfd46` | Mobile 2D/3D bounds, explicit return link, public configured-owner linked-post reads and 10 km city approximation are on Production. CI #149 and Vercel deployment `dpl_HHKuBeSYf5L9izLHqCfMsyxmCNMh` passed. Neon backup `br-curly-firefly-asy8hqti` was created and exactly 29 existing 25 km rows were transactionally changed to 10 km with unchanged aggregates. Live mobile linked-post smoke and runtime-error checks pass. |
 | Places address contract correction | IN_PROGRESS | Phase F2 complete | PR #52, squash `71106cc`; PR #54, squash `f98da30` | Strict candidate `address`, export schema v3, places-v2 identity and address-first Geoapify query are merged on develop. The authorized real dry-run returned amenity/rank 1/inner_part and scores EXACT at confidence 1 with radius null. CI #157 proves the 0.95 inner-part threshold, clean CLI exit, PostgreSQL automatic-primary supersession and confirmed-link preservation. Vercel develop deployment `dpl_GWMGkdvQptBCz1icJidE6zUJM8vL` is READY. No migration or data write; Production approval remains pending. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
-| I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | Historical Three.js implementation; T1–T10 merged and its real-GPU evidence remains recorded. The current working tree supersedes this runtime with the MapLibre follow-up below. |
-| I follow-up — MapLibre 2D + globe renderer | IN_PROGRESS | Historical Phase I | Unmerged working tree | Shared MapLibre canvas, native globe projection, GeoJSON clustering, WebGL2 gate and local Natural Earth fallback. First-render budget met locally; FPS budget remains open because system Chromium uses SwiftShader (35–38 fps desktop, 23–24 fps mobile viewport). |
+| I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | Historical Three.js implementation; T1–T10 merged and its real-GPU evidence remains recorded. Superseded on `develop` by the MapLibre follow-up below; still the runtime served by Production. |
+| I follow-up — MapLibre 2D + globe renderer | COMPLETE ON DEVELOP, D6 DEROGATED | Historical Phase I | PR #57, squash `78b3bbf` | Shared MapLibre canvas, native globe projection, GeoJSON clustering, WebGL2 gate and local Natural Earth fallback. Leaflet, `react-globe.gl` and Three.js dropped as runtime dependencies. Green under the standardized CI: lint, typecheck, 369 unit tests, build, browser tests, state guard. First-render budget met. **The D6 FPS budget is not measured on real hardware**; merged on an explicit owner derogation recorded in `HANDOFF.md` §7. Only SwiftShader figures exist (35–38 fps desktop, 23–24 fps mobile viewport) because the agent host has a paravirtualized virtio GPU with no hardware path under any Chromium flag combination. |
+| Places points-only map detail | COMPLETE | Phase G complete | Direct push `626aee5`, spec `007` | Exact points and post detail refinement; convergence `PASS`. Landed on `develop` without a pull request on 1 August 2026, contrary to `AGENTS.md` §8. Recorded, not reverted. |
+| Places panel coordination | COMPLETE | Phase G complete | Direct push `0a933a1`, spec `008` | Detail sheet and explorer panel coordination, post preview; convergence `PASS`. Same git-discipline deviation as above. |
+| VibeSpec cloud bundle 2.3.0 | COMPLETE | None | PR #58, squash `9e3a749` | Tooling-only. Repository test policy moved out of the managed block byte-for-byte — 1731 bytes, SHA-256 `1cb68d59…6459` identical before and after. Preflight skill added for Claude and Codex. No product code. |
+| CI standardization on `develop` | COMPLETE | PR #56 on `main` | PR #59, squash `439ec57` | Cherry-picks `4fb05e3`, `85a70f5`, `bb77f56`. `git diff main develop -- .github/ scripts/ci/ next-env.d.ts` is now empty. A full back-merge was attempted and rejected — merge base `67e3c1b` makes Production squashes look like new work and would have reverted the address contract. |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
+| Places v5 international addresses | BLOCKED | Phase H activation | Spec `006`, convergence `PENDING` | Contract drafted only; zero implementation, model call or data write. The v4 mechanical extractor emits no candidate for street-then-number addresses such as `Rue de Trèves 74, 1040 Bruxelles`. Needs an OpenAI key, an owner-approved spend cap and an explicit caption-egress authorization. |
 
 ## Current execution pointer
 
@@ -48,13 +53,26 @@ Current state
 - Phase I design is APPROVED and merged (PR #35, squash 3fef818); the ADR is ACCEPTED.
 - Phase I implementation is CLOSED and COMPLETE after PR #36, squash merge
   08be9f04df60c9d8e138242fc0d7b0504e0ba51e.
-- The unmerged MapLibre follow-up supersedes the historical Phase I runtime; it is
-  not merged and its FPS D6 gate remains open pending a real-GPU run.
+- The MapLibre follow-up is MERGED on develop (PR #57, squash 78b3bbf) and
+  supersedes the historical Phase I runtime. Its FPS D6 gate is NOT satisfied; it
+  was derogated by explicit owner decision on 7 August 2026 and stays open.
 - Global test suite consolidation is CLOSED and COMPLETE after PR #38, squash merge
   fc019a410603f491adae253f1466e67e0e30f88e.
 - CI #121 passed on reviewed head 60e228e7112b12ffaff9330b4ff2337206b7686a.
-- Current test baseline: 54 unit files / 448 tests; 46 E2E scenarios / 46 executions
-  (45 desktop + 1 mobile). Critical database and security suites remain intact.
+- Current test baseline, measured on develop at 78b3bbf on 7 August 2026:
+  60 unit files, 369 passed + 132 environment-bound skips; 47 E2E scenarios in
+  6 files. The 25 July figures (54 files / 448 tests, 46 scenarios) describe the
+  consolidation and are no longer the current count: the renderer migration
+  swapped the Three.js globe suites for MapLibre ones. Critical database and
+  security suites remain intact.
+- VibeSpec cloud bundle migrated to 2.3.0 (PR #58, squash 9e3a749), tooling only.
+- CI standardization brought down to develop (PR #59, squash 439ec57). Both
+  branches now validate with byte-identical CI. Do NOT back-merge main into
+  develop: merge base 67e3c1b makes Production squashes read as new work and the
+  trial merge would have reverted the address contract test suites.
+- Two commits reached develop directly without a pull request on 1 August 2026
+  (626aee5, 0a933a1). CI-green with converged specs 007 and 008; recorded as a
+  process deviation, not reverted.
 - Phase E PR #39 is promoted to Production. Its additive queue migration is
   recorded on Neon `main`; VPS operational activation remains pending.
 - PR #47 and the documentation follow-up PR #48 are merged on `main` at 44b0da0; the corresponding Vercel Production
@@ -82,8 +100,13 @@ Current state
 - Phase H and Phase J remain blocked.
 
 Reference develop implementation
-`71106cc75ab16c5746c452f9332ef30df51557ca`, including PR #52 and the 4.2.6
-DB-first synchronization correction.
+`78b3bbf98f5037ee3c155c635ec56d68b8005252`, including PR #52, PR #54, specs 007
+and 008, PR #58, PR #59, PR #57 and the 4.2.6 DB-first synchronization
+correction.
+
+Reference production base
+`31b3e92`, including PR #56. Production still serves the Three.js and Leaflet
+renderer; the MapLibre migration is on develop only.
 
 Recorded proof for Phase I
 - PR #36 reviewed twice and squash-merged after the WebGL lazy-load defect was fixed.
@@ -105,19 +128,35 @@ Recorded proof for global test consolidation
 
 ## Next agent action
 
-1. Treat Phase I and the global test consolidation as merged and complete.
-2. Use the consolidated baseline for future PRs; do not reintroduce duplicate desktop/mobile E2E executions without a real device-specific behavior.
-3. Phase I performance is validated on real hardware and needs no further measurement; re-run `npm run places:measure-globe` only if the globe scene or engine version changes.
-4. Reload extension 4.2.6 from `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`
+1. Configure `DATABASE_URL` and `GEOAPIFY_API_KEY`. The repository has no `.env`,
+   only `.env.example`, so the Places dry-run cannot run.
+2. Re-run the read-only hungryconsti dry-run from merged develop at `78b3bbf`,
+   then promote develop to main as a reviewed pull request. The merge is a
+   Production deployment and needs owner authorization at that moment.
+3. Close the MapLibre D6 FPS derogation on a machine with a real GPU: local
+   throwaway PostgreSQL, build with `NEXT_PUBLIC_PLACES_BENCHMARK=1`, then
+   `npm run places:measure-globe`. The Phase I RTX 5090 evidence validated the
+   Three.js runtime and does not transfer to MapLibre.
+4. Use the consolidated baseline for future PRs; do not reintroduce duplicate desktop/mobile E2E executions without a real device-specific behavior.
+5. Reload extension 4.2.6 from `C:\tmp\insta-saved-sync-v4.2.6-db-first.zip`
    in the existing Chrome extension directory and run
    the documented stable develop Preview smoke.
-5. Phase H remains blocked until Phase E VPS operational activation is separately authorized.
-6. Keep Phase E activation, H and J in separate changes; do not mix worker operations, deep analysis, Hermes or MCP work.
+6. Phase H remains blocked until Phase E VPS operational activation is separately authorized.
+7. Spec `006` (Places v5 international addresses) remains blocked until an OpenAI
+   key, an approved spend cap and an explicit caption-egress authorization exist.
+8. Keep Phase E activation, H and J in separate changes; do not mix worker operations, deep analysis, Hermes or MCP work.
+9. Branch and open a pull request for every change; never push to develop directly.
 
-## Unmerged follow-up — MapLibre 2D + globe renderer
+## MapLibre 2D + globe renderer — merged on develop
 
-This working-tree change supersedes the historical Phase G Leaflet and Phase I
-Three.js renderers in `src/features/places/components/places-map.tsx`. It is
-intentionally not marked as a merged phase or PR result here; see the dedicated
-change record and review before updating the historical status rows. The first
-render budget passes locally; FPS remains open pending real-GPU validation.
+PR #57, squash `78b3bbf`, merged 7 August 2026. It supersedes the historical
+Phase G Leaflet and Phase I Three.js renderers in
+`src/features/places/components/places-map.tsx`. The historical Phase G and
+Phase I status rows are deliberately left intact: they record the runtime that
+was shipped and validated at the time, and Production still serves it.
+
+The first-render budget passes. The D6 FPS budget does not: it was derogated,
+not met. `HANDOFF.md` §7 holds the full record — what is proven, what is not,
+why no better measurement exists in the agent environment, and the exact
+procedure to close it. Change record:
+`docs/changes/2026-08-03-maplibre-2d-renderer.md`.

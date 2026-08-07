@@ -1,6 +1,12 @@
 # MapLibre Places renderer — 2D and globe projection
 
-Status: unmerged working-tree follow-up to historical Phase G.
+Status: merged on `develop` through PR #57, squash `78b3bbf`, 7 August 2026.
+
+Merged with the D6 FPS budget **derogated, not satisfied**, on an explicit owner
+decision. The measurement below remains the only one that exists, and it is
+software-rasterized. A real-GPU run is still required; see `HANDOFF.md` §7 for the
+procedure and the accepted risk. Production is unaffected until the promotion to
+`main` is performed.
 
 ## Scope
 
