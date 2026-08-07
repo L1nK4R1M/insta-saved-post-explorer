@@ -559,12 +559,10 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 
 /* ---------------------------------------------------------------------------
    Places (Phase G) — 2D map, filters, list and detail.
-   Leaflet's own stylesheets are imported here so the map renders correctly;
+   MapLibre's own stylesheets provide the controls and attribution layout;
    everything else reuses the application design tokens.
 --------------------------------------------------------------------------- */
-@import "leaflet/dist/leaflet.css";
-@import "leaflet.markercluster/dist/MarkerCluster.css";
-@import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 .places-page { display: flex; flex-direction: column; min-height: 100dvh; }
 .places-page-head { padding: 16px 20px 10px; }
@@ -580,23 +578,25 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
   border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface-subtle);
 }
 .places-map-canvas { position: absolute; inset: 0; z-index: 0; background: #e8eaed; }
-.places-map-canvas .leaflet-tile-pane { filter: saturate(.72) contrast(.96) brightness(1.04); }
-.places-map-canvas .leaflet-control-zoom { border: 0; box-shadow: 0 2px 10px rgb(60 64 67 / 22%); }
-.places-map-canvas .leaflet-control-zoom a { color: #3c4043; border-color: #e8eaed; }
+.places-map-canvas .maplibregl-canvas-container {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+}
+.places-map-canvas .maplibregl-ctrl-group { border: 0; box-shadow: 0 2px 10px rgb(60 64 67 / 22%); }
+.places-map-canvas .maplibregl-ctrl-group button { color: #3c4043; }
+.places-map-canvas .maplibregl-ctrl-attrib { font-size: 10px; }
 .places-map-loading, .places-map-missing { display: grid; place-items: center; background: var(--surface-subtle); color: var(--muted); }
 .places-map-missing { padding: 24px; text-align: center; gap: 10px; font-size: .85rem; }
 .places-map-missing code { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; }
-
-/* Marker pins */
-.places-pin-wrapper { background: none; border: 0; }
-.places-pin {
-  display: grid; place-items: center; width: 26px; height: 26px;
-  border-radius: 50% 50% 50% 2px; transform: rotate(45deg);
-  background: var(--pin-color, var(--accent)); border: 2.5px solid var(--surface);
-  box-shadow: 0 2px 8px rgb(0 0 0 / .28);
+.places-map-a11y-list {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.places-pin > span { transform: rotate(-45deg); font-size: 12px; line-height: 1; }
-.places-pin.is-selected { outline: 3px solid var(--accent); outline-offset: 2px; }
+.places-map-a11y-list:focus-within {
+  top: 10px; left: 10px; z-index: 401; width: calc(100% - 20px); height: auto; max-height: calc(100% - 20px);
+  margin: 0; padding: 8px; overflow: auto; clip: auto; white-space: normal; display: flex; flex-wrap: wrap; gap: 6px;
+  border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow);
+}
+.places-map-a11y-list button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Hover callout with arrow */
 .places-callout {
@@ -776,16 +776,6 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
 .places-segment:disabled { opacity: .45; cursor: not-allowed; }
 .places-segment:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* WebGL fallback notice: explains the downgrade instead of silently showing 2D. */
-.places-webgl-notice {
-  position: absolute; z-index: 401; top: 66px; left: 50%; transform: translateX(-50%);
-  width: min(540px, calc(100% - 28px)); margin: 0;
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 13px; border-radius: 14px; border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(10px);
-  box-shadow: var(--shadow); font-size: .78rem; color: var(--text);
-}
-
 @media (max-width: 640px) {
   .places-topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
   .places-search { grid-column: 1 / -1; }
@@ -794,7 +784,6 @@ select { min-height: 38px; border-radius: 9px; color: var(--text); padding: 0 30
   .places-segmented { padding: 2px; }
   .places-segment { padding: 6px 9px; font-size: .74rem; }
   .places-panel { top: 104px; }
-  .places-webgl-notice { top: 104px; font-size: .74rem; }
 }
 
 /* Reduced motion: the halo and the globe stay, nothing keeps moving. */

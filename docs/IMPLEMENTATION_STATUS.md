@@ -35,7 +35,8 @@ Status values:
 | Places mobile usability correction | COMPLETE | Phases G and I complete | PR #49, squash `8dbfd46` | Mobile 2D/3D bounds, explicit return link, public configured-owner linked-post reads and 10 km city approximation are on Production. CI #149 and Vercel deployment `dpl_HHKuBeSYf5L9izLHqCfMsyxmCNMh` passed. Neon backup `br-curly-firefly-asy8hqti` was created and exactly 29 existing 25 km rows were transactionally changed to 10 km with unchanged aggregates. Live mobile linked-post smoke and runtime-error checks pass. |
 | Places address contract correction | IN_PROGRESS | Phase F2 complete | PR #52, squash `71106cc`; PR #54, squash `f98da30` | Strict candidate `address`, export schema v3, places-v2 identity and address-first Geoapify query are merged on develop. The authorized real dry-run returned amenity/rank 1/inner_part and scores EXACT at confidence 1 with radius null. CI #157 proves the 0.95 inner-part threshold, clean CLI exit, PostgreSQL automatic-primary supersession and confirmed-link preservation. Vercel develop deployment `dpl_GWMGkdvQptBCz1icJidE6zUJM8vL` is READY. No migration or data write; Production approval remains pending. |
 | H — Deep Places analysis | BLOCKED | Phases C and E, stable F | None | FFmpeg, OCR, transcription, multimodal escalation and measured pilot. |
-| I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | T1–T10 merged: additive `view=map|globe`, pure projection module, renderer seam, WebGL probe and fallback, lazy `react-globe.gl` 2.38.0 / `three` 0.185.1, public-domain Natural Earth texture generated locally with documented licence, segmented `2D | 3D` control, shared filters/search/selection/list/statistics/detail, client aggregation, reduced motion and keyboard paths. CI #115 green; no migration, no API change, Leaflet preserved. Measured: `/places` initial 2D JS +4.2 KiB (+1.08 %), 3D chunk absent from the 2D entry; first globe render 907–1033 ms on the GPU-less CI baseline. **Performance validated on real GPU** (`FPS_BUDGET_VALIDATED_ON_REAL_GPU`, 25 July 2026): NVIDIA GeForce RTX 5090, 240 fps and 276-326 ms first render at 100/500/1000 places, desktop and mobile viewport — all D6 budgets met. No Phase I follow-up remains open. |
+| I — Places 3D globe | COMPLETE | Phase G complete, design approved | PR #36, squash `08be9f0` | Historical Three.js implementation; T1–T10 merged and its real-GPU evidence remains recorded. The current working tree supersedes this runtime with the MapLibre follow-up below. |
+| I follow-up — MapLibre 2D + globe renderer | IN_PROGRESS | Historical Phase I | Unmerged working tree | Shared MapLibre canvas, native globe projection, GeoJSON clustering, WebGL2 gate and local Natural Earth fallback. First-render budget met locally; FPS budget remains open because system Chromium uses SwiftShader (35–38 fps desktop, 23–24 fps mobile viewport). |
 | J — Unified MCP and Hermes | BLOCKED | Phase D; complete F for Places tools | None | One MCP server, shared API client and confirmations for sensitive commands. |
 
 ## Current execution pointer
@@ -47,6 +48,8 @@ Current state
 - Phase I design is APPROVED and merged (PR #35, squash 3fef818); the ADR is ACCEPTED.
 - Phase I implementation is CLOSED and COMPLETE after PR #36, squash merge
   08be9f04df60c9d8e138242fc0d7b0504e0ba51e.
+- The unmerged MapLibre follow-up supersedes the historical Phase I runtime; it is
+  not merged and its FPS D6 gate remains open pending a real-GPU run.
 - Global test suite consolidation is CLOSED and COMPLETE after PR #38, squash merge
   fc019a410603f491adae253f1466e67e0e30f88e.
 - CI #121 passed on reviewed head 60e228e7112b12ffaff9330b4ff2337206b7686a.
@@ -110,3 +113,11 @@ Recorded proof for global test consolidation
    the documented stable develop Preview smoke.
 5. Phase H remains blocked until Phase E VPS operational activation is separately authorized.
 6. Keep Phase E activation, H and J in separate changes; do not mix worker operations, deep analysis, Hermes or MCP work.
+
+## Unmerged follow-up — MapLibre 2D + globe renderer
+
+This working-tree change supersedes the historical Phase G Leaflet and Phase I
+Three.js renderers in `src/features/places/components/places-map.tsx`. It is
+intentionally not marked as a merged phase or PR result here; see the dedicated
+change record and review before updating the historical status rows. The first
+render budget passes locally; FPS remains open pending real-GPU validation.
