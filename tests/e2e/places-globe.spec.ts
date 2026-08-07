@@ -133,6 +133,47 @@ test.describe("page Places — vue 3D", () => {
     await expect(page.getByRole("complementary", { name: "Liste des lieux" })).toBeVisible();
   });
 
+  // Regression guard for the blank-map defect: MapLibre 6 locates its worker from
+  // `import.meta.url`, which Turbopack does not expose as an http(s) URL inside the
+  // bundled chunk. MapLibre then falls back to an empty string and builds
+  // `new Worker("")`, which does not throw — the worker loads the HTML document,
+  // dies on the parse error, and every GeoJSON source stays unloaded. The map kept
+  // drawing its raster tiles and nothing else, with no console error.
+  //
+  // This asserts the observable defect rather than the pixels, so it holds in the
+  // database-less e2e environment where there is no place to draw: the source is
+  // still created, and it only finishes loading when the worker is alive.
+  test("démarre le worker MapLibre depuis une URL servie, sans quoi aucune source ne charge", async ({ page }) => {
+    await page.addInitScript(() => {
+      const RealWorker = window.Worker;
+      (window as unknown as { __workerUrls: string[] }).__workerUrls = [];
+      class TrackedWorker extends RealWorker {
+        constructor(url: string | URL, options?: WorkerOptions) {
+          (window as unknown as { __workerUrls: string[] }).__workerUrls.push(String(url));
+          super(url, options);
+        }
+      }
+      window.Worker = TrackedWorker as unknown as typeof Worker;
+    });
+
+    // The globe view is used because it mounts MapLibre without a tile provider,
+    // which the database-less e2e environment does not configure.
+    await page.goto("/places?view=globe");
+    await expect(page.locator(".places-globe-canvas canvas")).toBeVisible();
+
+    // The worker asset must actually be served; a missing sync leaves a 404 here.
+    const workerAsset = await page.request.get("/maplibre/maplibre-gl-worker.mjs");
+    expect(workerAsset.status()).toBe(200);
+
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __workerUrls: string[] }).__workerUrls))
+      .toContainEqual(expect.stringContaining("/maplibre/maplibre-gl-worker.mjs"));
+
+    // The empty string is the exact failure mode, so it is named explicitly.
+    const urls = await page.evaluate(() => (window as unknown as { __workerUrls: string[] }).__workerUrls);
+    expect(urls).not.toContain("");
+  });
+
   test("reste utilisable au clavier et ne déborde pas", async ({ page }) => {
     await page.goto("/places");
     await page.getByRole("button", { name: "Filtres" }).focus();
