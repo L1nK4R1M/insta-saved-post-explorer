@@ -56,12 +56,15 @@ export default async function PlacesPage({ searchParams }: PageProps) {
   const initialState = parsePlacesUrlState(toSearchParams(params));
   const ownerId = getConfiguredOwnerId();
   const session = await getSession().catch(() => null);
+  const emptyView: Awaited<ReturnType<typeof loadPlacesMapView>> = { items: [], truncated: false };
 
   // Without a configured database the page still renders: an empty map, empty
   // statistics and working controls, instead of crashing.
   const [view, stats] = databaseConfigured
-    ? await Promise.all([loadPlacesMapView(ownerId), getPlacesStats({}, ownerId)])
-    : [{ items: [], truncated: false }, EMPTY_PLACES_STATS];
+    ? await Promise.all([loadPlacesMapView(ownerId), getPlacesStats({}, ownerId)]).catch(
+        (): [typeof emptyView, PlacesStatsDto] => [emptyView, EMPTY_PLACES_STATS],
+      )
+    : [emptyView, EMPTY_PLACES_STATS];
 
   // Map tiles are a public, client-side resource: the key is a NEXT_PUBLIC_ tile
   // URL, never the server-only geocoding key. Attribution is mandatory.

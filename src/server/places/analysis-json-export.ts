@@ -18,7 +18,7 @@ import { MAX_CANDIDATES_PER_POST } from "@/lib/places/candidates";
 import type { CaptionBatchRecord } from "@/server/places/caption-batch";
 
 export const PLACES_ANALYSIS_INPUT_SCHEMA_VERSION =
-  "places-caption-analysis-input-v2" as const;
+  "places-caption-analysis-input-v3" as const;
 export const DEFAULT_ANALYSIS_JSON_OUTPUT =
   ".tmp/places/places-analysis-input.json";
 export const MAX_ANALYSIS_EXPORT_RECORDS = 10_000;
@@ -96,6 +96,23 @@ const candidateOutputContractSchema = z
       z.literal("post_id"),
       z.literal("input_hash"),
       z.literal("analysis_version"),
+    ]),
+    required_candidate_fields: z.tuple([
+      z.literal("name"),
+      z.literal("address"),
+      z.literal("city"),
+      z.literal("region"),
+      z.literal("country"),
+      z.literal("category"),
+      z.literal("confidence"),
+      z.literal("evidence"),
+    ]),
+    nullable_candidate_fields: z.tuple([
+      z.literal("name"),
+      z.literal("address"),
+      z.literal("city"),
+      z.literal("region"),
+      z.literal("country"),
     ]),
   })
   .strict();
@@ -209,6 +226,23 @@ export function buildPlacesAnalysisInput(
         "post_id",
         "input_hash",
         "analysis_version",
+      ],
+      required_candidate_fields: [
+        "name",
+        "address",
+        "city",
+        "region",
+        "country",
+        "category",
+        "confidence",
+        "evidence",
+      ],
+      nullable_candidate_fields: [
+        "name",
+        "address",
+        "city",
+        "region",
+        "country",
       ],
     },
     records: records.map((record) => ({

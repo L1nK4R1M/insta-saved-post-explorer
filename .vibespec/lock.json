@@ -5,6 +5,7 @@
     "claude"
   ],
   "distribution": "cloud-bundle",
+  "entrypoint_skill": "vibespec-preflight",
   "files": {
     ".agents/skills/vibespec-clarifying-changes/SKILL.md": "41d1e05a33cfac2c41f1bd9a0f7460fc4c79b093257bb8d2da228afa314d69f3",
     ".agents/skills/vibespec-clarifying-changes/agents/openai.yaml": "d02ece3d6d58f974e3572e52e6a06c5c9954f2a589bb1ec97c694f417c85fb46",
@@ -26,6 +27,8 @@
     ".agents/skills/vibespec-implementing-changes/agents/openai.yaml": "dc1ea7bd8e960bbc2ed37fe6293defbf6a47697d80281d0e8628646ba0d7bdd8",
     ".agents/skills/vibespec-modeling-domains/SKILL.md": "3971b9704e2ecc39d25d04eb92239cd4f839b3b4eeb0aa61bd69f646196d6c5d",
     ".agents/skills/vibespec-modeling-domains/agents/openai.yaml": "ec15c30b321eed0ce748062c4aded7b6acb9c79c6c1e6cd3da3a5889798638cc",
+    ".agents/skills/vibespec-preflight/SKILL.md": "bef59d50cd316d082b9d450f9bac03f7f7dc0f5eb02e93366f42237188f38f6b",
+    ".agents/skills/vibespec-preflight/agents/openai.yaml": "58f053b5cbd4cf4c5c31fc8346431280d6ee99556f7be2195b3401d5c78be7cf",
     ".agents/skills/vibespec-reviewing-changes/SKILL.md": "f67024fddb963cd559439032a8ce83e523efc6702da395c53ba649297238184f",
     ".agents/skills/vibespec-reviewing-changes/agents/openai.yaml": "de5f697cf01718d4e780aecab17057c1372a145122cfc55bae47ef8da63f40e2",
     ".agents/skills/vibespec-routing-changes/SKILL.md": "f4f7e4bcc5281336747fe9883c440d02d09f5ffd565e7257227cbe403795d448",
@@ -54,6 +57,8 @@
     ".claude/skills/vibespec-implementing-changes/agents/openai.yaml": "dc1ea7bd8e960bbc2ed37fe6293defbf6a47697d80281d0e8628646ba0d7bdd8",
     ".claude/skills/vibespec-modeling-domains/SKILL.md": "3971b9704e2ecc39d25d04eb92239cd4f839b3b4eeb0aa61bd69f646196d6c5d",
     ".claude/skills/vibespec-modeling-domains/agents/openai.yaml": "ec15c30b321eed0ce748062c4aded7b6acb9c79c6c1e6cd3da3a5889798638cc",
+    ".claude/skills/vibespec-preflight/SKILL.md": "bef59d50cd316d082b9d450f9bac03f7f7dc0f5eb02e93366f42237188f38f6b",
+    ".claude/skills/vibespec-preflight/agents/openai.yaml": "58f053b5cbd4cf4c5c31fc8346431280d6ee99556f7be2195b3401d5c78be7cf",
     ".claude/skills/vibespec-reviewing-changes/SKILL.md": "f67024fddb963cd559439032a8ce83e523efc6702da395c53ba649297238184f",
     ".claude/skills/vibespec-reviewing-changes/agents/openai.yaml": "de5f697cf01718d4e780aecab17057c1372a145122cfc55bae47ef8da63f40e2",
     ".claude/skills/vibespec-routing-changes/SKILL.md": "f4f7e4bcc5281336747fe9883c440d02d09f5ffd565e7257227cbe403795d448",
@@ -69,7 +74,7 @@
     ".vibespec/bundle/core/quality-gates.md": "964e111f67f45c98620de4a554d2821c355fc28afbb7d578f28e46bae22ae998",
     ".vibespec/bundle/core/safety-policy.md": "34d34e07859920c3a941584cb78a0160d03800160c1ced9e31b86e10245fbb1c",
     ".vibespec/bundle/core/workflow.md": "92b5ece79baf98054a4cde6d69ea66b2fc66295b9b3ce8a543bb94cf68f47546",
-    ".vibespec/bundle/manifest.json": "5f1b10ec13a4a51e631e78fc0475f38bcdd4a5343432abdb53aa01276190a588",
+    ".vibespec/bundle/manifest.json": "8974e874f49466ef6fd3db796c07684f54c19ab803c55f62899e00ef213917a1",
     ".vibespec/bundle/profiles/backend-api.md": "9dac71c2a949c7e61a023fb7e9f7b50dcec65596d6acf03e2c89b88b94949d6c",
     ".vibespec/bundle/profiles/web-app.md": "8da58b7544cd44c57681b8fb5586fcad2d0b8eb65c6343035acc96e48c69cdad",
     ".vibespec/bundle/templates/adr.md": "5bde8a2fe76853ce8c067173c2b77775da46e5a5abd40516e981534c66db7b2d",
@@ -84,14 +89,23 @@
     ".vibespec/bundle/templates/task.md": "77665d11d9a0373021366c2b7757361beef9d322a1e6e81e6f91718570cd1fbd",
     ".vibespec/bundle/templates/traceability-matrix.md": "bb3adaa6f44196f45e415e1073dea7afb74958a2f1d47d98d873e5f3bf5a3412",
     ".vibespec/bundle/templates/verification-report.md": "d44ad08c63bcf38b15f175c2649d8982140e8d7e9a5720cb5f66c6494ee9eb8d",
-    ".vibespec/bundle/tools/start_change.py": "88bc2027a65ca46522929cec95f495d70456c85dd40c698a11ec86abdf08b033",
+    ".vibespec/bundle/tools/cloud_bundle.py": "6c53dd1eed4d6b0935c986232db0ad88ebbb0b432250ac4ab6232d41aad2424d",
+    ".vibespec/bundle/tools/drift.py": "5e05d72c2b46bd67948b5dbf8f1a3ad1228ed271a46d01bced77090d5e7901d4",
+    ".vibespec/bundle/tools/evidence.py": "602bfd5d74fe9e72a297734a41c607ce72ac72599b114556bc46fa6cc4573597",
+    ".vibespec/bundle/tools/init_project.py": "095de3b05c45794928ed460ffb4bdd663420a121ecc73b7e1e97d1471463e563",
+    ".vibespec/bundle/tools/project_status.py": "4915af6b2d661b1bcf5e6cd7e0708dce9c61202f3745636e65b9f1f0c1839eca",
+    ".vibespec/bundle/tools/skills.py": "fb5dee1cad44f364bd5815658b2c5c4096f0eed15afcfd13ce7f1cb38bf0a359",
+    ".vibespec/bundle/tools/start_change.py": "d3c4ebc149e5b32caef6fec69654cedc3b86f30e752623e95cf204c96db77210",
     ".vibespec/bundle/tools/validate_installation.py": "c89aa50a6cfd28e18c3291290ca7e94c145f80e4bb86df41f4a3aed7da4a9038",
-    ".vibespec/bundle/tools/vibespec_common.py": "51c0b73d57ddbc9b7e62b2a00de2ebc4e08ef8f5e7b5ed5897a68a480844fac9"
+    ".vibespec/bundle/tools/vibespec_atomic.py": "34a5e53292da8b6d30fbdd4fbd0daf3c53569aa4e0174a924919a28e5ab014d3",
+    ".vibespec/bundle/tools/vibespec_common.py": "dcb28f13af323172ef787e88042a9454fe94cb33934a203ea3298cbc8fc13007",
+    ".vibespec/bundle/tools/vibespec_git.py": "95dfc64937f1596c94101e551d1827e387aef1ba30e28ad93893bc2a6a8ccb5d",
+    ".vibespec/bundle/tools/vibespec_json.py": "4647dc72fb809e1984f8171ec97441f8ab908e8a21466ea6a87de9b65d88ec5b"
   },
-  "generated_at": "2026-07-24T12:21:02.733457+00:00",
+  "generated_at": "2026-08-02T02:14:12.898886+00:00",
   "instruction_blocks": {
-    "AGENTS.md": "f3a3635fa42668c953d2e6120dfc8206c2b0dff216862c0aae419b4193a82f0d",
-    "CLAUDE.md": "f3a3635fa42668c953d2e6120dfc8206c2b0dff216862c0aae419b4193a82f0d"
+    "AGENTS.md": "db98b8b60a9fef64f20c3d0684a119ed3c27a5c54ae2f09fb3cdf2c032475dd7",
+    "CLAUDE.md": "28a41b671c9b4dc4501fbe55070c0494b472905a37af3f21fee16023ea347c54"
   },
   "instruction_files": [
     "AGENTS.md",
@@ -101,6 +115,7 @@
     "web-app",
     "backend-api"
   ],
+  "project_config": ".vibespec/project.yaml",
   "schema_version": 1,
-  "vibespec_version": "2.2.0"
+  "vibespec_version": "2.3.0"
 }

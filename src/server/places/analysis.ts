@@ -162,6 +162,12 @@ export type PersistMetadataAnalysisInput = {
   plans: CandidatePlan[];
 };
 
+type PersistedLink = {
+  placeId: string;
+  confidence: number;
+  precision: "EXACT" | "PROBABLE" | "APPROXIMATE";
+};
+
 // The single atomic domain transaction. Any thrown error rolls back every write.
 export async function persistMetadataAnalysis(
   tx: TxClient,
@@ -174,7 +180,7 @@ export async function persistMetadataAnalysis(
   });
 
   const persistedPlaceIds = new Set<string>();
-  const persistedLinks: Array<{ placeId: string; confidence: number }> = [];
+  const persistedLinks: PersistedLink[] = [];
   let evidencePersisted = 0;
 
   for (const plan of plans) {
@@ -190,11 +196,17 @@ export async function persistMetadataAnalysis(
     }
 
     const { resolved, scored } = plan.best;
-    const place = await upsertCanonicalPlace(tx, { ownerId, resolved, scored });
+    const place = await upsertCanonicalPlace(tx, { ownerId, postId, resolved, scored });
     persistedPlaceIds.add(place.id);
 
     const link = await upsertPostPlace(tx, { ownerId, postId, placeId: place.id, jobId, scored });
-    if (link) persistedLinks.push({ placeId: place.id, confidence: scored.confidence });
+    if (link) {
+      persistedLinks.push({
+        placeId: place.id,
+        confidence: scored.confidence,
+        precision: scored.precision as "EXACT" | "PROBABLE" | "APPROXIMATE",
+      });
+    }
 
     evidencePersisted += await insertCandidateEvidence(tx, {
       ownerId,
@@ -206,6 +218,7 @@ export async function persistMetadataAnalysis(
     evidencePersisted += await insertProviderEvidence(tx, { ownerId, postId, placeId: place.id, jobId, resolved, scored });
   }
 
+  await supersedeAutomaticApproximatePrimary(tx, { ownerId, postId, persistedLinks });
   await assignPrimaryLink(tx, { ownerId, postId, persistedLinks });
 
   const resolvedCount = plans.filter((plan) => plan.best).length;
@@ -242,20 +255,26 @@ export async function persistMetadataAnalysis(
 
 async function upsertCanonicalPlace(
   tx: TxClient,
-  { ownerId, resolved, scored }: { ownerId: string; resolved: ResolvedPlaceCandidate; scored: ScoredResolution },
+  { ownerId, postId, resolved, scored }: { ownerId: string; postId: string; resolved: ResolvedPlaceCandidate; scored: ScoredResolution },
 ) {
+  const precision = scored.precision as "EXACT" | "PROBABLE" | "APPROXIMATE";
+  // Exact/provider-verified places remain canonical. An approximate area is an
+  // uncertainty envelope for one post, never a shared canonical destination.
+  const providerPlaceId =
+    precision === "APPROXIMATE"
+      ? `${resolved.providerPlaceId}:post:${postId}`
+      : resolved.providerPlaceId;
   const existing = await tx.place.findUnique({
     where: {
       ownerId_provider_providerPlaceId: {
         ownerId,
         provider: resolved.provider,
-        providerPlaceId: resolved.providerPlaceId,
+        providerPlaceId,
       },
     },
   });
 
   // scored.precision is never UNKNOWN here (UNKNOWN plans have best === null).
-  const precision = scored.precision as "EXACT" | "PROBABLE" | "APPROXIMATE";
   const descriptive = {
     displayName: resolved.displayName,
     normalizedName: foldForSearch(resolved.displayName),
@@ -273,8 +292,10 @@ async function upsertCanonicalPlace(
     approximationRadiusMeters: scored.approximationRadiusMeters,
     metadata: {
       provider: resolved.provider,
+      sourceProviderPlaceId: resolved.providerPlaceId,
       providerResultType: resolved.providerResultType,
       providerRank: resolved.providerRank,
+      providerMatchType: resolved.providerMatchType,
       attribution: resolved.attribution,
     } satisfies Prisma.InputJsonValue,
   };
@@ -284,7 +305,7 @@ async function upsertCanonicalPlace(
       data: {
         ownerId,
         provider: resolved.provider,
-        providerPlaceId: resolved.providerPlaceId,
+        providerPlaceId,
         reviewStatus: "UNREVIEWED",
         isUserConfirmed: false,
         ...descriptive,
@@ -333,11 +354,45 @@ async function upsertPostPlace(
   });
 }
 
+async function supersedeAutomaticApproximatePrimary(
+  tx: TxClient,
+  {
+    ownerId,
+    postId,
+    persistedLinks,
+  }: {
+    ownerId: string;
+    postId: string;
+    persistedLinks: PersistedLink[];
+  },
+): Promise<void> {
+  if (!persistedLinks.some((link) => link.precision === "EXACT")) return;
+
+  await tx.postPlace.deleteMany({
+    where: {
+      ownerId,
+      postId,
+      isPrimary: true,
+      isUserConfirmed: false,
+      precision: "APPROXIMATE",
+      placeId: { notIn: persistedLinks.map((link) => link.placeId) },
+    },
+  });
+}
+
 // Assign exactly one primary link per post (design D5, enforced by a partial
 // unique index). A user-confirmed primary is never displaced.
 async function assignPrimaryLink(
   tx: TxClient,
-  { ownerId, postId, persistedLinks }: { ownerId: string; postId: string; persistedLinks: Array<{ placeId: string; confidence: number }> },
+  {
+    ownerId,
+    postId,
+    persistedLinks,
+  }: {
+    ownerId: string;
+    postId: string;
+    persistedLinks: PersistedLink[];
+  },
 ) {
   const confirmedPrimary = await tx.postPlace.findFirst({
     where: { ownerId, postId, isPrimary: true, isUserConfirmed: true },

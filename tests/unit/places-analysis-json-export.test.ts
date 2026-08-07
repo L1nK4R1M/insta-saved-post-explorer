@@ -43,6 +43,7 @@ import {
   writePlacesAnalysisInputFile,
 } from "@/server/places/analysis-json-export";
 import type { CaptionBatchRecord } from "@/server/places/caption-batch";
+import { computePlacesInputHash } from "@/server/places/hash";
 
 const temporaryRoots: string[] = [];
 
@@ -87,7 +88,7 @@ describe("Places analysis JSON document", () => {
   it("preserves complete text and emits the exact strict record contract", () => {
     const document = buildPlacesAnalysisInput([captionRecord()], source(), new Date("2026-07-28T12:34:56.000Z"));
 
-    expect(document.schema_version).toBe("places-caption-analysis-input-v2");
+    expect(document.schema_version).toBe("places-caption-analysis-input-v3");
     expect(document.generated_at).toBe("2026-07-28T12:34:56.000Z");
     expect(document.summary).toEqual({ record_count: 1, voyages_count: 1, restaurant_count: 0 });
     expect(document.records[0]).toEqual({
@@ -121,8 +122,35 @@ describe("Places analysis JSON document", () => {
       provider_fields_forbidden: true,
       precision_field_forbidden: true,
       required_identity_fields: ["post_id", "input_hash", "analysis_version"],
+      required_candidate_fields: [
+        "name",
+        "address",
+        "city",
+        "region",
+        "country",
+        "category",
+        "confidence",
+        "evidence",
+      ],
+      nullable_candidate_fields: ["name", "address", "city", "region", "country"],
     });
     expect(placesAnalysisInputSchema.parse(document)).toEqual(document);
+  });
+
+  it("gives places-v2 a distinct re-analysis identity from places-v1", () => {
+    const common = {
+      postId: "post-1",
+      sourceTheme: "Voyages",
+      caption: "12 rue de l'Independance Americaine, 78000 Versailles",
+      authorUsername: "hungryconsti",
+      internalTags: [],
+      structuredLocation: null,
+      verifiedMedia: [],
+    };
+
+    expect(
+      computePlacesInputHash({ ...common, analysisVersion: "places-v2" }),
+    ).not.toBe(computePlacesInputHash({ ...common, analysisVersion: "places-v1" }));
   });
 
   it.each([

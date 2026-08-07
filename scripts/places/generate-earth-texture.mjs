@@ -7,10 +7,11 @@
 // is not clearly compatible. Rather than fetching a photographic basemap of
 // uncertain provenance, this script rasterizes the Natural Earth 1:110m Admin 0
 // country polygons — data explicitly released into the **public domain** — into a
-// flat equirectangular image. That gives exactly what D3 asks for (continents,
+// flat Web Mercator raster image. That gives exactly what D3 asks for (continents,
 // oceans and main borders), matches the sober dark globe of Concept 2, and keeps
-// the provenance auditable: the input ships inside `three-globe` (MIT) and the
-// output is reproducible by re-running this script.
+// the provenance auditable: the input ships inside `three-globe` (MIT) and
+// the output is reproducible by re-running this script. The package is kept as
+// a build-only source-data dependency; it is not imported by the application.
 //
 //   npm run places:generate-earth-texture
 //
@@ -42,8 +43,9 @@ const LAND = 1;
 const BORDER = 2;
 
 function loadCountries() {
-  // Resolved through `three-globe` so the input is versioned by the lockfile
-  // instead of being a loose copy in the repository. The package restricts its
+  // Resolved through the build-only `three-globe` package so the input is
+  // versioned by the lockfile instead of being a loose copy in the repository.
+  // The package restricts its
   // `exports`, so the package root is derived from its main entry point rather
   // than resolving the data file directly.
   const packageRoot = resolve(dirname(require.resolve("three-globe")), "..");
@@ -53,9 +55,15 @@ function loadCountries() {
   return { path, features: parsed.features };
 }
 
-// Equirectangular projection: longitude maps linearly to x, latitude to y.
+// Web Mercator projection: longitude maps linearly to x and latitude follows the
+// same ordinate MapLibre uses for the image source's ±85.051129° world extent.
 const toX = (lon) => ((lon + 180) / 360) * WIDTH;
-const toY = (lat) => ((90 - lat) / 180) * HEIGHT;
+const MAX_LATITUDE = 85.051129;
+const toY = (lat) => {
+  const clamped = Math.min(MAX_LATITUDE, Math.max(-MAX_LATITUDE, lat));
+  const radians = (clamped * Math.PI) / 180;
+  return (0.5 - Math.log(Math.tan(Math.PI / 4 + radians / 2)) / (2 * Math.PI)) * HEIGHT;
+};
 
 function ringsOf(geometry) {
   if (geometry.type === "Polygon") return [geometry.coordinates];

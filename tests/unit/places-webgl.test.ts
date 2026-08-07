@@ -11,23 +11,23 @@ function canvasSupporting(...names: string[]) {
 }
 
 describe("WebGL probe", () => {
-  it("accepts webgl2 first, then the older context names", () => {
+  it("accepts only the WebGL2 context required by MapLibre", () => {
     const preferred = canvasSupporting("webgl2");
     expect(probeWebGl(() => preferred.canvas)).toBe("supported");
     // webgl2 is asked for first: no pointless extra context creation.
     expect(preferred.getContext).toHaveBeenCalledTimes(1);
     expect(preferred.getContext).toHaveBeenCalledWith("webgl2");
 
-    // Older devices are not dropped to 2D unnecessarily.
+    // WebGL1 is not enough for MapLibre's renderer.
     for (const name of ["webgl", "experimental-webgl"]) {
-      expect(probeWebGl(() => canvasSupporting(name).canvas), name).toBe("supported");
+      expect(probeWebGl(() => canvasSupporting(name).canvas), name).toBe("unsupported");
     }
   });
 
   it("reports unsupported without ever falling back to the real document", () => {
     const none = canvasSupporting();
     expect(probeWebGl(() => none.canvas)).toBe("unsupported");
-    expect(none.getContext).toHaveBeenCalledTimes(3);
+    expect(none.getContext).toHaveBeenCalledTimes(1);
 
     // An injected factory returning null is authoritative: probing the real
     // document would answer for a canvas the caller never asked for.

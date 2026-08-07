@@ -34,9 +34,15 @@
     "candidate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "city", "region", "country", "category", "confidence", "evidence"],
+      "required": ["name", "address", "city", "region", "country", "category", "confidence", "evidence"],
       "properties": {
         "name": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+        "address": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Exact postal or street address copied from the evidence when present; never coordinates."
+        },
         "city": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
         "region": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
         "country": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },

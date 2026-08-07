@@ -1,14 +1,16 @@
 import { expect, test } from "@playwright/test";
 
+const expectedGlobeAttribution = process.env.NEXT_PUBLIC_PLACES_TILE_URL ? "OpenStreetMap" : "Natural Earth";
+
 // Phase I browser coverage, limited to the cross-cutting journeys that unit and
-// component tests cannot prove: real routing, a real lazy chunk, a real WebGL
-// context and real layout. Rules already proven by a unit test are not replayed
-// here.
+// component tests cannot prove: real routing, a real MapLibre canvas, a real
+// WebGL context and real layout. Rules already proven by a unit test are not
+// replayed here.
 //
-// Like the Phase G suite, the e2e environment has no database and no tile key,
-// so the page renders its empty state — which is exactly what makes these
-// assertions meaningful without a live map or a live globe. Nothing is fetched
-// from a tile server, a texture CDN or any 3D provider.
+// Like the Phase G suite, the e2e environment has no database, so the page
+// renders its empty state. With no tile URL the globe uses the versioned local
+// texture; a smoke may opt into a public raster URL to exercise the configured
+// tile path.
 //
 // Project scoping is declarative (see playwright.config.ts): untagged scenarios
 // run on desktop only, and the single `@mobile @mobile-only` journey runs on the
@@ -18,27 +20,19 @@ import { expect, test } from "@playwright/test";
 const PROVIDER_HOSTS = ["geoapify", "mapbox", "cesium", "openstreetmap", "unpkg", "jsdelivr", "cdn."];
 
 test.describe("page Places — vue 3D", () => {
-  test("garde la 2D par défaut et ne charge pas le moteur 3D", async ({ page }) => {
-    const chunkRequests: string[] = [];
-    page.on("request", (request) => {
-      if (/three|globe/i.test(request.url()) && request.url().includes("/_next/")) chunkRequests.push(request.url());
-    });
-
+  test("garde la 2D par défaut sans monter la vue globe", async ({ page }) => {
     await page.goto("/places");
     await expect(page.getByRole("button", { name: "2D" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("places-globe")).toHaveCount(0);
+    await expect(page.locator(".places-globe-canvas")).toHaveCount(0);
     // A historical URL must not gain a view parameter it never had.
     await expect(page).toHaveURL(/\/places$/);
-    await page.waitForTimeout(300);
-    expect(chunkRequests).toEqual([]);
-
     // An explicit view=map behaves identically and stays clean.
     await page.goto("/places?view=map");
     await expect(page).toHaveURL(/\/places$/);
-    await expect(page.getByTestId("places-globe")).toHaveCount(0);
+    await expect(page.locator(".places-globe-canvas")).toHaveCount(0);
   });
 
-  test("rend le globe, son attribution, et n'appelle aucun fournisseur", async ({ page }) => {
+  test("rend le globe et l'attribution de sa source de fond", async ({ page }) => {
     const offenders: string[] = [];
     page.on("request", (request) => {
       const url = request.url();
@@ -47,12 +41,19 @@ test.describe("page Places — vue 3D", () => {
     });
 
     await page.goto("/places?view=globe");
-    await expect(page.getByTestId("places-globe")).toBeVisible();
+    await expect(page.locator(".places-globe-canvas")).toBeVisible();
     await expect(page.locator(".places-globe-canvas canvas")).toBeVisible();
-    // The texture licence must be visible in the view that uses it (FR-I-15).
-    await expect(page.getByText("Natural Earth")).toBeVisible();
+    // The active base source's attribution must be visible in the globe.
+    await expect(page.getByText(expectedGlobeAttribution)).toBeVisible();
     await page.waitForTimeout(400);
-    expect(offenders).toEqual([]);
+    const configuredTileHost = process.env.NEXT_PUBLIC_PLACES_TILE_URL
+      ? new URL(process.env.NEXT_PUBLIC_PLACES_TILE_URL).hostname
+      : null;
+    if (configuredTileHost) {
+      expect(offenders.every((url) => url.includes(configuredTileHost))).toBe(true);
+    } else {
+      expect(offenders).toEqual([]);
+    }
 
     // The texture is a local asset, small enough to keep the first render cheap.
     const response = await page.request.get("/places/earth-dark.png");
@@ -65,13 +66,33 @@ test.describe("page Places — vue 3D", () => {
     await page.getByRole("searchbox", { name: "Rechercher un lieu" }).fill("rome");
     await page.getByRole("button", { name: "3D" }).click();
 
-    await expect(page.getByTestId("places-globe")).toBeVisible();
+    await expect(page.locator(".places-globe-canvas")).toBeVisible();
+    if (process.env.NEXT_PUBLIC_PLACES_TILE_URL) {
+      await page.evaluate(() => {
+        (window as unknown as { placesCanvasBefore?: HTMLCanvasElement }).placesCanvasBefore = document.querySelector(
+          ".places-globe-canvas canvas",
+        ) as HTMLCanvasElement;
+      });
+    }
     for (const fragment of [/view=globe/, /theme=Voyages/, /categories=cafe/, /q=rome/, /placeId=abc/]) {
       await expect(page).toHaveURL(fragment);
     }
 
     await page.getByRole("button", { name: "2D" }).click();
-    await expect(page.getByTestId("places-globe")).toHaveCount(0);
+    if (process.env.NEXT_PUBLIC_PLACES_TILE_URL) {
+      await expect(page.locator(".places-map-canvas")).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              (window as unknown as { placesCanvasBefore?: HTMLCanvasElement }).placesCanvasBefore ===
+              document.querySelector(".places-map-canvas canvas"),
+          ),
+        )
+        .toBe(true);
+    } else {
+      await expect(page.locator(".places-globe-canvas")).toHaveCount(0);
+    }
     await expect(page).not.toHaveURL(/view=globe/);
     await expect(page).toHaveURL(/placeId=abc/);
   });
@@ -79,18 +100,18 @@ test.describe("page Places — vue 3D", () => {
   test("rend précédent et suivant cohérents entre les vues", async ({ page }) => {
     await page.goto("/places");
     await page.getByRole("button", { name: "3D" }).click();
-    await expect(page.getByTestId("places-globe")).toBeVisible();
+    await expect(page.locator(".places-globe-canvas")).toBeVisible();
 
     await page.goBack();
-    await expect(page.getByTestId("places-globe")).toHaveCount(0);
+    await expect(page.locator(".places-globe-canvas")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "2D" })).toHaveAttribute("aria-pressed", "true");
 
     await page.goForward();
-    await expect(page.getByTestId("places-globe")).toBeVisible();
+    await expect(page.locator(".places-globe-canvas")).toBeVisible();
     await expect(page.getByRole("button", { name: "3D" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("bascule proprement en 2D quand WebGL est refusé, sans demander le chunk", async ({ page }) => {
+  test("reste utilisable quand WebGL2 est refusé, sans canvas MapLibre", async ({ page }) => {
     // Deny every WebGL context before any application script runs — the
     // situation of a browser or device that cannot render the globe.
     await page.addInitScript(() => {
@@ -100,21 +121,57 @@ test.describe("page Places — vue 3D", () => {
         return (original as (...a: unknown[]) => unknown).apply(this, args);
       } as typeof HTMLCanvasElement.prototype.getContext;
     });
-    const chunkRequests: string[] = [];
-    page.on("request", (request) => {
-      if (/three|globe/i.test(request.url()) && request.url().includes("/_next/")) chunkRequests.push(request.url());
-    });
-
     await page.goto("/places?view=globe&q=rome");
-    await expect(page.getByText(/WebGL indisponible/)).toBeVisible();
-    await expect(page.getByTestId("places-globe")).toHaveCount(0);
+    await expect(page.getByTestId("places-map-unavailable")).toContainText("WebGL2 indisponible");
+    await expect(page.locator(".places-globe-canvas")).toHaveCount(0);
+    await expect(page.locator(".places-map-canvas canvas")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "3D" })).toBeDisabled();
     // The URL is corrected and everything else survives.
     await expect(page).not.toHaveURL(/view=globe/);
     await expect(page).toHaveURL(/q=rome/);
     await page.getByRole("button", { name: /Liste/ }).click();
     await expect(page.getByRole("complementary", { name: "Liste des lieux" })).toBeVisible();
-    expect(chunkRequests).toEqual([]);
+  });
+
+  // Regression guard for the blank-map defect: MapLibre 6 locates its worker from
+  // `import.meta.url`, which Turbopack does not expose as an http(s) URL inside the
+  // bundled chunk. MapLibre then falls back to an empty string and builds
+  // `new Worker("")`, which does not throw — the worker loads the HTML document,
+  // dies on the parse error, and every GeoJSON source stays unloaded. The map kept
+  // drawing its raster tiles and nothing else, with no console error.
+  //
+  // This asserts the observable defect rather than the pixels, so it holds in the
+  // database-less e2e environment where there is no place to draw: the source is
+  // still created, and it only finishes loading when the worker is alive.
+  test("démarre le worker MapLibre depuis une URL servie, sans quoi aucune source ne charge", async ({ page }) => {
+    await page.addInitScript(() => {
+      const RealWorker = window.Worker;
+      (window as unknown as { __workerUrls: string[] }).__workerUrls = [];
+      class TrackedWorker extends RealWorker {
+        constructor(url: string | URL, options?: WorkerOptions) {
+          (window as unknown as { __workerUrls: string[] }).__workerUrls.push(String(url));
+          super(url, options);
+        }
+      }
+      window.Worker = TrackedWorker as unknown as typeof Worker;
+    });
+
+    // The globe view is used because it mounts MapLibre without a tile provider,
+    // which the database-less e2e environment does not configure.
+    await page.goto("/places?view=globe");
+    await expect(page.locator(".places-globe-canvas canvas")).toBeVisible();
+
+    // The worker asset must actually be served; a missing sync leaves a 404 here.
+    const workerAsset = await page.request.get("/maplibre/maplibre-gl-worker.mjs");
+    expect(workerAsset.status()).toBe(200);
+
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __workerUrls: string[] }).__workerUrls))
+      .toContainEqual(expect.stringContaining("/maplibre/maplibre-gl-worker.mjs"));
+
+    // The empty string is the exact failure mode, so it is named explicitly.
+    const urls = await page.evaluate(() => (window as unknown as { __workerUrls: string[] }).__workerUrls);
+    expect(urls).not.toContain("");
   });
 
   test("reste utilisable au clavier et ne déborde pas", async ({ page }) => {
@@ -125,10 +182,10 @@ test.describe("page Places — vue 3D", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "3D" })).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page.getByTestId("places-globe")).toBeVisible();
+    await expect(page.locator(".places-globe-canvas")).toBeVisible();
     // The globe canvas must not swallow focus.
     await page.keyboard.press("Tab");
-    await expect(page.getByTestId("places-globe")).toBeVisible();
+    await expect(page.locator(".places-globe-canvas")).toBeVisible();
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -150,9 +207,9 @@ test.describe("page Places — vue 3D", () => {
     expect(switchBounds!.x + switchBounds!.width).toBeLessThanOrEqual(stageBounds!.x + stageBounds!.width);
     expect(switchBounds!.x + switchBounds!.width).toBeLessThanOrEqual(viewport!.width);
     await page.getByRole("button", { name: "3D" }).click();
-    await expect(page.getByTestId("places-globe")).toBeVisible();
+    await expect(page.locator(".places-globe-canvas")).toBeVisible();
     await expect(page.locator(".places-globe-canvas canvas")).toBeVisible();
-    await expect(page.getByText("Natural Earth")).toBeVisible();
+    await expect(page.getByText(expectedGlobeAttribution)).toBeVisible();
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

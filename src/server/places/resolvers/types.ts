@@ -23,6 +23,7 @@ export type ResolvedPlaceCandidate = {
   longitude: number;
   providerResultType: string | null;
   providerRank: number | null;
+  providerMatchType: string | null;
   attribution: string | null;
 };
 

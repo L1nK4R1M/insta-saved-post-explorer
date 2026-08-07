@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { placeCandidateSchema, placeCandidateBatchSchema, placeCandidateRecordSchema } from "@/lib/places/candidates";
@@ -10,6 +13,7 @@ import { placeCandidateSchema, placeCandidateBatchSchema, placeCandidateRecordSc
 
 const validCandidate = {
   name: "Nobu Dubai",
+  address: null,
   city: "Dubai",
   region: null,
   country: "United Arab Emirates",
@@ -22,6 +26,45 @@ describe("placeCandidateSchema", () => {
   it("accepts a bounded textual candidate, with or without evidence", () => {
     expect(placeCandidateSchema.parse(validCandidate)).toEqual(validCandidate);
     expect(placeCandidateSchema.parse({ ...validCandidate, evidence: [] })).toBeDefined();
+  });
+
+  it("keeps the documented JSON Schema aligned with the required address contract", () => {
+    const schema = JSON.parse(
+      readFileSync(path.join(process.cwd(), "docs", "places-caption-candidate.schema.json"), "utf8"),
+    ) as {
+      $defs: {
+        candidate: {
+          required: string[];
+          properties: Record<string, { maxLength?: number }>;
+        };
+      };
+    };
+
+    expect(schema.$defs.candidate.required).toEqual([
+      "name",
+      "address",
+      "city",
+      "region",
+      "country",
+      "category",
+      "confidence",
+      "evidence",
+    ]);
+    expect(schema.$defs.candidate.properties.address).toMatchObject({ maxLength: 300 });
+  });
+
+  it("requires a nullable bounded address as part of the textual contract", () => {
+    expect(
+      placeCandidateSchema.parse({
+        ...validCandidate,
+        address: "12 rue de l'Independance Americaine, 78000 Versailles",
+      }).address,
+    ).toBe("12 rue de l'Independance Americaine, 78000 Versailles");
+
+    const withoutAddress = { ...validCandidate } as Record<string, unknown>;
+    delete withoutAddress.address;
+    expect(() => placeCandidateSchema.parse(withoutAddress)).toThrow();
+    expect(() => placeCandidateSchema.parse({ ...validCandidate, address: "x".repeat(301) })).toThrow();
   });
 
   it("refuses anything authoritative or unbounded coming from the model", () => {

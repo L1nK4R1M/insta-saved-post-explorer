@@ -26,6 +26,7 @@ const MAX_EVIDENCE_PER_CANDIDATE = 8;
 export const MAX_CANDIDATES_PER_POST = 5;
 
 const boundedNullableName = z.string().trim().min(1).max(200).nullable();
+const boundedNullableAddress = z.string().trim().min(1).max(300).nullable();
 
 const candidateEvidenceSchema = z
   .object({
@@ -37,6 +38,7 @@ const candidateEvidenceSchema = z
 export const placeCandidateSchema = z
   .object({
     name: boundedNullableName,
+    address: boundedNullableAddress,
     city: boundedNullableName,
     region: boundedNullableName,
     country: boundedNullableName,

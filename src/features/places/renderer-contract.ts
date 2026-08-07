@@ -1,8 +1,8 @@
 import type { PlacesMapItem } from "@/server/places/map-view";
 
-// The contract every Places renderer honours. Phase G established it implicitly
-// inside the Leaflet component; Phase I promotes it to its own module so the 2D
-// map and the 3D globe are interchangeable leaf components.
+// The contract every Places renderer honours. Phase G established it at the
+// Places renderer seam; Phase I promotes it to its own module so the 2D map and
+// the 3D globe are interchangeable.
 //
 // The rules that make the seam work:
 // - a renderer receives places that are ALREADY filtered by the shell; it never

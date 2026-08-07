@@ -9,14 +9,14 @@ vi.mock("server-only", () => ({}));
 // session. Session, owner and service layers are mocked; no database is needed.
 
 const getSession = vi.fn();
-const getPlacePosts = vi.fn();
+const getPlacePostDetails = vi.fn();
 const confirmPlace = vi.fn();
 const rejectPlaceResult = vi.fn();
 
 vi.mock("@/auth/session", () => ({ getSession }));
 vi.mock("@/auth/config", () => ({ getConfiguredOwnerId: () => "owner-actions" }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/server/places/queries", () => ({ getPlacePosts }));
+vi.mock("@/server/places/queries", () => ({ getPlacePostDetails }));
 vi.mock("@/server/places/review", () => {
   class PlaceReviewError extends Error {
     readonly code: string;
@@ -39,27 +39,27 @@ describe("Places server actions", () => {
   describe("loadPlacePostsAction", () => {
     it("reads configured-owner posts for the public Places page without a session", async () => {
       getSession.mockResolvedValue(null);
-      getPlacePosts.mockResolvedValue({ items: [{ postId: "p1" }], nextCursor: null });
+      getPlacePostDetails.mockResolvedValue({ items: [{ postId: "p1" }], nextCursor: null });
       const actions = await loadActions();
 
       await expect(actions.loadPlacePostsAction("place-1")).resolves.toEqual({ ok: true, posts: [{ postId: "p1" }] });
-      expect(getPlacePosts).toHaveBeenCalledWith("place-1", { limit: 24 }, "owner-actions");
+      expect(getPlacePostDetails).toHaveBeenCalledWith("place-1", { limit: 24 }, "owner-actions");
       expect(getSession).not.toHaveBeenCalled();
     });
 
     it("reads owner-scoped posts for an authenticated session", async () => {
       getSession.mockResolvedValue({ ownerId: "owner-actions", role: "admin", bypass: false });
-      getPlacePosts.mockResolvedValue({ items: [{ postId: "p1" }], nextCursor: null });
+      getPlacePostDetails.mockResolvedValue({ items: [{ postId: "p1" }], nextCursor: null });
       const actions = await loadActions();
 
       await expect(actions.loadPlacePostsAction("place-1")).resolves.toEqual({ ok: true, posts: [{ postId: "p1" }] });
       // The owner is always passed to the query: the action never reads globally.
-      expect(getPlacePosts).toHaveBeenCalledWith("place-1", { limit: 24 }, "owner-actions");
+      expect(getPlacePostDetails).toHaveBeenCalledWith("place-1", { limit: 24 }, "owner-actions");
     });
 
     it("treats another owner's place as absent", async () => {
       getSession.mockResolvedValue({ ownerId: "owner-actions", role: "admin", bypass: false });
-      getPlacePosts.mockResolvedValue(null); // owner-scoped query found nothing
+      getPlacePostDetails.mockResolvedValue(null); // owner-scoped query found nothing
       const actions = await loadActions();
 
       await expect(actions.loadPlacePostsAction("someone-elses-place")).resolves.toEqual({
@@ -70,7 +70,7 @@ describe("Places server actions", () => {
 
     it("never leaks an internal message when the query fails", async () => {
       getSession.mockResolvedValue({ ownerId: "owner-actions", role: "admin", bypass: false });
-      getPlacePosts.mockRejectedValue(new Error("Invalid `prisma.place.findFirst()` invocation: secret detail"));
+      getPlacePostDetails.mockRejectedValue(new Error("Invalid `prisma.place.findFirst()` invocation: secret detail"));
       const actions = await loadActions();
 
       const result = await actions.loadPlacePostsAction("place-1");

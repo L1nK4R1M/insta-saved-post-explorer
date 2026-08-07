@@ -1,5 +1,10 @@
 # Places analysis JSON export - Contracts
 
+> Superseded for future exports by `../005-places-address-contract/`: schema v3
+> adds the required nullable candidate `address` field and defaults to
+> `places-v2`. This file remains the historical contract verified for feature
+> 003.
+
 ## Command contract
 
 ```text

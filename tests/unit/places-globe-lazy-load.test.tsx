@@ -5,20 +5,17 @@ import type { PlacesStatsDto } from "@/contracts/api/places";
 import type { WebGlState } from "@/features/places/capabilities";
 import type { PlacesMapItem } from "@/server/places/map-view";
 
-// FR-I-12 proof: the 3D engine chunk must never be requested on an unproven
-// capability. The load is observed directly — the mock factory for the globe
-// module only runs if something actually imports it, so `state.globeImported`
-// answers "was the dynamic import invoked?" rather than "is a canvas visible?".
-const state = vi.hoisted(() => ({ globeImported: false, webgl: "unknown" as WebGlState }));
+// FR-I-12 proof: the shared MapLibre renderer must never be requested before WebGL2 is proven.
+const state = vi.hoisted(() => ({ mapImported: false, webgl: "unknown" as WebGlState }));
 
-vi.mock("@/features/places/components/places-globe", () => {
-  state.globeImported = true;
-  return { default: () => <div data-testid="globe-engine" /> };
+vi.mock("@/features/places/components/places-map", () => {
+  return {
+    default: () => {
+      state.mapImported = true;
+      return <div data-testid="maplibre-canvas" />;
+    },
+  };
 });
-
-vi.mock("@/features/places/components/places-map", () => ({
-  default: () => <div data-testid="leaflet-canvas" />,
-}));
 
 // The capability is driven directly so the four states can be reproduced
 // exactly, including "unknown", which is what the server render and the
@@ -114,7 +111,7 @@ function renderExplorer(view: "map" | "globe") {
 }
 
 beforeEach(() => {
-  state.globeImported = false;
+  state.mapImported = false;
   window.history.replaceState(null, "", "/places");
 });
 
@@ -122,29 +119,30 @@ afterEach(cleanup);
 
 describe("3D engine is never imported without a proven WebGL capability", () => {
   it.each([
-    // The 2D view never depends on the probe, and must never pay for the globe.
-    { name: "2D view, WebGL available", view: "map" as const, webgl: "supported" as WebGlState, expect2d: true },
+    { name: "2D view, WebGL available", view: "map" as const, webgl: "supported" as WebGlState, expectMap: true },
     // Server render and hydration pass: nothing is known yet.
-    { name: "globe requested, probe still unknown", view: "globe" as const, webgl: "unknown" as WebGlState, expect2d: false },
-    { name: "globe requested, WebGL unsupported", view: "globe" as const, webgl: "unsupported" as WebGlState, expect2d: true },
-    { name: "globe requested, probe failed", view: "globe" as const, webgl: "failed" as WebGlState, expect2d: true },
-  ])("$name", async ({ view, webgl, expect2d }) => {
+    { name: "globe requested, probe still unknown", view: "globe" as const, webgl: "unknown" as WebGlState, expectMap: false },
+    { name: "globe requested, WebGL unsupported", view: "globe" as const, webgl: "unsupported" as WebGlState, expectMap: false },
+    { name: "globe requested, probe failed", view: "globe" as const, webgl: "failed" as WebGlState, expectMap: false },
+  ])("$name", async ({ view, webgl, expectMap }) => {
     state.webgl = webgl;
     renderExplorer(view);
 
-    if (expect2d) {
-      await waitFor(() => expect(screen.getByTestId("leaflet-canvas")).toBeDefined());
-    } else {
-      // Unknown shows a waiting state, not the 2D map: the deep link is still
+    if (expectMap) {
+      await waitFor(() => expect(screen.getByTestId("maplibre-canvas")).toBeDefined());
+    } else if (webgl === "unknown") {
+      // Unknown shows a waiting state, not the map: the deep link is still
       // legitimate and must not be downgraded before the answer arrives.
       await waitFor(() => expect(screen.getByTestId("places-globe-probing")).toBeDefined());
-      expect(screen.queryByTestId("leaflet-canvas")).toBeNull();
+      expect(screen.queryByTestId("maplibre-canvas")).toBeNull();
       // …and the URL keeps view=globe rather than being rewritten prematurely.
       expect(window.location.search).toContain("view=globe");
+    } else {
+      await waitFor(() => expect(screen.getByTestId("places-map-unavailable")).toBeDefined());
+      expect(screen.queryByTestId("maplibre-canvas")).toBeNull();
     }
 
-    expect(state.globeImported).toBe(false);
-    expect(screen.queryByTestId("globe-engine")).toBeNull();
+    if (!expectMap) expect(state.mapImported).toBe(false);
     // Whatever the state, the rest of the page stays usable.
     expect(screen.getByRole("searchbox", { name: "Rechercher un lieu" })).toBeDefined();
   });

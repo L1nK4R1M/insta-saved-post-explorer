@@ -203,9 +203,11 @@ exact point; `UNKNOWN` and `REJECTED` are **never rendered** on the globe; visua
 clustering applies when several places are close at world scale; no second source of
 truth — `PlacesMapItem` is reused until evidence justifies a new server contract.
 
-## 10.2 Implementation outcome (25 July 2026)
+## 10.2 Historical implementation outcome (25 July 2026)
 
-The decision was implemented as recorded; nothing in it was reopened.
+The historical Three.js implementation was completed as recorded. The later
+MapLibre follow-up in §13 supersedes its runtime; the measurements below remain
+evidence for that historical implementation only.
 
 - `react-globe.gl` 2.38.0 and `three` 0.185.1 are pinned exactly and reach the browser
   only through a lazy chunk. The `/places` initial 2D payload grew by **4.2 KiB
@@ -234,3 +236,38 @@ Revisit this ADR if any of the following becomes true:
 - the dataset grows **well beyond ~1000 places**, or per-viewport loading becomes necessary;
 - the measured bundle or frame rate misses the budget agreed in §10.6;
 - `globe.gl` / `react-globe.gl` becomes unmaintained → fall back to raw Three.js (Option A) behind the same contract.
+
+## 12. Superseding decision — MapLibre 2D migration (unmerged follow-up)
+
+The owner later chose to replace the Leaflet 2D renderer with **MapLibre GL JS**.
+This explicitly supersedes the no-migration constraint in C2 and the related D1
+wording; it does not reopen the 3D engine decision.
+
+The current 2D implementation uses MapLibre's native GeoJSON clustering and keeps
+the existing Places renderer contract, Geoapify raster tiles, attribution, filters,
+selection, hover callouts and fit-to-results behavior.
+Because MapLibre requires WebGL2 for both projections, the shared renderer now gates
+the 2D map as well as the globe; unsupported browsers keep the list, filters and
+selection usable but do not receive a map canvas.
+
+## 13. Superseding decision — MapLibre globe projection
+
+On 3 August 2026 the owner requested a softer 2D ↔ 3D transition. The separate
+`react-globe.gl`/Three.js renderer is therefore replaced by MapLibre's native
+`globe` projection. Mercator and globe now share one MapLibre instance, one
+GeoJSON source and the same interaction/accessibility contract; the transition
+uses `setProjection` and a bounded `easeTo` rather than remounting a second
+WebGL scene.
+
+This decision deliberately chooses MapLibre's globe projection, not DEM terrain
+or 3D building extrusions. If photorealistic terrain becomes a requirement, the
+re-evaluation trigger in §11 still applies. The local Natural Earth image remains
+the globe base and `three-globe` is retained only as a build-time source-data
+dependency for regenerating that versioned texture.
+
+This is an unmerged working-tree follow-up, not a replacement of the historical
+PR #36 merge proof. Its local first-render budget passes; its FPS budget remains
+open pending a real-GPU measurement because system Chromium uses SwiftShader.
+The later critical points-only requirement `REQ-001` supersedes the historical
+zone/halo rendering rule for this follow-up: only `EXACT` and `PROBABLE` reach the
+map or globe; approximate precision remains available in list and review flows.

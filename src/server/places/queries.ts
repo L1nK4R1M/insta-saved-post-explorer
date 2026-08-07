@@ -227,6 +227,23 @@ export async function getPlacePosts(
   );
 }
 
+export type PlacePostDetailSummary = PlacePostSummaryDto & { caption: string };
+
+export async function getPlacePostDetails(
+  placeId: string,
+  input: CursorPageInput,
+  ownerId: string,
+): Promise<PlacePage<PlacePostDetailSummary> | null> {
+  const page = await getPlacePosts(placeId, input, ownerId);
+  if (!page) return null;
+  const captions = await prisma.post.findMany({
+    where: { ownerId, id: { in: page.items.map((item) => item.postId) } },
+    select: { id: true, caption: true },
+  });
+  const byId = new Map(captions.map((post) => [post.id, post.caption]));
+  return { ...page, items: page.items.map((item) => ({ ...item, caption: byId.get(item.postId) ?? "" })) };
+}
+
 export async function queryEligiblePosts(input: CursorPageInput, ownerId: string): Promise<PlacePage<EligiblePostDto>> {
   const variants = await eligibleThemeVariants(ownerId);
   if (variants.length === 0) return { items: [], nextCursor: null };
