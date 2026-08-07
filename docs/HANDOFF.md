@@ -473,5 +473,20 @@ Merged with the D6 FPS budget derogated, not satisfied. Section 7 records exactl
 what is proven, what is not, why no better measurement exists here, and how to
 close it.
 
+**PR #57 shipped a blank map, fixed the same day.** MapLibre 6 locates its worker
+from `import.meta.url`, which Turbopack does not expose as an http(s) URL inside
+the bundled chunk. MapLibre fell back to `new Worker("")`, which does not throw:
+the worker loaded the HTML document, died on the parse error and closed silently,
+leaving every GeoJSON source unloaded. Raster tiles kept rendering, so `/places`
+looked healthy while drawing zero places. The renderer now calls `setWorkerUrl`
+against copies served from `public/maplibre`, kept in sync by
+`scripts/places/sync-maplibre-worker.mjs` on `prebuild`. Full record:
+`changes/2026-08-07-maplibre-worker-url.md`.
+
+Two process facts worth keeping: CI, an independent review and the D6 discussion
+all passed over a map that rendered nothing, because the database-less e2e
+environment has no marker to assert on and the suite only checked that a canvas
+was visible. The defect was found by looking at the running Preview.
+
 This renderer is on `develop` only. Production still serves the Three.js and
 Leaflet runtime until the promotion in section 8 is performed.
