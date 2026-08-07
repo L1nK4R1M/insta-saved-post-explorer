@@ -27,7 +27,7 @@ env:
 
 jobs:
   quality:
-    name: Lint, types, unit tests and build
+    name: Lint, types, tests and build
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
@@ -45,7 +45,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Set up Node.js
@@ -63,18 +63,8 @@ jobs:
       - name: Apply migrations to ephemeral database
         run: npm run db:deploy
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Worker typecheck and unit tests
-        run: |
-          npm run worker:typecheck
-          npm run worker:test
-
-      - name: Worker PostgreSQL invariants and smoke
+      - name: Run project validation
+        shell: bash
         env:
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           WORKER_DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -86,21 +76,7 @@ jobs:
           R2_ACCESS_KEY_ID: ci-access
           R2_SECRET_ACCESS_KEY: ci-secret
           NODE_ENV: test
-        run: |
-          npm run worker:test:postgres
-          npm test -- media-identity-postgres.test.ts
-          npm run worker:smoke
-
-      - name: Worker container contract and build
-        run: |
-          npm run worker:test -- container-contract.test.ts
-          docker build -f services/worker/Dockerfile -t insta-post-explorer-worker:ci .
-
-      - name: Unit tests
-        run: npm test
-
-      - name: Production build
-        run: npm run build
+        run: bash scripts/ci/check.sh
 
   e2e:
     name: Browser tests
@@ -122,7 +98,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Set up Node.js
